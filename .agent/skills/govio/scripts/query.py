@@ -30,7 +30,7 @@ ASSETS_DIR = Path(__file__).parent.parent / "assets"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--graph', type=str, help='图数据库名称', default="ontology")
+    parser.add_argument('--graph', type=str, help='Graph name', default="ontology")
     parser.add_argument('--cypher', type=str, help='Cypher', required=True)
 
     # 解析命令行参数
@@ -38,11 +38,16 @@ if __name__ == "__main__":
     g = FalkorDBGraph(graph = args.graph)
 
     if not ASSETS_DIR.exists():
-        ASSETS_DIR.mkdir()
+        from load_schema import load_schema
+        load_schema(g)
+        from load_names import generate_names
+        generate_names(g)
+        print("Please read [schema.md](assets/schema.md) before make cypher.")
+        exit(1)
 
     _cypher = args.cypher
     if not _cypher.upper().startswith('MATCH'):
-        print('请编写一个MATCH的查询。') 
+        print('Please write a MATCH query.') 
         sys.exit(1)
     
     logger.info("cypher: "+ _cypher)

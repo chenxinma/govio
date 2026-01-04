@@ -26,13 +26,11 @@ For advanced usage, see [reference.md](reference.md).
 When this skill is loaded, the base directory is provided:
 
 ```
-Base directory: /path/to/data-gov-knowledge-graph
+Base directory: /path/to/govio
 ```
 
 Relative paths resolve from base directory:
 - `reference.md` → `/path/to/govio/reference.md`
-- `scripts/load_schema.py` → `/path/to/govio/scripts/load_schema.py`
-- `scripts/load_names.py` → `/path/to/govio/scripts/load_names.py`
 - `scripts/query.py` → `/path/to/govio/scripts/query.py`
 - `assets/schema.md` → `/path/to/govio/assets/schema.md`
 - `assets/names/*.md`  → `/path/to/govio/assets/names/*.md`
@@ -41,8 +39,5 @@ Relative paths resolve from base directory:
 
 Required dependencies (install if not available):
 
-- **environment**: (for init assets)
-    1. load schema `uv run scripts/load_schema.py` 
-    2. load relevant names `uv run scripts/load_names.py`
 - **execute**: `uv run python -c ...`
 - **query cypher**: `uv run scripts/query.py --cypher "MATCH ..."`

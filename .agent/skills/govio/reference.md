@@ -52,7 +52,7 @@ db_graph.query("MATCH (n:User {id: $id}) RETURN n", {"id": 123})
 
 - 用户问题: 供应商相关的表有哪些？
 - 思考: 查询供应商相关的节点，再根据相关节点获得表的信息。
-- 用 Grep, Glob 查询 `assets/names/` 获得供应商相关的实体在图数据库中的标准名称  
+- 用 Grep, Glob 查询 `assets/names/*.md` 获得供应商相关的实体在图数据库中的标准名称  
 - 根据`assets/schema.md`编写cypher执行查询
     ```python
     from ontology import FalkorDBGraph

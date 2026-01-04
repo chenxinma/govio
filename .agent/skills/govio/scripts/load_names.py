@@ -26,7 +26,6 @@ app1.md
 - ADDRESS 地址
 ...
 ```
-
 """
 import argparse
 from pathlib import Path
@@ -36,6 +35,9 @@ ASSETS_NAMES_DIR = Path(__file__).parent.parent / "assets/names"
 
 def generate_names(g:FalkorDBGraph):
     """生成按应用分组的名称索引文件"""
+
+    if not ASSETS_NAMES_DIR.exists():
+        ASSETS_NAMES_DIR.mkdir()
     
     # 查询所有应用
     apps_query = """
@@ -96,8 +98,5 @@ if __name__ == "__main__":
     # 解析命令行参数
     args = parser.parse_args()
     g = FalkorDBGraph(graph = args.graph)
-
-    if not ASSETS_NAMES_DIR.exists():
-        ASSETS_NAMES_DIR.mkdir()
 
     generate_names(g)
