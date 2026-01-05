@@ -94,7 +94,7 @@ class FalkorDBGraph:
         """Query FalkorDB database."""
 
         try:
-            data = self._g.query(query, params)
+            data = self._g.ro_query(query, params)
             return data.result_set
         except Exception as e:
             raise ValueError(f"Generated Cypher Statement is not valid\n{e}")

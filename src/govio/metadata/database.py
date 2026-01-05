@@ -49,7 +49,7 @@ class DatabseLoader:
         """从数据库加载列元数据
         
         Returns:
-            pd.DataFrame: 包含列信息、数据类型和嵌入向量的DataFrame
+            pd.DataFrame: 包含列信息、数据类型的DataFrame
         """
         sql = textwrap.dedent(f"""
             select
@@ -93,7 +93,7 @@ class DatabseLoader:
         """从数据库加载表元数据
 
         Returns:
-            pd.DataFrame: 包含表信息和嵌入向量的DataFrame
+            pd.DataFrame: 包含表信息的DataFrame
         """
         sql = textwrap.dedent(f"""
                 select 
@@ -101,7 +101,8 @@ class DatabseLoader:
                     d.name "schema",
                     t.name table_name,
                     t.comment name,
-                    t.data_entity_type
+                    t.data_entity_type,
+                    d2.name database_name
                 from connector_foundation1.database_table t
                 inner join connector_foundation1.`database` d
                 on t.database_id = d.id
@@ -126,4 +127,4 @@ class DatabseLoader:
 
     @property
     def Col(self):
-        return self.load_columns()        
+        return self.load_columns()

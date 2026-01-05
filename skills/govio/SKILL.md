@@ -20,6 +20,7 @@ For advanced usage, see [reference.md](reference.md).
 
 1. 使用 Read, Grep, Glob 查询`assets/names/`获得被记载的标准名称
 2. 严格按照 `assets/schema.md` 的图数据库结构生成`cypher`脚本
+3. `cypher`脚本取数应该控制输出行数一次获取应小于300行
 
 ## Resource Resolution
 

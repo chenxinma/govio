@@ -10,6 +10,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "pandas>=2.3.3",
     "pymysql>=1.1.2",
+    "scikit-learn>=1.8.0",
     "sqlalchemy>=2.0.45",
 ]
 
@@ -32,4 +33,4 @@ exclude = [
 ]
 
 [project.scripts]
-metadata-csv = "govio:make_metadata_csv"
+metadata = "govio:run"

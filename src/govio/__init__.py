@@ -1,4 +1,4 @@
-from .metadata.utility import make_metadata_csv
+from .metadata.utility import run
 from .graph.falkordb_graph import FalkorDBGraph
 
-__all__ = ['make_metadata_csv', 'FalkorDBGraph']
+__all__ = ['run', 'FalkorDBGraph']
