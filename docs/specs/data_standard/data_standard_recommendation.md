@@ -49,7 +49,7 @@
 - **项目（Item）**：已贯标的列
 - **推荐内容**：数据标准ID
 
-### 3.2 相似度计算
+### 3.2 相似度计算size_scaled
 
 #### 3.2.1 特征向量构建
 为每个列构建多维特征向量：
@@ -143,43 +143,122 @@ class StandardRecommender:
     def __init__(self, std_compliance: pd.DataFrame,
                  weights: dict[str, float] = None,
                  k_neighbors: int = 5,
-                 top_n: int = 3):
+                 top_n: int = 3,
+                 min_similarity: float = 0.3):
         """
         Args:
-            std_compliance: 已贯标列数据（需包含 full_table_name, name 等字段）
+            std_compliance: 已贯标列数据（需包含 full_table_name, name, dtype, size, precision, scale 等字段）
             weights: 特征权重 {'table': 0.25, 'name': 0.30, 'comment': 0.25, 'type': 0.10, 'numeric': 0.10}
             k_neighbors: K近邻数量
             top_n: 返回推荐数量
+            min_similarity: 最小相似度阈值，低于此值不推荐
         """
         pass
     
-    def fit(self, all_columns: pd.DataFrame):
-        """训练推荐器，构建特征索引"""
+    def _extract_table_name(self, full_table_name: str) -> str:
+        """从 full_table_name 中提取 table_name 部分"""
+        pass
+    
+    def _preprocess_std_data(self) -> None:
+        """预处理已贯标列数据，构建特征索引"""
+        pass
+    
+    def _precompute_std_features(self) -> None:
+        """预计算所有已贯标列的特征矩阵"""
+        pass
+    
+    def _type_similarity(self, type1: str, type2: str) -> float:
+        """计算数据类型相似度"""
+        pass
+    
+    def find_k_neighbors(self, column: pd.Series, exclude_columns: set[str] = None) -> list[tuple[int, float]]:
+        """为单个列找到K个最相似的已贯标列"""
         pass
     
     def recommend(self, column: pd.Series) -> list[dict]:
         """为单个列推荐数据标准"""
         pass
     
-    def batch_recommend(self, columns: pd.DataFrame) -> pd.DataFrame:
+    def batch_recommend(self, columns: pd.DataFrame, exclude_compliant: bool = True) -> pd.DataFrame:
         """批量推荐"""
+        pass
+    
+    def evaluate(self, test_columns: pd.DataFrame, test_standards: dict[str, str]) -> dict[str, float]:
+        """评估推荐器的性能"""
         pass
 ```
 
-### 4.2 相似度计算实现
+### 4.2 工厂函数
 
-#### 4.2.1 字符串相似度
-使用 `difflib.SequenceMatcher` 或 `Levenshtein` 距离
+```python
+def create_recommender(std_compliance: pd.DataFrame,
+                      weights: dict[str, float] = None,
+                      k_neighbors: int = 5,
+                      top_n: int = 3) -> StandardRecommender:
+    """创建数据标准推荐器的工厂函数
+    
+    Args:
+        std_compliance: 已贯标列数据
+        weights: 特征权重
+        k_neighbors: K近邻数量
+        top_n: 返回推荐数量
+    
+    Returns:
+        StandardRecommender 实例
+    """
+    pass
+```
 
-#### 4.2.2 数值相似度
-使用归一化后的欧氏距离
+### 4.3 特征向量化与相似度计算
 
-### 4.3 性能优化
+#### 4.3.1 特征向量化
+使用 **TF-IDF 向量化器** 对字符串特征进行向量化：
 
-1. **特征缓存**：缓存已计算的列特征向量
-2. **索引优化**：为已贯标列建立索引，加速相似度搜索
+- **稀疏向量表示**：将每个字符串字段（表名、列名、注释）转换为 TF-IDF 向量（基于字符 n-gram 词汇表）
+- **向量化器训练**：使用 `TfidfVectorizer` 训练每个字段的词汇表，n-gram 范围为 (1, NGRAM_N)
+- **特征拼接**：所有字段拼接成一个大特征向量（文本 + 数值）
+- **批量计算**：使用 `sklearn.metrics.pairwise.cosine_similarity` 一次性计算目标列与所有已贯标列的相似度
+
+#### 4.3.2 数据类型相似度
+实现 `_type_similarity` 方法，用于计算数据类型的相似度：
+
+- 完全匹配返回 1.0
+- 部分匹配（如 varchar 和 char）返回 0.8
+- 类型族匹配（如 int, bigint, smallint 属于 int 族）返回 0.6
+- 无匹配返回 0.0
+
+### 4.4 性能优化
+
+#### 4.4.1 预计算特征矩阵
+在初始化时预计算所有已贯标列的综合特征矩阵，避免重复计算：
+
+```python
+def _precompute_std_features(self) -> None:
+    # 训练 TF-IDF 向量化器并构建标准列特征矩阵
+    # ...
+    # 拼接所有特征（文本 + 数值）到一个稀疏矩阵
+    self._std_features_matrix = hstack([...])
+```
+
+**优势**：
+- 初始化时一次性计算，后续推荐直接使用
+- 稀疏矩阵存储，节省内存
+- 支持快速批量相似度计算
+
+#### 4.4.2 批量相似度计算
+使用 `cosine_similarity` 一次性计算目标列与所有已贯标列的相似度：
+
+**优势**：
+- 时间复杂度从 O(N*K) 降低到 O(N*M)，其中 M 是特征维度
+- 对于高相似度的场景，性能提升显著
+- 利用 sklearn 优化的底层实现
+
+#### 4.4.3 其他优化策略
+1. **稀疏矩阵运算**：使用 scipy.sparse 矩阵提升内存和计算效率
+2. **特征权重整合**：在特征拼接时直接应用权重，避免后续乘法操作
 3. **批量处理**：支持批量推荐，减少重复计算
-4. **并行计算**：使用多进程加速相似度计算
+4. **堆优化**：使用 `heapq` 模块优化 K 近邻搜索
+5. **排除机制**：支持排除指定列，避免重复推荐
 
 ## 5. 配置参数
 
@@ -249,7 +328,7 @@ DataFrame，包含以下列：
 ```python
 from govio.metadata.standard import StandardLoader
 from govio.metadata.database import DatabseLoader
-from govio.metadata.recommender import StandardRecommender
+from govio.metadata.recommender import create_recommender
 
 # 加载数据
 std_loader = StandardLoader(db='...', workspace_uuid='...')
@@ -258,21 +337,24 @@ db_loader = DatabseLoader(db='...', workspace_uuid='...')
 std_compliance = std_loader.StdCompliance
 all_columns = db_loader.Col
 
-# 创建推荐器
-recommender = StandardRecommender(
+# 创建推荐器（使用工厂函数）
+recommender = create_recommender(
     std_compliance=std_compliance,
     k_neighbors=5,
     top_n=3
 )
 
-# 训练
-recommender.fit(all_columns)
-
-# 批量推荐
+# 批量推荐（自动处理预计算）
 recommendations = recommender.batch_recommend(all_columns)
 
 # 保存结果
 recommendations.to_csv('recommendations.csv', index=False)
+
+# 或者使用推荐器评估功能
+test_columns = all_columns.sample(frac=0.2)  # 示例测试数据
+test_standards = {row['column']: row['standard_id'] for _, row in std_compliance.iterrows()}
+metrics = recommender.evaluate(test_columns, test_standards)
+print(f"评估指标: {metrics}")
 ```
 
 ## 8. 评估指标
@@ -315,6 +397,21 @@ recommendations.to_csv('recommendations.csv', index=False)
 
 ## 11. 版本历史
 
+- **v1.5** (2026-01-05): 代码清理和文档更新
+  - 移除未使用的 `_string_similarity` 函数
+  - 更新设计文档以匹配实际代码实现
+  - 完善工厂函数 `create_recommender` 的说明
+  - 更新使用示例以反映实际API使用方式
+- **v1.4** (2026-01-05): 性能优化
+  - 使用 TF-IDF 向量化器替代 n-gram Jaccard，提升字符串匹配准确性
+  - 将每个字符串字段（表名、列名、注释）转换为 TF 向量（基于字符 n-gram 词汇表）
+  - 所有字段拼接成一个大特征向量（数值 + 文本）
+  - 使用 sklearn.metrics.pairwise.cosine_similarity 批量计算相似度
+  - 使用 scipy.sparse 矩阵优化内存使用
+- **v1.3** (2026-01-05): 性能优化
+  - 替换 `difflib.SequenceMatcher` 为 n-gram Jaccard 相似度，提升字符串匹配性能
+  - 预计算标准列特征（n-gram、数值特征标准化），避免重复计算
+  - 使用 `heapq.nlargest` 优化 K 近邻搜索，降低时间复杂度
 - **v1.2** (2026-01-04): 优化表名特征，仅使用从 `full_table_name` 提取的 `table_name` 部分计算相似度，提高跨 schema 匹配能力
 - **v1.1** (2026-01-04): 添加表名特征，利用表名限定列的作用范围，提高推荐准确性
 - **v1.0** (2026-01-04): 初始设计，实现基于协同过滤的数据标准推荐

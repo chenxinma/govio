@@ -16,15 +16,16 @@ class StandardLoader:
         sql = textwrap.dedent(f"""
                 select
                     bis.code standard_id,
+                    nv.name standard_name,
                     d2.name  database_name,
                     concat(d.name, ".", t.name) as "full_table_name",
                     c.name "column_name",
                     c.comment as "name",
                     c.data_entity_type,
                     c.type as "dtype",
-                    c.length as "size",
-                    c.`precision`,
-                    c.scale 
+                    IFNULL(c.length,0) as "size",
+                    IFNULL(c.`precision`, 0) as "precision",
+                    IFNULL(c.scale , 0) as "scale"
                 from
                     connector_foundation1.database_table_column c
                 inner join connector_foundation1.database_table t
@@ -43,6 +44,8 @@ class StandardLoader:
                 and scn.column_name = c.name
                 inner join navigator_foundation1.standard_basic bis
                 on scn.standard_uuid = bis.uuid
+                inner join navigator_foundation1.navigation nv
+                on bis.uuid = nv.uuid
                 where
                     scn.category= 'METADATA'
                     and
@@ -57,7 +60,10 @@ class StandardLoader:
                     and d2.tenant = 'TDH'
                     and d2.workspace_uuid = '{self.workspace_uuid}'
                 """)
-        df_std_col = pd.read_sql(sql, self.engine)
+        df_std_col = pd.read_sql(sql, self.engine, 
+                                 dtype={"size":"int", 
+                                        "precision":"int", 
+                                        "scale":"int"})
         return df_std_col
 
     def load_standards(self) -> pd.DataFrame:

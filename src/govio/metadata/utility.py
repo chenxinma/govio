@@ -10,7 +10,7 @@ import pandas as pd
 from .application import AppInfoLoader
 from .database import DatabseLoader
 from .standard import StandardLoader
-from .recommender import create_recommender, StandardRecommender
+from .recommender import create_recommender
 
 app_db_map_data = [
         ['ihrodb', '外包项目管理系统'],
@@ -144,14 +144,68 @@ def make_csv(output:Path, db:str, workspace_uuid:str, app_list_file: str):
     s = f"falkordb-bulk-insert {{GRAPH}} {"  ".join(files)}"
     print("Bulk insert usage:")
     print(s)
-    
+
+
 def data_standard_recommend(output:Path, db:str, workspace_uuid:str):
-    db_loader = DatabseLoader(db, workspace_uuid, ['ihrodb', 'ihrmdb', 'MDM'])
+
     std_loader = StandardLoader(db, workspace_uuid)
     # 加载数据
     std_compliance = std_loader.StdCompliance  # 已贯标列
-    all_columns = db_loader.Col  # 所有列
+    
+    # 创建推荐器
+    WEIGHTS = {
+        'table': 0.25,     # 表名权重（仅使用从 full_table_name 提取的 table_name）
+        'name': 0.35,      # 列名权重
+        'comment': 0.25,   # 列注释权重
+        'type': 0.05,      # 数据类型权重
+        'numeric': 0.10    # 数值特征权重
+    }
+    recommender = create_recommender(
+        std_compliance=std_compliance,
+        weights=WEIGHTS,
+        k_neighbors=5,  # 使用5个最近邻
+        top_n=3  # 返回Top 3推荐
+    )
 
+    df = pd.DataFrame()
+
+    for schema in df_app_db_map["schema"].to_list():
+        db_loader = DatabseLoader(db, workspace_uuid, [schema])
+        all_columns = db_loader.Col  # 所有列
+        print("Schema=", schema, " columns=", all_columns.shape[0])
+
+        # 批量推荐
+        recommendations = recommender.batch_recommend(all_columns)
+        _recommendations_confirm = recommendations[recommendations["recommendation_score"] > 0]
+
+        df = pd.concat([df, _recommendations_confirm])
+
+        # 保存结果
+        # _recommendations_confirm.to_csv(output / f'_recommendations_{schema}.csv', index=False)
+    
+    if (output / "Col.csv").exists() and (output / "Standard.csv").exists():
+        df = df[["column", "recommended_standard_id"]]
+        df_col = pd.read_csv(output / "Col.csv")[[":ID(Col)", "column"]]
+        df_std = pd.read_csv(output / "Standard.csv")[[":ID(Standard)", "standard_id"]]
+
+        df_colStdId = pd.merge(df, df_col, on="column", how="inner")
+        df_complies_with = pd.merge(df_colStdId, df_std, left_on="recommended_standard_id", 
+                            right_on="standard_id", how="inner")
+        # COMPLIES_WITH
+        df_complies_with[[":ID(Col)", ":ID(Standard)"]].rename(columns={
+            ":ID(Col)": "START_ID(Col)",
+            ":ID(Standard)": "END_ID(Standard)"
+        }).to_csv(output / "COMPLIES_WITH.csv", index=False)
+
+
+def eval_test():
+    load_dotenv()
+    db = os.getenv("KUNDB_URL", "")
+    workspace_uuid = "82ee37374b314a938bf28170ab4db7cf"
+    std_loader = StandardLoader(db, workspace_uuid)
+    # 加载数据
+    std_compliance = std_loader.StdCompliance  # 已贯标列
+    
     # 创建推荐器
     recommender = create_recommender(
         std_compliance=std_compliance,
@@ -159,8 +213,15 @@ def data_standard_recommend(output:Path, db:str, workspace_uuid:str):
         top_n=3  # 返回Top 3推荐
     )
 
-    # 批量推荐
-    recommendations = recommender.batch_recommend(all_columns)
+    db_loader = DatabseLoader(db, workspace_uuid, ['ihrmdb'])
+    df_columns = db_loader.Col
 
-    # 保存结果
-    recommendations.to_csv(output / 'recommendations.csv', index=False)
+    result = recommender.evaluate(
+        df_columns[df_columns["column"] == "ihrmdb.basic_api_access_log.application_name"],
+        {"ihrmdb.basic_api_access_log.application_name":""}
+    )
+    print(result)
+
+
+if __name__ == "__main__":
+    eval_test()
