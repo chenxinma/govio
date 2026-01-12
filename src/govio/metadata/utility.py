@@ -8,32 +8,10 @@ from dotenv import load_dotenv
 import pandas as pd
 
 from .application import AppInfoLoader
-from .database import DatabseLoader
+from .database import DatabaseLoader
 from .standard import StandardLoader
 from .recommender import create_recommender
 
-app_db_map_data = [
-        ['ihrodb', '外包项目管理系统'],
-        ['IHRO_BILL', '外包项目管理系统'],
-        ['ihrmdb', '外包雇员管理系统'],
-        ['fsghr', '人力资源服务订单'],
-        ['pdm', '产品价格中心'],
-        ['sqc', '报价单中心'],
-        # ['fsgcontract', '集团业务合同管理系统（合同中心）'],
-        ['SSOP_USER', '企业法定福利服务系统'],
-        ['podb', '产品订单系统'],
-        ['CDPS_USER', '财务管理平台收付费管理'],
-        ['ITS_USER', '财务管理平台发票管理'],
-        ['MDM', '客户及供应商中心主数据系统'],
-        ['ioms', '外服内部机构管理系统'],
-        ['hps_health', '健康管理生产系统'],
-        ['paypro', '薪税生产系统'],
-        ['AEP_USER', '会计引擎'],
-        ['sprtdb', '销售及订单管理平台（销售门户）'],
-        ['BILL_USER', '客户账单管理'],
-        ['NHRS_USER', '人事服务订单（调派订单）'],
-    ]
-df_app_db_map = pd.DataFrame(app_db_map_data, columns=['schema', 'name'])
 
 class Mode(Enum):
     CSV = "csv"
@@ -65,6 +43,7 @@ def run():
     )
     parser.add_argument('--kundb', type=str, help='元数据库URL')
     parser.add_argument('--app-list', type=str, help="应用清单")
+    parser.add_argument('--app-map', type=str, help="应用数据库映射")
     parser.add_argument('-m', "--mode", type=Mode, choices=list(Mode), default=Mode.CSV)
     parser.add_argument('-o', '--output', type=str, default=".", help="输出目录")
     # 解析命令行参数
@@ -78,7 +57,12 @@ def run():
     app_list = os.getenv("APP_LIST_FILE", "")
     if args.app_list:
         app_list = args.app_list
-    
+
+    app_map = os.getenv("APP_MAP", "")
+    if args.app_map:
+        app_map = args.app_map
+
+
     workspace_uuid = '82ee37374b314a938bf28170ab4db7cf'
 
     if len(db) == 0:
@@ -88,17 +72,23 @@ def run():
     if not os.path.exists(args.output):
         print("输出目录未找到")
         sys.exit()
+
+    if not os.path.exists(app_map):
+        print("应用和数据库映射未找到")
+        sys.exit()
     
     output = Path(args.output)
+
+    df_app_db_map = pd.read_json(app_map, orient='records')
     
     if args.mode == Mode.CSV:
-        make_csv(output, db, workspace_uuid, app_list)
+        make_csv(output, db, workspace_uuid, app_list, df_app_db_map)
     elif args.mode == Mode.RECOMMEND:
-        data_standard_recommend(output, db, workspace_uuid)
+        data_standard_recommend(output, db, workspace_uuid, df_app_db_map)
 
     
-def make_csv(output:Path, db:str, workspace_uuid:str, app_list_file: str):
-    db_loader = DatabseLoader(db, workspace_uuid, df_app_db_map["schema"].to_list())
+def make_csv(output:Path, db:str, workspace_uuid:str, app_list_file: str, df_app_db_map: pd.DataFrame):
+    db_loader = DatabaseLoader(db, workspace_uuid, df_app_db_map["schema"].to_list())
     app_loader = AppInfoLoader(app_list_file, df_app_db_map["name"].to_list())
     std_loader = StandardLoader(db, workspace_uuid)
 
@@ -146,7 +136,7 @@ def make_csv(output:Path, db:str, workspace_uuid:str, app_list_file: str):
     print(s)
 
 
-def data_standard_recommend(output:Path, db:str, workspace_uuid:str):
+def data_standard_recommend(output:Path, db:str, workspace_uuid:str, df_app_db_map: pd.DataFrame):
 
     std_loader = StandardLoader(db, workspace_uuid)
     # 加载数据
@@ -170,7 +160,7 @@ def data_standard_recommend(output:Path, db:str, workspace_uuid:str):
     df = pd.DataFrame()
 
     for schema in df_app_db_map["schema"].to_list():
-        db_loader = DatabseLoader(db, workspace_uuid, [schema])
+        db_loader = DatabaseLoader(db, workspace_uuid, [schema])
         all_columns = db_loader.Col  # 所有列
         print("Schema=", schema, " columns=", all_columns.shape[0])
 
@@ -213,7 +203,7 @@ def eval_test():
         top_n=3  # 返回Top 3推荐
     )
 
-    db_loader = DatabseLoader(db, workspace_uuid, ['ihrmdb'])
+    db_loader = DatabaseLoader(db, workspace_uuid, ['ihrmdb'])
     df_columns = db_loader.Col
 
     result = recommender.evaluate(

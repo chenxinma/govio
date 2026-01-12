@@ -3,7 +3,7 @@ import textwrap
 import pandas as pd
 from sqlalchemy import create_engine
 
-class DatabseLoader:
+class DatabaseLoader:
     def __init__(self, db: str, workspace_uuid: str, schema_limits: list[str] | None = None) -> None:
         self.engine = create_engine(db)
         self.workspace_uuid = workspace_uuid

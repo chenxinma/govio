@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 import logging
+import json
 
 from govio import FalkorDBGraph
 
@@ -52,13 +53,18 @@ if __name__ == "__main__":
     
     logger.info("cypher: "+ _cypher)
 
-    df = pd.DataFrame(g.query(args.cypher))
-    if df.shape[0] > 0:
-        fname = ASSETS_DIR / f"output-{datetime.now().strftime("%Y%m%d%H%M%s")}.csv"
-        df.to_csv(ASSETS_DIR / fname, index=False)
-        print("Result output:", fname)
-        logger.info("result rows: %s", str(df.shape[0]))
-        logger.info("result file: %s", str(fname))
+    data = g.query(args.cypher)
+    _size = len(data)
+    if _size > 0:
+        if _size > 10:
+            fname = ASSETS_DIR / f"output-{datetime.now().strftime("%Y%m%d%H%M%s")}.json"
+            df = pd.DataFrame(data)
+            df.to_json(fname, index=False, orient="records", lines=True, force_ascii=False)
+            print("Result output:", fname, "rows:", _size)
+            logger.info("result file: %s", str(fname))
+        else:
+            print(json.dumps(data, ensure_ascii=False, default=lambda obj: obj.__dict__))
+        logger.info("result rows: %s", str(_size))
     else:
         print("Data not found.")
         logger.info("data not found.")

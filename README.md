@@ -103,7 +103,7 @@ result = graph.query("MATCH (n) RETURN n LIMIT 10")
 
 ```python
 from govio.metadata.application import AppInfoLoader
-from govio.metadata.database import DatabseLoader
+from govio.metadata.database import DatabaseLoader
 from govio.metadata.standard import StandardLoader
 
 # 加载应用信息
@@ -111,7 +111,7 @@ app_loader = AppInfoLoader(app_list_file="path/to/app_list.xlsx")
 apps = app_loader.Application
 
 # 加载数据库元数据
-db_loader = DatabseLoader(
+db_loader = DatabaseLoader(
     db="mysql+pymysql://user:pass@host/db",
     workspace_uuid="your-uuid",
     schema_limits=["schema1", "schema2"]

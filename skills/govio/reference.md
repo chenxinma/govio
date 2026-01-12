@@ -95,10 +95,10 @@ db_graph.query("MATCH (n:User {id: $id}) RETURN n", {"id": 123})
     ORDER BY application, c.order_no
     """
     df = pd.DataFrame(g.query(cypher)) 
-    df.to_csv("output.csv", index=False) # 数据量较大时存储为文件输出
+    df.to_json("output.json", index=False, orient='records') # 数据量较大时存储为文件输出
     print(df.info())
     ```
-- 读取输出结果output.csv
+- 读取输出结果output.json
 
 ### 字段数据类型查询
 
@@ -117,10 +117,10 @@ db_graph.query("MATCH (n:User {id: $id}) RETURN n", {"id": 123})
     ORDER BY count(*) DESC
     """
     df = pd.DataFrame(g.query(cypher)) 
-    df.to_csv("output.csv", index=False) # 数据量较大时存储为文件输出
+    df.to_json("output.json", index=False, orient='records') # 数据量较大时存储为文件输出
     print(df.info())
     ```
-- 读取输出结果output.csv
+- 读取输出结果output.json
 
 ## SQL生成
 
