@@ -14,7 +14,7 @@ FalkorDBGraph 是用于与 FalkorDB 图数据库交互的 Python 类，提供以
 检查`assets/schema.md`是否存在，如果不存在就执行`uv run scripts/load_graph.py`初始化。
 
 ```python
-from ontology import FalkorDBGraph
+from govio import FalkorDBGraph
 
 # 创建连接实例
 db_graph = FalkorDBGraph()
@@ -55,7 +55,7 @@ db_graph.query("MATCH (n:User {id: $id}) RETURN n", {"id": 123})
 - 用 Grep, Glob 查询 `assets/names/*.md` 获得供应商相关的实体在图数据库中的标准名称  
 - 根据`assets/schema.md`编写cypher执行查询
     ```python
-    from ontology import FalkorDBGraph
+    from govio import FalkorDBGraph
 
     g = FalkorDBGraph()
     cypher = """
@@ -77,7 +77,7 @@ db_graph.query("MATCH (n:User {id: $id}) RETURN n", {"id": 123})
 - 用 Grep 查询 `assets/names/CRM.md` 中customer表标准名称 和 `assets/names/ERP.md`中customer_info表标准名称
 - 根据`assets/schema.md`编写cypher执行查询
     ```python
-    from ontology import FalkorDBGraph
+    from govio import FalkorDBGraph
     import pandas as pd
 
     g = FalkorDBGraph()
@@ -106,7 +106,7 @@ db_graph.query("MATCH (n:User {id: $id}) RETURN n", {"id": 123})
 - 思考: 为了回答这个问题，我们需要找到所有包含'更新时间','update_time', 或 'updated_at'关键字的列，并按它们的数据类型进行分组计数。
 - 根据`assets/schema.md`编写cypher执行查询
     ```python
-    from ontology import FalkorDBGraph
+    from govio import FalkorDBGraph
     import pandas as pd
 
     g = FalkorDBGraph()
@@ -130,7 +130,7 @@ db_graph.query("MATCH (n:User {id: $id}) RETURN n", {"id": 123})
 - 思考: 首先使用relevant_nodes工具确定与'会计引擎'和'金蝶分录'相关的物理表；接着通过datagov_query工具获取该表的完整列信息；基于此信息并结合业务常识构造出符合要求的SQL查询。
 - 根据`assets/schema.md`编写cypher执行查询
     ```python
-    from ontology import FalkorDBGraph
+    from govio import FalkorDBGraph
     import pandas as pd
 
     g = FalkorDBGraph()
