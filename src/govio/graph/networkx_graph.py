@@ -2,10 +2,15 @@
 govio.graph.networkx_graph
 
 """
+import os
+from os import PathLike
 import networkx as nx
 
 class NetworkXGraph:
-    def __init__(self, graph="ontology.gml") -> None:
+    def __init__(self, graph: str| PathLike ="ontology.gml") -> None:
+        if not os.path.exists(graph):
+            raise FileNotFoundError(f"File not found: {graph}") 
+        
         self._g = nx.read_gml(graph)
 
         self._schema:str = ""
@@ -37,9 +42,7 @@ class NetworkXGraph:
             edge_types.add(rel_type)
 
             # Define relationship signature: source_type --[rel]--> target_type
-            # Since G = nx.Graph() is undirected, you might want to sort types to avoid dups
-            types = sorted([u_type, v_type])
-            rel_key = f"({types[0]})-[{rel_type}]->({types[1]})"
+            rel_key = f"({u_type})-[{rel_type}]->({v_type})"
 
             if rel_key not in schema["edge_relationships"]:
                 schema["edge_relationships"][rel_key] = set()
@@ -55,6 +58,7 @@ class NetworkXGraph:
             f"edge_types: {list(edge_types)}\n"
             f"edge_relationships: { {k: sorted(list(v)) for k, v in schema['edge_relationships'].items()} }\n"
         )
+
     
     @property
     def schema(self) -> str:
@@ -66,3 +70,4 @@ class NetworkXGraph:
     def G(self) -> nx.Graph:
         """Returns the schema of the Graph"""
         return self._g
+

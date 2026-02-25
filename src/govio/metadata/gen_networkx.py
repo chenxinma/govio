@@ -80,12 +80,12 @@ def load_edges(csv_dir: str) -> pd.DataFrame:
 def build_graph(csv_dir: str, output_gml: str):
     nodes_list = load_nodes(csv_dir)
     edges_df = load_edges(csv_dir)
-    G = nx.Graph()
-    for node in tqdm(nodes_list):
+    G = nx.DiGraph()
+    for node in tqdm(nodes_list, desc="nodes"):
         id = node["id"]
         del node["id"]
         G.add_node(id, **node)
-    for _, row in tqdm(edges_df.iterrows(), total=edges_df.shape[0]):
+    for _, row in tqdm(edges_df.iterrows(), total=edges_df.shape[0], desc="edges"):
         G.add_edge(row["source"], row["target"], edge_type=row["edge_type"])
     nx.write_gml(G, output_gml)
 
