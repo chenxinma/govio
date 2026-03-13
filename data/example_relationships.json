@@ -1,0 +1,41 @@
+{
+  "version": "1.0",
+  "relationships": [
+    {
+      "description": "用户表关联部门表",
+      "source": {
+        "PhysicalTable": "db.schema.users",
+        "Cols": ["dept_id"]
+      },
+      "target": {
+        "PhysicalTable": "db.schema.departments",
+        "Cols": ["id"]
+      },
+      "relationship_type": "many_to_one"
+    },
+    {
+      "description": "订单明细关联订单主表",
+      "source": {
+        "PhysicalTable": "db.schema.order_items",
+        "Cols": ["order_id"]
+      },
+      "target": {
+        "PhysicalTable": "db.schema.orders",
+        "Cols": ["id"]
+      },
+      "relationship_type": "many_to_one"
+    },
+    {
+      "description": "订单与商品多对多关系",
+      "source": {
+        "PhysicalTable": "db.schema.orders",
+        "Cols": ["id"]
+      },
+      "target": {
+        "PhysicalTable": "db.schema.products",
+        "Cols": ["id"]
+      },
+      "relationship_type": "many_to_many"
+    }
+  ]
+}
