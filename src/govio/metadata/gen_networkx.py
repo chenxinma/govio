@@ -55,7 +55,7 @@ def load_nodes(csv_dir: str) -> list[dict[str, Any]]:
 
 
 def load_edges(csv_dir: str) -> pd.DataFrame:
-    edge_files = ["HAS_COLUMN.csv", "USE.csv", "COMPLIES_WITH.csv"]
+    edge_files = ["HAS_COLUMN.csv", "USE.csv", "COMPLIES_WITH.csv", "RELATES_TO.csv"]
     edges_list = []
     for filename in edge_files:
         filepath = Path(csv_dir) / filename
@@ -96,20 +96,21 @@ def gml_generate():
     """
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="读取基础元数据的生成CSV，生成GML")
-    parser.add_argument('--csv', type=str, help='元数据csv目录')
-    parser.add_argument('-o', '--output', type=str, default=".", help="输出目录")
+        description="读取基础元数据的生成CSV，生成GML",
+    )
+    parser.add_argument("--csv", type=str, help="元数据csv目录")
+    parser.add_argument("-o", "--output", type=str, default=".", help="输出目录")
     # 解析命令行参数
     args = parser.parse_args()
 
     if not os.path.exists(args.csv):
         print("元数据csv目录未找到")
         sys.exit()
-    
+
     if not os.path.isdir(args.csv):
         print("指定的元数据csv路径应该是一个目录")
         sys.exit()
-    
+
     if not os.path.exists(args.output):
         print("输出目录未找到")
         sys.exit()
