@@ -183,3 +183,79 @@ class RelationshipLoader:
                 return False
 
         return True
+
+    def _convert_to_edge_row(self, rel: dict[str, Any]) -> dict[str, Any]:
+        """
+        将单个关系转换为边数据行
+
+        Args:
+            rel: 关系字典
+
+        Returns:
+            dict: 边数据行
+        """
+        return {
+            "source": rel["source"]["PhysicalTable"],
+            "target": rel["target"]["PhysicalTable"],
+            "relationship_type": rel["relationship_type"],
+            "description": rel.get("description", ""),
+            "source_columns": ",".join(rel["source"]["Cols"]),
+            "target_columns": ",".join(rel["target"]["Cols"]),
+        }
+
+    def load_relationships(self) -> pd.DataFrame:
+        """
+        加载并验证所有关系，返回边数据 DataFrame
+
+        Returns:
+            pd.DataFrame: 包含边数据的 DataFrame
+        """
+        data = self.load_json()
+        relationships = data["relationships"]
+
+        edge_rows = []
+        for idx, rel in enumerate(relationships):
+            if not self.validate_relationship(rel, idx):
+                continue
+
+            if not self.validate_table_and_columns(rel, idx):
+                continue
+
+            edge_row = self._convert_to_edge_row(rel)
+            edge_rows.append(edge_row)
+
+        if not edge_rows:
+            logger.warning("没有有效的关系数据")
+            return pd.DataFrame(
+                columns=[
+                    "source",
+                    "target",
+                    "relationship_type",
+                    "description",
+                    "source_columns",
+                    "target_columns",
+                ]
+            )
+
+        df = pd.DataFrame(edge_rows)
+        logger.info(f"成功加载 {len(df)} 个表关系")
+
+        return df
+
+
+def load_relationships(
+    json_path: str, df_tables: pd.DataFrame, df_columns: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    便捷函数：加载关系JSON并返回边数据
+
+    Args:
+        json_path: JSON文件路径
+        df_tables: PhysicalTable DataFrame
+        df_columns: Col DataFrame
+
+    Returns:
+        pd.DataFrame: 边数据 DataFrame
+    """
+    loader = RelationshipLoader(json_path, df_tables, df_columns)
+    return loader.load_relationships()
