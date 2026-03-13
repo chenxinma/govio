@@ -9,14 +9,17 @@ from .recommender import (
     DEFAULT_WEIGHTS,
     DEFAULT_K_NEIGHBORS,
     DEFAULT_TOP_N,
-    MIN_SIMILARITY
+    MIN_SIMILARITY,
 )
+from .relationship import RelationshipLoader, load_relationships
 
 __all__ = [
-    'StandardRecommender',
-    'create_recommender',
-    'DEFAULT_WEIGHTS',
-    'DEFAULT_K_NEIGHBORS',
-    'DEFAULT_TOP_N',
-    'MIN_SIMILARITY'
+    "StandardRecommender",
+    "create_recommender",
+    "DEFAULT_WEIGHTS",
+    "DEFAULT_K_NEIGHBORS",
+    "DEFAULT_TOP_N",
+    "MIN_SIMILARITY",
+    "RelationshipLoader",
+    "load_relationships",
 ]
