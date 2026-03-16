@@ -120,9 +120,9 @@ class RelationshipLoader:
 
     def _validate_column_exists(
         self, table_name: str, column_name: str, context: str
-    ) -> bool:
+    ) -> tuple[bool, str | None, str | None]:
         """
-        验证列是否存在
+        验证列是否存在（大小写不敏感匹配）
 
         Args:
             table_name: 表名
@@ -130,25 +130,41 @@ class RelationshipLoader:
             context: 上下文描述（用于错误消息）
 
         Returns:
-            bool: 是否存在
+            tuple[bool, str | None, str | None]: (是否存在, 实际列名或None, 实际表名或None)
         """
         full_col_name = f"{table_name}.{column_name}"
 
         if "column" in self.df_columns.columns:
             col_names = self.df_columns["column"]
-        elif "full_column_name" in self.df_columns.columns:
-            col_names = self.df_columns["full_column_name"]
         else:
             logger.warning(
                 f"{context}: 列 '{full_col_name}' 无法验证，DataFrame 缺少列名列，跳过"
             )
-            return False
+            return False, None, None
 
-        if full_col_name not in col_names.values:
-            logger.warning(f"{context}: 列 '{full_col_name}' 不存在于 Col 数据中，跳过")
-            return False
+        if full_col_name in col_names.values:
+            return True, column_name, \
+                self.df_columns[self.df_columns["column"]==full_col_name].get("full_table_name", pd.Series()).values[0]
 
-        return True
+        col_names_lower = {str(c).lower(): c for c in col_names.values}
+        full_col_name_lower = full_col_name.lower()
+
+        if full_col_name_lower in col_names_lower:
+            actual_col_name = col_names_lower[full_col_name_lower]
+            actual_simple_name = actual_col_name.split(".")[-1]
+            logger.info(
+                f"{context}: 列名大小写不匹配，'{column_name}' -> '{actual_simple_name}'"
+            )
+            return True, actual_simple_name, \
+                self.df_columns[self.df_columns["column"]==actual_col_name].get("full_table_name", pd.Series()).values[0]
+
+
+        logger.warning(f"{context}: 列 '{full_col_name}' 不存在于 Col 数据中，跳过")
+        return False, None, None
+    
+    def _get_table_id(self, full_table_name:str)-> int:
+        return self.df_tables[self.df_tables["full_table_name"] == full_table_name].index[0]
+
 
     def validate_table_and_columns(self, rel: dict[str, Any], index: int) -> bool:
         """
@@ -170,17 +186,38 @@ class RelationshipLoader:
         if not self._validate_table_exists(target_table, f"关系 {index} target"):
             return False
 
+        normalized_source_cols = []
+        full_table_names = set()
         for col in rel["source"]["Cols"]:
-            if not self._validate_column_exists(
+            valid, actual_col, full_table_name = self._validate_column_exists(
                 source_table, col, f"关系 {index} source"
-            ):
+            )
+            if not valid:
                 return False
+            normalized_source_cols.append(actual_col)
+            full_table_names.add(full_table_name)
+        rel["source"]["Cols"] = normalized_source_cols
+        if len(full_table_names) > 1:
+            logger.warning(f"source 表 {source_table}, 元数据定义出现重复")
+            return False
+        rel["source"]["ID"] = self._get_table_id(full_table_names.pop())
 
+
+        normalized_target_cols = []
+        full_table_names = set()
         for col in rel["target"]["Cols"]:
-            if not self._validate_column_exists(
+            valid, actual_col, full_table_name = self._validate_column_exists(
                 target_table, col, f"关系 {index} target"
-            ):
+            )
+            if not valid:
                 return False
+            normalized_target_cols.append(actual_col)
+            full_table_names.add(full_table_name)
+        rel["target"]["Cols"] = normalized_target_cols
+        if len(full_table_names) > 1:
+            logger.warning(f"target 表 {target_table}, 元数据定义出现重复")
+            return False
+        rel["target"]["ID"] = self._get_table_id(full_table_names.pop())
 
         return True
 
@@ -195,8 +232,8 @@ class RelationshipLoader:
             dict: 边数据行
         """
         return {
-            "source": rel["source"]["PhysicalTable"],
-            "target": rel["target"]["PhysicalTable"],
+            "source": rel["source"]["ID"],
+            "target": rel["target"]["ID"],
             "relationship_type": rel["relationship_type"],
             "description": rel.get("description", ""),
             "source_columns": ",".join(rel["source"]["Cols"]),
@@ -212,7 +249,7 @@ class RelationshipLoader:
         """
         data = self.load_json()
         relationships = data["relationships"]
-
+        
         edge_rows = []
         for idx, rel in enumerate(relationships):
             if not self.validate_relationship(rel, idx):
@@ -223,6 +260,7 @@ class RelationshipLoader:
 
             edge_row = self._convert_to_edge_row(rel)
             edge_rows.append(edge_row)
+        
 
         if not edge_rows:
             logger.warning("没有有效的关系数据")

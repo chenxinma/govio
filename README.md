@@ -84,6 +84,9 @@ metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_lis
 
 # 生成数据标准推荐（可选模式）
 metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_list.xlsx" -m recommend -o ./output
+
+# 生成元数据 CSV（用于图数据库导入）包含数据表关联
+metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_list.xlsx" -m csv --relationship relationship.json -o ./output
 ```
 
 ### 生成 NetworkX 图文件
@@ -93,7 +96,7 @@ metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_lis
 metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_list.xlsx" -o ./output
 
 # 生成 GML 文件
-python -m govio.metadata.gen_networkx --csv ./output -o ./output
+gml_generate --csv ./output -o ./output
 ```
 
 ### 使用图数据库

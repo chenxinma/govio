@@ -71,9 +71,16 @@ def load_edges(csv_dir: str) -> pd.DataFrame:
         edge_type = Path(filename).stem
         df = df.rename(columns={src_col: "source", dst_col: "target"})
         df["edge_type"] = edge_type
+        cols = list(df.columns.copy())
+        cols.remove("source")
+        cols.remove("target") 
+        df["attributes"] = df[cols].apply(
+            lambda x: {k: v for k, v in x.items() if pd.notna(v)}, 
+            axis=1
+        )
         edges_list.append(df)
     if not edges_list:
-        return pd.DataFrame(columns=["source", "target", "edge_type"])
+        return pd.DataFrame(columns=["source", "target", "attributes"])
     return pd.concat(edges_list)
 
 
@@ -86,7 +93,8 @@ def build_graph(csv_dir: str, output_gml: str):
         del node["id"]
         G.add_node(id, **node)
     for _, row in tqdm(edges_df.iterrows(), total=edges_df.shape[0], desc="edges"):
-        G.add_edge(row["source"], row["target"], edge_type=row["edge_type"])
+        attr = row["attributes"]
+        G.add_edge(row["source"], row["target"], **attr)
     nx.write_gml(G, output_gml)
 
 
