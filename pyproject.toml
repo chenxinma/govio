@@ -27,6 +27,7 @@ build-backend = "hatchling.build"
 dev = [
     "falkordb-bulk-loader>=1.0.7",
     "pytest>=9.0.2",
+    "ruff>=0.15.6",
 ]
 
 [[tool.uv.index]]
