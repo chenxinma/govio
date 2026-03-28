@@ -56,7 +56,7 @@ class FalkorDBGraph:
     
 
     def refresh_schema(self):
-        """Refreshes the Kùzu graph schema information"""
+        """Refreshes the Falkordb graph schema information"""
         node_properties = []
         for node in self._get_labels():
             current_table_schema = {"properties": [], "label": self._wrap_name(node)}

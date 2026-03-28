@@ -3,7 +3,7 @@
 ✅ 核心构词：Gov（Governance，数据治理核心）+ io（Data IO，数据交互 / 数据流转，数据治理的核心载体）
 ✅ 深层内涵：以「数据治理」为核心内核，以「数据交互」为落地链路，一站式承载元数据管理、数据标准统一、数据质量校验全能力，赋能数据全生命周期的合规治理与高效流转。
 
-基于 FalkorDB 的数据治理知识图谱项目，提供元数据查询、表字段比较、SQL 生成、数据标准推荐等数据治理支持功能。
+基于 NetworkX 的数据治理知识图谱项目，提供元数据查询、表字段比较、SQL 生成、数据标准推荐等数据治理支持功能。
 
 ## 功能特性
 
@@ -11,12 +11,12 @@
 - **表字段比较**：比较不同表之间的字段差异（字段名称、数据类型、是否必填等）
 - **SQL 生成**：根据需求描述自动生成符合要求的 SQL 语句
 - **数据标准推荐**：基于协同过滤算法，为未贯标列推荐合适的数据标准
-- **图数据库集成**：使用 FalkorDB 构建和管理知识图谱
+- **图数据库集成**：使用 NetworkX 构建本地知识图谱，通过 Python 脚本执行查询
 
 ## 技术栈
 
 - **Python**: >= 3.13
-- **图数据库**: FalkorDB >= 1.4.0
+- **图数据库**: NetworkX >= 3.0
 - **数据处理**: pandas >= 2.3.3, openpyxl >= 3.1.5, scikit-learn >= 1.8.0
 - **数据库连接**: SQLAlchemy >= 2.0.45, PyMySQL >= 1.1.2
 - **其他**: tqdm >= 4.67.1, python-dotenv
@@ -45,11 +45,13 @@ govio/
 │       ├── __init__.py
 │       ├── graph/
 │       │   ├── __init__.py
-│       │   └── falkordb_graph.py      # FalkorDB 图数据库封装
+│       │   ├── falkordb_graph.py      # FalkorDB 图数据库封装
+│       │   └── networkx_graph.py      # NetworkX 图数据库封装
 │       └── metadata/
 │           ├── __init__.py
 │           ├── application.py         # 应用信息加载
 │           ├── database.py            # 数据库元数据加载
+│           ├── gen_networkx.py        # 生成 NetworkX GML 图文件
 │           ├── standard.py            # 数据标准加载
 │           ├── recommender.py         # 数据标准推荐器
 │           ├── type.py                # 类型定义
@@ -82,21 +84,42 @@ metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_lis
 
 # 生成数据标准推荐（可选模式）
 metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_list.xlsx" -m recommend -o ./output
+
+# 生成元数据 CSV（用于图数据库导入）包含数据表关联
+metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_list.xlsx" -m csv --relationship relationship.json -o ./output
+```
+
+### 生成 NetworkX 图文件
+
+```bash
+# 从元数据 CSV 生成 GML 图文件
+metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_list.xlsx" -o ./output
+
+# 生成 GML 文件
+gml_generate --csv ./output -o ./output
 ```
 
 ### 使用图数据库
 
 ```python
-from govio import FalkorDBGraph
+from govio import NetworkXGraph
 
-# 连接到 FalkorDB
-graph = FalkorDBGraph(graph="ontology", host='localhost', port=6379)
+# 加载 NetworkX 图
+graph = NetworkXGraph(graph="./output/ontology.gml")
 
 # 查看图模式
 print(graph.schema)
 
-# 执行 Cypher 查询
-result = graph.query("MATCH (n) RETURN n LIMIT 10")
+# 使用 Python 进行图查询
+# 获取所有节点
+nodes = list(graph.G.nodes(data=True))
+
+# 获取特定类型的节点
+cols = [n for n, data in graph.G.nodes(data=True) if data.get("node_type") == "Col"]
+
+# 遍历边
+for u, v, data in graph.G.edges(data=True):
+    print(f"{u} --[{data.get('edge_type')}]--> {v}")
 ```
 
 ### 加载元数据

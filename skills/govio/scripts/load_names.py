@@ -14,10 +14,10 @@
 
 输出样例：
 assets
-   └── names
-        ├── app1.md
-        ├── app2.md
-        └── app3.md
+└── names
+├── app1.md
+├── app2.md
+└── app3.md
 
 app1.md
 ```markdown
@@ -27,76 +27,42 @@ app1.md
 ...
 ```
 """
-import argparse
+
+import json
 from pathlib import Path
-from govio import FalkorDBGraph
+from govio import NetworkXGraph
+from networkx import Graph
 
-ASSETS_NAMES_DIR = Path(__file__).parent.parent / "assets/names"
+ASSETS_DIR = Path(__file__).parent.parent / "assets"
+ASSETS_NAMES_DIR = ASSETS_DIR / "names"
 
-def generate_names(g:FalkorDBGraph):
-    """生成按应用分组的名称索引文件"""
 
+def generate_names(g: Graph):
+    """节点名称索引文件
+    格式：
+    {"id":123, "name":"ABC", "node_type": "Application"}
+    """
+
+    if not ASSETS_DIR.exists():
+        ASSETS_DIR.mkdir()
     if not ASSETS_NAMES_DIR.exists():
         ASSETS_NAMES_DIR.mkdir()
-    
-    # 查询所有应用
-    apps_query = """
-    MATCH (app:Application)
-    RETURN app.app_name_en AS app_name_en, app.name AS name
-    ORDER BY app.app_name_en
-    """
-    apps = g.query(apps_query)
-    
-    # 按应用逐次处理
-    for app_row in apps:
-        app_name_en, name = app_row
-        
-        # 查询该应用使用的所有物理表
-        tables_query = """
-        MATCH (app:Application {app_name_en: $app_name_en})-[:USE]->(table:PhysicalTable)
-        RETURN table.full_table_name, table.name AS table_name
-        ORDER BY table.full_table_name
-        """
-        tables = g.query(tables_query, {'app_name_en': app_name_en})
-        
-        md_content = []
-        
-        # 按物理表逐次处理
-        for table_row in tables:
-            full_table_name, table_name = table_row
 
-            if not table_name or table_name == "None":
-                table_name = ""
-            
-            md_content.append(f"# {full_table_name} {table_name}")
-            
-            # 查询该物理表的所有字段
-            cols_query = """
-            MATCH (table:PhysicalTable {full_table_name: $full_table_name})-[:HAS_COLUMN]->(col:Col)
-            RETURN col.column_name, col.name AS col_name
-            ORDER BY col.order_no
-            """
-            cols = g.query(cols_query, {'full_table_name': full_table_name})
-            
-            for col_row in cols:
-                column_name, col_name = col_row
-                if not col_name or col_name == "None":
-                    col_name = ""
-                md_content.append(f"- {column_name} {col_name}")
-            
-            md_content.append("")  # 空行分隔
-        
-        # 写入文件
-        file_path = ASSETS_NAMES_DIR / f"{name}_{app_name_en}.md"
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(md_content))
+    # 遍历所有节点，查找Application类型的节点
+    nodes = [ dict(id=node_id, name=g.nodes[node_id]['name'], node_type=g.nodes[node_id]['node_type']) \
+              for node_id in g.nodes() \
+                if g.nodes[node_id]['name'] \
+                   and g.nodes[node_id]['name'] != "0" \
+                   and isinstance(g.nodes[node_id]['name'], str)]
+    
+    if nodes and len(nodes) > 0:  # 只有在有内容时才写入文件
+        file_path = ASSETS_NAMES_DIR / f"node_names.md"
+        with open(file_path, "w", encoding="utf-8") as f:
+            for node in nodes:
+                f.write(json.dumps(node, ensure_ascii=False) + "\n")
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--graph', type=str, help='图数据库名称', default="ontology")
-
-    # 解析命令行参数
-    args = parser.parse_args()
-    g = FalkorDBGraph(graph = args.graph)
-
-    generate_names(g)
+    # Use the provided graph file path relative to assets directory
+    g = NetworkXGraph(ASSETS_DIR / "ontology.gml")
+    generate_names(g.G)

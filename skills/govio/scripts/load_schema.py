@@ -3,11 +3,11 @@
 """
 import argparse
 from pathlib import Path
-from govio import FalkorDBGraph
+from govio import NetworkXGraph
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
 
-def load_schema(g: FalkorDBGraph):
+def load_schema(g: NetworkXGraph):
     if not ASSETS_DIR.exists():
         ASSETS_DIR.mkdir()
 
@@ -15,10 +15,6 @@ def load_schema(g: FalkorDBGraph):
         fp.write(g.schema)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--graph', type=str, help='图数据库名称', default="ontology")
-
     # 解析命令行参数
-    args = parser.parse_args()
-    g = FalkorDBGraph(graph = args.graph)
+    g = NetworkXGraph(ASSETS_DIR / "ontology.gml")
     load_schema(g)

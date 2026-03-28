@@ -16,3 +16,4 @@ uv.lock
 
 assets/
 .iflow
+.worktrees/
