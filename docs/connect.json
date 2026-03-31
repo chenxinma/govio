@@ -1,0 +1,9 @@
+{
+  "ds1": {
+    "url": "trino://user:{password}@host:port/database",
+    "connect_args": {
+      "http_scheme": "https",
+      "timezone": "Asia/Shanghai"
+    }
+  }
+}
