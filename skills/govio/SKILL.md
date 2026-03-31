@@ -37,7 +37,7 @@ govio/
     │       └── names/
     │            └── node_names.md # 已知节点的名称，作为标准名称备参考
     └── scripts/                   # 脚本工具
-         ├── query.py              # NetworkX查询
+         ├── query.py              # 统一查询入口 (networkx/falkordb)
          ├── load_names.py         # 加载标准名称脚本工具
          └── load_schema.py        # 加载图数据库模式脚本工具
 
@@ -47,7 +47,7 @@ govio/
 Q: 查询CRM应用有几张表
 
 ```bash
-uv run ./.opencode/skills/govio/sscripts/query.py --code "app_node = next((n for n, d in g.nodes(data=True) if d.get('name')=='CRM' and d.get('node_type')=='Application'), None)
+uv run python skills/govio/scripts/query.py networkx --code "app_node = next((n for n, d in g.nodes(data=True) if d.get('name')=='CRM' and d.get('node_type')=='Application'), None)
 if app_node:
     count = sum(
         1 for neighbor in g.successors(app_node)
@@ -60,4 +60,4 @@ else:
 "
 ```
 执行以上代码并获得反馈
-在使用scripts/query.py时可以直接使用g,g是NetworkX的图对象。结果返回采用result=...
+在使用 query.py networkx 时可以直接使用g,g是NetworkX的图对象。结果返回采用result=...
