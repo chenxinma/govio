@@ -10,9 +10,7 @@ from govio.mcp.config import DataSourceConfig, load_config
 
 
 def test_load_config_success():
-    config_data = {
-        "datasources": {"testdb": {"driver": "sqlite", "database": ":memory:"}}
-    }
+    config_data = {"testdb": {"url": "sqlite:///:memory:"}}
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(config_data, f)
@@ -20,7 +18,7 @@ def test_load_config_success():
         config = load_config(Path(f.name))
 
     assert "testdb" in config.datasources
-    assert config.datasources["testdb"].driver == "sqlite"
+    assert config.datasources["testdb"].url == "sqlite:///:memory:"
 
 
 def test_load_config_file_not_found():
@@ -28,22 +26,15 @@ def test_load_config_file_not_found():
         load_config(Path("/nonexistent/config.json"))
 
 
-def test_datasource_config_to_url():
+def test_datasource_config_with_url():
+    config = DataSourceConfig(url="mysql+pymysql://user:pass@localhost:3306/testdb")
+    assert config.url == "mysql+pymysql://user:pass@localhost:3306/testdb"
+    assert config.connect_args == {}
+
+
+def test_datasource_config_with_connect_args():
     config = DataSourceConfig(
-        driver="mysql+pymysql",
-        host="localhost",
-        port=3306,
-        database="testdb",
-        username="user",
-        password="pass",
+        url="trino://user:pass@host:8080/db", connect_args={"http_scheme": "https"}
     )
-
-    url = config.to_url()
-    assert url == "mysql+pymysql://user:pass@localhost:3306/testdb"
-
-
-def test_datasource_config_to_url_sqlite():
-    config = DataSourceConfig(driver="sqlite", database="/path/to/db.sqlite")
-
-    url = config.to_url()
-    assert url == "sqlite:////path/to/db.sqlite"
+    assert config.url == "trino://user:pass@host:8080/db"
+    assert config.connect_args == {"http_scheme": "https"}
