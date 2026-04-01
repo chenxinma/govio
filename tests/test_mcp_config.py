@@ -10,7 +10,7 @@ from govio.mcp.config import DataSourceConfig, load_config
 
 
 def test_load_config_success():
-    config_data = {"testdb": {"url": "sqlite:///:memory:"}}
+    config_data = {"datasources": {"testdb": {"url": "sqlite:///:memory:"}}}
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(config_data, f)

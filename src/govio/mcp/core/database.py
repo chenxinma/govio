@@ -29,6 +29,7 @@ class DatabaseManager:
                     if not Path(dir_path).exists():
                         raise ValueError(f"目录不存在: {dir_path}")
                     conn = duckdb.connect(":memory:")
+                    conn.execute(f"SET file_search_path = '{dir_path}'")
                     self._duckdb_conns[name] = conn
                     self._duckdb_dirs[name] = dir_path
                 else:

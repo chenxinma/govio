@@ -24,11 +24,13 @@ def test_load_config():
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(
             {
-                "ds1": {
-                    "url": "trino://user:pass@host:8080/db",
-                    "connect_args": {"http_scheme": "https"},
-                },
-                "ds2": {"url": "duckdb:///data/warehouse"},
+                "datasources": {
+                    "ds1": {
+                        "url": "trino://user:pass@host:8080/db",
+                        "connect_args": {"http_scheme": "https"},
+                    },
+                    "ds2": {"url": "duckdb:///data/warehouse"},
+                }
             },
             f,
         )

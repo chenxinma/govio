@@ -30,7 +30,7 @@ def load_config(path: Path) -> Config:
         data = json.load(f)
 
     datasources = {}
-    for name, ds_data in data.items():
+    for name, ds_data in data.get("datasources", {}).items():
         datasources[name] = DataSourceConfig(
             url=ds_data.get("url", ""),
             connect_args=ds_data.get("connect_args", {}),

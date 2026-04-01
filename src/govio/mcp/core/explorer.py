@@ -32,18 +32,29 @@ class RelationExplorer:
         target_df: pd.DataFrame,
         target_name: str,
     ) -> list[dict[str, Any]]:
-        """推断外键关系"""
+        """推断外键关系（大小写不敏感）"""
         relations = []
 
-        for col in source_df.columns:
-            if col.endswith("_id") or col.endswith("Id"):
-                target_col = col.replace("_id", "").replace("Id", "") + "_id"
-                if target_col not in target_df.columns:
-                    target_col = col
+        target_col_map = {col.lower(): col for col in target_df.columns}
 
-                if col in target_df.columns:
+        for col in source_df.columns:
+            col_lower = col.lower()
+            if col_lower.endswith("_id") or col_lower.endswith("id"):
+                if col_lower.endswith("_id"):
+                    base = col_lower[:-3]
+                else:
+                    base = col_lower[:-2]
+                inferred_target = base + "_id"
+
+                target_col = None
+                if inferred_target in target_col_map:
+                    target_col = target_col_map[inferred_target]
+                elif col_lower in target_col_map:
+                    target_col = target_col_map[col_lower]
+
+                if target_col:
                     source_values = set(source_df[col].dropna().unique())
-                    target_values = set(target_df[col].dropna().unique())
+                    target_values = set(target_df[target_col].dropna().unique())
 
                     if source_values and target_values:
                         overlap = len(source_values & target_values)
@@ -55,7 +66,7 @@ class RelationExplorer:
                                     "source_table": source_name,
                                     "source_column": col,
                                     "target_table": target_name,
-                                    "target_column": col,
+                                    "target_column": target_col,
                                     "confidence": ratio,
                                 }
                             )
@@ -77,5 +88,18 @@ class RelationExplorer:
 
                 relations = self.infer_foreign_keys(df2, name2, df1, name1)
                 all_relations.extend(relations)
+
+                similarities = self.find_column_similarity(df1, df2)
+                for sim in similarities:
+                    all_relations.append(
+                        {
+                            "type": "column_similarity",
+                            "table1": name1,
+                            "column1": sim["column"],
+                            "table2": name2,
+                            "column2": sim["match_column"],
+                            "similarity": sim["similarity"],
+                        }
+                    )
 
         return all_relations
