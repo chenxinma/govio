@@ -45,3 +45,4 @@ exclude = [
 metadata = "govio:run"
 gml_generate = "govio:gml_generate"
 mcp-server = "govio.mcp.server:main"
+onboard = "govio.cli:onboard"
