@@ -1,10 +1,6 @@
-import argparse
 from enum import Enum
-import os
 from pathlib import Path
-import sys
-import textwrap
-from dotenv import load_dotenv
+
 import pandas as pd
 
 from .application import AppInfoLoader
@@ -30,65 +26,6 @@ def reorder_index(dfs: list[pd.DataFrame]):
         df["index"] = [i for i in range(base_index, _end_index)]
         df.set_index("index", drop=True, inplace=True)
         base_index = _end_index
-
-
-def run():
-    """
-    1.从数据治理平台和应用清单获取基础元数据生成CSV
-    """
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        description=textwrap.dedent(f"""\
-        从元数据管理的数据库中提取元数据信息生成用于沟通图数据库的csv。
-        从应用清单中获得应用信息生成用于沟通图数据库的csv。
-        """),
-    )
-    parser.add_argument("--kundb", type=str, help="元数据库URL")
-    parser.add_argument("--app-list", type=str, help="应用清单")
-    parser.add_argument("--app-map", type=str, help="应用数据库映射")
-    parser.add_argument("--relationship", type=str, help="表关系JSON文件路径")
-    parser.add_argument("-m", "--mode", type=Mode, choices=list(Mode), default=Mode.CSV)
-    parser.add_argument("-o", "--output", type=str, default=".", help="输出目录")
-    # 解析命令行参数
-    args = parser.parse_args()
-
-    load_dotenv()
-    db = os.getenv("KUNDB_URL", "")
-    if args.kundb:
-        db = args.kundb
-
-    app_list = os.getenv("APP_LIST_FILE", "")
-    if args.app_list:
-        app_list = args.app_list
-
-    app_map = os.getenv("APP_MAP", "")
-    if args.app_map:
-        app_map = args.app_map
-
-    relationship_file = args.relationship
-
-    workspace_uuid = "82ee37374b314a938bf28170ab4db7cf"
-
-    if len(db) == 0:
-        print("元数据管理库未设置")
-        sys.exit()
-
-    if not os.path.exists(args.output):
-        print("输出目录未找到")
-        sys.exit()
-
-    if not os.path.exists(app_map):
-        print("应用和数据库映射未找到")
-        sys.exit()
-
-    output = Path(args.output)
-
-    df_app_db_map = pd.read_json(app_map, orient="records")
-
-    if args.mode == Mode.CSV:
-        make_csv(output, db, workspace_uuid, app_list, df_app_db_map, relationship_file)
-    elif args.mode == Mode.RECOMMEND:
-        data_standard_recommend(output, db, workspace_uuid, df_app_db_map)
 
 
 def make_csv(
@@ -266,7 +203,3 @@ def eval_test():
         {"ihrmdb.basic_api_access_log.application_name": ""},
     )
     print(result)
-
-
-if __name__ == "__main__":
-    eval_test()
