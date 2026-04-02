@@ -127,6 +127,33 @@ def test_prompt_falkordb_config(monkeypatch):
     assert config["falkordb"]["graph"] == "test_graph"
 
 
+def test_prompt_backend_choice_invalid_input(monkeypatch, capsys):
+    from govio.cli.onboard import prompt_backend_choice
+
+    inputs = iter(["3", "invalid", "1"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    result = prompt_backend_choice()
+    assert result == "networkx"
+
+    captured = capsys.readouterr()
+    assert "无效选项" in captured.out
+
+
+def test_prompt_falkordb_config_invalid_port(monkeypatch, capsys):
+    from govio.cli.onboard import prompt_falkordb_config
+
+    inputs = iter(["localhost", "invalid", "6379", "test_graph"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    config = prompt_falkordb_config()
+
+    assert config["falkordb"]["port"] == 6379
+
+    captured = capsys.readouterr()
+    assert "端口必须是数字" in captured.out
+
+
 def test_onboard_networkx_workflow(monkeypatch, tmp_path):
     import importlib
     from govio.cli.config import ConfigManager

@@ -61,7 +61,7 @@ def prompt_networkx_config() -> dict[str, Any]:
         .strip()
         .lower()
     )
-    generate_gml = generate_gml in ["yes", "y", ""] or generate_gml == "yes"
+    generate_gml = generate_gml in ("yes", "y", "")
 
     if generate_gml:
         while True:
@@ -97,7 +97,11 @@ def prompt_falkordb_config() -> dict[str, Any]:
 
     host = input("请输入 FalkorDB 主机地址 [默认: localhost]: ").strip() or "localhost"
     port_str = input("请输入 FalkorDB 端口 [默认: 6379]: ").strip() or "6379"
-    port = int(port_str)
+    try:
+        port = int(port_str)
+    except ValueError:
+        print(f"❌ 端口必须是数字: {port_str}")
+        port = 6379
     graph_name = input("请输入图数据库名称 [默认: ontology]: ").strip() or "ontology"
 
     return {
