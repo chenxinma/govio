@@ -65,4 +65,14 @@ class ConfigManager:
                 if field not in config["falkordb"]:
                     raise ValueError(f"FalkorDB 配置缺少 '{field}' 字段")
 
+        if "csv_dir" in config:
+            csv_path = Path(config["csv_dir"])
+            if not csv_path.exists():
+                raise ValueError(f"csv_dir 不存在: {csv_path}")
+
+        if "graph_dir" in config:
+            graph_path = Path(config["graph_dir"])
+            if not graph_path.exists():
+                raise ValueError(f"graph_dir 不存在: {graph_path}")
+
         return True
