@@ -13,52 +13,6 @@
 - **数据标准推荐**：基于协同过滤算法，为未贯标列推荐合适的数据标准
 - **图数据库集成**：使用 NetworkX 构建本地知识图谱，通过 Python 脚本执行查询
 
-## 技术栈
-
-- **Python**: >= 3.13
-- **图数据库**: NetworkX >= 3.0
-- **数据处理**: pandas >= 2.3.3, openpyxl >= 3.1.5, scikit-learn >= 1.8.0
-- **数据库连接**: SQLAlchemy >= 2.0.45, PyMySQL >= 1.1.2
-- **其他**: tqdm >= 4.67.1, python-dotenv
-
-## 项目结构
-
-```
-govio/
-├── pyproject.toml                     # 项目配置
-├── README.md                          # 项目说明
-├── data/                              # 数据文件
-├── docs/                              # 文档
-│   └── specs/
-│       └── data_standard/
-│           ├── data_standard_recommendation.md
-│           └── recommender_usage.md
-├── skills/
-│   └── govio/
-│       ├── SKILL.md                   # 技能定义
-│       ├── reference.md               # 参考文档
-│       ├── assets/                    # 资源文件
-│       ├── logs/                      # 日志文件
-│       └── scripts/                   # 脚本工具
-├── src/
-│   └── govio/
-│       ├── __init__.py
-│       ├── graph/
-│       │   ├── __init__.py
-│       │   ├── falkordb_graph.py      # FalkorDB 图数据库封装
-│       │   └── networkx_graph.py      # NetworkX 图数据库封装
-│       └── metadata/
-│           ├── __init__.py
-│           ├── application.py         # 应用信息加载
-│           ├── database.py            # 数据库元数据加载
-│           ├── gen_networkx.py        # 生成 NetworkX GML 图文件
-│           ├── standard.py            # 数据标准加载
-│           ├── recommender.py         # 数据标准推荐器
-│           ├── type.py                # 类型定义
-│           └── utility.py             # 工具函数（包含命令行入口）
-└── dist/                              # 构建输出目录
-```
-
 ## 安装
 
 ```bash
@@ -72,11 +26,61 @@ uv sync
 uv sync --group dev
 ```
 
+## 从元数据到知识图谱
+
+Govio 将企业元数据（图结构）转化为知识图谱，支持两种图数据库后端：
+
+```
+┌─────────────────┐     metadata      ┌─────────────────┐
+│   企业数据库      │ ────────────────▶ │   CSV 文件       │
+│ (KunDB/MySQL)   │                  │ (节点 + 边)     │
+└─────────────────┘                  └────────┬────────┘
+                                              │
+                                              ▼
+                                     ┌─────────────────┐
+                                     │  gml_generate   │
+                                     │  (生成 GML)     │
+                                     └────────┬────────┘
+                                              │
+                          ┌───────────────────┼───────────────────┐
+                          ▼                                       ▼
+               ┌─────────────────┐                        ┌─────────────────┐
+               │   NetworkX      │                        │   FalkorDB      │
+               │   GML 文件       │                        │   图数据库       │
+               └────────┬────────┘                        └────────┬────────┘
+                        │                                          │
+                        ▼                                          ▼
+               ┌─────────────────────────────────────────────────────────┐
+               │                    onboard 向导                          │
+               │  • 选择后端 (NetworkX / FalkorDB)                       │
+               │  • 配置连接信息                                          │
+               │  • 生成 schema.md (图结构定义)                          │
+               │  • 生成 names/ (节点名称索引)                            │
+               └─────────────────────────────────────────────────────────┘
+```
+
 ## 快速开始
 
-### 首次使用：运行 Onboard 向导
+### 第一步：生成元数据 CSV
 
-安装完成后，运行 onboard 向导进行初始化配置：
+从企业数据库导出元数据，生成 CSV 文件：
+
+```bash
+metadata --kundb "mysql+pymysql://user:pass@host/db" \
+  --app-list "path/to/app_list.xlsx" \
+  -m csv \
+  -o ./output
+```
+
+### 第二步：生成 GML 图文件
+
+将 CSV 文件转换为 GML 格式：
+
+```bash
+gml_generate --csv ./output -o ./output
+```
+
+### 第三步：运行 Onboard 向导初始化
 
 ```bash
 uv run onboard
@@ -96,15 +100,13 @@ uv run onboard
 3. **FalkorDB 模式**
    - 输入 FalkorDB 连接信息（host, port, graph name）
 
-4. **自动生成**
+4. **自动生成 Assets**
    - 配置文件保存到 `~/.govio/config.yaml`
    - Assets 生成到 `skills/govio/assets/`
      - `schema.md`: 图结构定义
      - `names/`: 节点名称索引
 
 ### CSV 文件格式要求
-
-如果选择从 CSV 生成 GML 文件，CSV 目录应包含以下文件：
 
 **节点文件：**
 - `PhysicalTable.csv`: 物理表节点
@@ -133,32 +135,9 @@ col1,用户ID,USER_ID,DB.SCHEMA.TABLE1
 table1,col1
 ```
 
-### 命令行工具
-
-项目提供了一个命令行工具来生成元数据 CSV 文件：
-
-```bash
-# 生成元数据 CSV（用于图数据库导入）
-metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_list.xlsx" -o ./output
-
-# 生成数据标准推荐（可选模式）
-metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_list.xlsx" -m recommend -o ./output
-
-# 生成元数据 CSV（用于图数据库导入）包含数据表关联
-metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_list.xlsx" -m csv --relationship relationship.json -o ./output
-```
-
-### 生成 NetworkX 图文件
-
-```bash
-# 从元数据 CSV 生成 GML 图文件
-metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path/to/app_list.xlsx" -o ./output
-
-# 生成 GML 文件
-gml_generate --csv ./output -o ./output
-```
-
 ### 使用图数据库
+
+**NetworkX 模式：**
 
 ```python
 from govio import NetworkXGraph
@@ -170,15 +149,26 @@ graph = NetworkXGraph(graph="./output/ontology.gml")
 print(graph.schema)
 
 # 使用 Python 进行图查询
-# 获取所有节点
 nodes = list(graph.G.nodes(data=True))
-
-# 获取特定类型的节点
 cols = [n for n, data in graph.G.nodes(data=True) if data.get("node_type") == "Col"]
 
-# 遍历边
 for u, v, data in graph.G.edges(data=True):
     print(f"{u} --[{data.get('edge_type')}]--> {v}")
+```
+
+**FalkorDB 模式：**
+
+```python
+from govio import FalkorDBGraph
+
+# 连接 FalkorDB 图数据库
+graph = FalkorDBGraph(host="localhost", port=6379, graph="ontology")
+
+# 查看图模式
+print(graph.schema)
+
+# 使用 Cypher 查询
+result = graph.query("MATCH (n:Application) RETURN n.name LIMIT 10")
 ```
 
 ### 加载元数据
