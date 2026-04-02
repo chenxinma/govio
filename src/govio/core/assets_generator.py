@@ -48,11 +48,9 @@ class AssetsGenerator:
             names_dir.mkdir(parents=True, exist_ok=True)
 
         # 检测图谱类型
-        from govio import NetworkXGraph, FalkorDBGraph
-
-        if isinstance(self.graph, NetworkXGraph):
+        if hasattr(self.graph, "G"):
             self._generate_names_networkx(names_dir)
-        elif isinstance(self.graph, FalkorDBGraph):
+        else:
             self._generate_names_falkordb(names_dir)
 
     def _generate_names_networkx(self, names_dir: Path) -> None:

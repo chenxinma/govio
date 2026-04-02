@@ -1,7 +1,10 @@
-import pytest
-from pathlib import Path
+import json
 import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, Mock
+
 import networkx as nx
+
 from govio import NetworkXGraph
 from govio.core.assets_generator import AssetsGenerator
 
@@ -65,7 +68,12 @@ def test_assets_generator_networkx_names():
         assert node_names_path.exists()
 
         content = node_names_path.read_text(encoding="utf-8")
-        assert "应用1" in content or "APP1" in content
+        lines = content.strip().split("\n")
+        assert len(lines) > 0
+        node = json.loads(lines[0])
+        assert "id" in node
+        assert "name" in node
+        assert "node_type" in node
 
 
 def test_assets_generator_generate_all():
@@ -83,3 +91,28 @@ def test_assets_generator_generate_all():
 
         assert (output_dir / "schema.md").exists()
         assert (output_dir / "names" / "node_names.md").exists()
+
+
+def test_assets_generator_falkordb_names():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_dir = Path(tmpdir) / "assets"
+        output_dir.mkdir()
+
+        mock_graph = Mock(spec=["schema", "query"])
+        mock_graph.schema = "## FalkorDB schema:\n节点：[]\n关联: []\n"
+
+        mock_graph.query = MagicMock()
+        mock_graph.query.side_effect = [
+            [["APP1", "应用1"]],
+            [["SCHEMA.TABLE1", "表1"]],
+            [["COL1", "字段1"]],
+        ]
+
+        generator = AssetsGenerator(mock_graph, output_dir)
+        generator.generate_all()
+
+        assert (output_dir / "schema.md").exists()
+        names_dir = output_dir / "names"
+        assert names_dir.exists()
+        app_file = names_dir / "应用1_APP1.md"
+        assert app_file.exists()
