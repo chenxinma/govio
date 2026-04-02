@@ -8,9 +8,7 @@ from ..core.assets_generator import AssetsGenerator
 from ..metadata.gen_networkx import build_graph
 
 
-SKILLS_ASSETS_DIR = (
-    Path(__file__).parent.parent.parent.parent.parent / "skills" / "govio" / "assets"
-)
+SKILLS_ASSETS_DIR = Path(".skills/govio/assets")
 
 
 def validate_csv_directory(csv_dir: Path) -> bool:
@@ -32,6 +30,82 @@ def validate_csv_directory(csv_dir: Path) -> bool:
             return False
 
     return True
+
+
+def prompt_csv_config(config_manager: ConfigManager) -> dict[str, Any]:
+    """提示用户输入 CSV 生成配置"""
+    print("\n=== 步骤 1: CSV 元数据生成 ===\n")
+
+    existing_config = {}
+    if config_manager.exists():
+        try:
+            existing_config = config_manager.load()
+        except Exception:
+            pass
+
+    default_kundb = existing_config.get("kundb", "")
+    kundb = input(f"请输入元数据库 URL [默认: {default_kundb}]: ").strip()
+    kundb = kundb or default_kundb
+
+    default_app_list = existing_config.get("app_list", "")
+    app_list = input(
+        f"请输入应用清单 Excel 文件路径 [默认: {default_app_list}]: "
+    ).strip()
+    app_list = app_list or default_app_list
+
+    default_app_map = existing_config.get("app_map", "")
+    app_map = input(
+        f"请输入应用数据库映射 JSON 文件路径 [默认: {default_app_map}]: "
+    ).strip()
+    app_map = app_map or default_app_map
+
+    default_relationship = existing_config.get("relationship", "")
+    relationship = input(
+        f"请输入表关系 JSON 文件路径（可选，直接回车跳过） [默认: {default_relationship}]: "
+    ).strip()
+    relationship = relationship or default_relationship
+
+    default_csv_dir = existing_config.get("csv_dir", "")
+    csv_dir = input(f"请输入 CSV 输出目录 [默认: {default_csv_dir}]: ").strip()
+    csv_dir = csv_dir or default_csv_dir
+
+    return {
+        "kundb": kundb,
+        "app_list": app_list,
+        "app_map": app_map,
+        "relationship": relationship if relationship else None,
+        "csv_dir": csv_dir,
+    }
+
+
+def generate_csv(config: dict[str, Any]) -> None:
+    """根据配置生成 CSV 文件"""
+    from ..metadata.utility import make_csv
+    from ..metadata.database import DatabaseLoader
+    from ..metadata.application import AppInfoLoader
+    from ..metadata.standard import StandardLoader
+    import pandas as pd
+
+    kundb = config["kundb"]
+    app_list = config["app_list"]
+    app_map = config["app_map"]
+    relationship = config.get("relationship")
+    csv_dir = Path(config["csv_dir"])
+    workspace_uuid = "82ee37374b314a938bf28170ab4db7cf"
+
+    if not csv_dir.exists():
+        csv_dir.mkdir(parents=True, exist_ok=True)
+
+    df_app_db_map = pd.read_json(app_map, orient="records")
+
+    make_csv(
+        output=csv_dir,
+        db=kundb,
+        workspace_uuid=workspace_uuid,
+        app_list_file=app_list,
+        df_app_db_map=df_app_db_map,
+        relationship_file=relationship,
+    )
 
 
 def prompt_backend_choice() -> str:
@@ -121,15 +195,31 @@ def onboard():
             print("已取消配置")
             return
 
+    csv_config = prompt_csv_config(config_manager)
+    print("\n正在生成 CSV 文件...")
+    try:
+        generate_csv(csv_config)
+        print(f"✓ CSV 文件已生成到: {csv_config['csv_dir']}")
+    except Exception as e:
+        print(f"❌ CSV 生成失败: {e}")
+        sys.exit(1)
+
+    full_config = {
+        **csv_config,
+        "csv_dir": str(Path(csv_config["csv_dir"]).resolve()),
+    }
+
     backend = prompt_backend_choice()
 
     if backend == "networkx":
         config = prompt_networkx_config()
+        full_config.update(config)
     else:
         config = prompt_falkordb_config()
+        full_config.update(config)
 
     print("\n正在保存配置...")
-    config_manager.save(config)
+    config_manager.save(full_config)
     print(f"✓ 配置已保存到: {config_manager.config_path}")
 
     print("\n正在生成 assets...")
