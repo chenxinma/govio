@@ -28,8 +28,6 @@ class ConfigManager:
 
     def save(self, config: dict[str, Any]) -> None:
         """保存配置文件"""
-        self.validate(config)
-
         with open(self.config_path, "w", encoding="utf-8") as f:
             yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
 
