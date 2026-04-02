@@ -74,6 +74,65 @@ uv sync --group dev
 
 ## 快速开始
 
+### 首次使用：运行 Onboard 向导
+
+安装完成后，运行 onboard 向导进行初始化配置：
+
+```bash
+uv run onboard
+```
+
+向导会引导你完成以下步骤：
+
+1. **选择图数据库后端**
+   - NetworkX: 使用本地 GML 文件
+   - FalkorDB: 连接 FalkorDB 图数据库
+
+2. **NetworkX 模式**
+   - 选择是否从 CSV 文件生成新的 GML 文件
+   - 如果选择生成，输入 CSV 目录路径
+   - 如果不生成，输入已有的 GML 文件路径
+
+3. **FalkorDB 模式**
+   - 输入 FalkorDB 连接信息（host, port, graph name）
+
+4. **自动生成**
+   - 配置文件保存到 `~/.govio/config.yaml`
+   - Assets 生成到 `skills/govio/assets/`
+     - `schema.md`: 图结构定义
+     - `names/`: 节点名称索引
+
+### CSV 文件格式要求
+
+如果选择从 CSV 生成 GML 文件，CSV 目录应包含以下文件：
+
+**节点文件：**
+- `PhysicalTable.csv`: 物理表节点
+- `Col.csv`: 字段节点
+- `Application.csv`: 应用节点
+- `Standard.csv`: 数据标准节点
+
+**边文件：**
+- `HAS_COLUMN.csv`: 表包含字段的关系
+- `USE.csv`: 应用使用表的关系
+- `COMPLIES_WITH.csv`: 字段贯标的关系
+
+**CSV 格式示例：**
+
+```csv
+# PhysicalTable.csv
+:ID(PhysicalTable),name,full_table_name
+table1,用户表,DB.SCHEMA.TABLE1
+
+# Col.csv
+:ID(Col),name,column_name,full_table_name
+col1,用户ID,USER_ID,DB.SCHEMA.TABLE1
+
+# HAS_COLUMN.csv
+:START_ID(PhysicalTable),:END_ID(Col)
+table1,col1
+```
+
 ### 命令行工具
 
 项目提供了一个命令行工具来生成元数据 CSV 文件：
