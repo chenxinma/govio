@@ -1,4 +1,3 @@
-import argparse
 from datetime import datetime
 import json
 import logging
@@ -9,7 +8,6 @@ import sys
 import pandas as pd
 
 from govio import NetworkXGraph, FalkorDBGraph
-from govio.cli.config import ConfigManager
 
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
@@ -30,12 +28,22 @@ logger = logging.getLogger(__name__)
 
 
 def load_config() -> dict:
-    """从全局配置文件加载配置"""
-    config_manager = ConfigManager()
-    if not config_manager.exists():
-        print(f"配置文件不存在: {config_manager.config_path}")
+    """从 assets/backend.txt 加载 backend 配置"""
+    backend_file = ASSETS_DIR / "backend.txt"
+    if not backend_file.exists():
+        print(f"Backend 配置文件不存在: {backend_file}")
         sys.exit(1)
-    return config_manager.load()
+    backend = backend_file.read_text().strip()
+    return {"backend": backend}
+
+
+def load_backend() -> str:
+    """从 assets/backend.txt 读取 backend 类型"""
+    backend_file = ASSETS_DIR / "backend.txt"
+    if not backend_file.exists():
+        print(f"Backend 配置文件不存在: {backend_file}")
+        sys.exit(1)
+    return backend_file.read_text().strip()
 
 
 def output_result(data):
@@ -113,10 +121,6 @@ def cmd_falkordb(args, config: dict):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="图数据库查询工具（配置从 ~/.govio/config.yaml 读取）"
-    )
-
     if len(sys.argv) > 1:
         query_text = sys.argv[1]
     elif not sys.stdin.isatty():
@@ -126,13 +130,12 @@ def main():
         print('用法: python query.py "MATCH (n) RETURN n LIMIT 10"')
         sys.exit(1)
 
-    config = load_config()
-    backend = config.get("backend")
+    backend = load_backend()
 
     if backend == "networkx":
-        cmd_networkx(Namespace(code=query_text), config)
+        cmd_networkx(Namespace(code=query_text), {"backend": backend})
     elif backend == "falkordb":
-        cmd_falkordb(Namespace(cypher=query_text), config)
+        cmd_falkordb(Namespace(cypher=query_text), {"backend": backend})
     else:
         print(f"不支持的 backend: {backend}")
         sys.exit(1)

@@ -34,6 +34,29 @@ def init_server(config: Config) -> None:
 
 
 @mcp.tool()
+def show_datasource() -> str:
+    """显示已配置的数据源及数据库协议
+
+    Returns:
+        数据源配置列表
+    """
+    if _config is None:
+        return "错误: 配置未初始化"
+
+    if not _config.datasources:
+        return "暂无配置的数据源"
+
+    lines = ["已配置的数据源:"]
+    for name, ds_config in _config.datasources.items():
+        protocol = (
+            ds_config.url.split("://")[0] if "://" in ds_config.url else "unknown"
+        )
+        lines.append(f"  - {name}: {protocol} ")
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
 def load_df(datasource: str, name: str, sql: str) -> str:
     """执行 SQL 并将结果存入内存 DataFrame
 

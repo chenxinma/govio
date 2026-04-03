@@ -314,6 +314,10 @@ def onboard():
     config_manager.save(full_config)
     print(f"✓ 配置已保存到: {config_manager.config_path}")
 
+    backend_file = SKILLS_ASSETS_DIR / "backend.txt"
+    backend_file.write_text(backend + "\n")
+    print(f"✓ Backend 已写入: {backend_file}")
+
     print("\n正在生成 assets...")
 
     try:

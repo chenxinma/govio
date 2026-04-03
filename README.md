@@ -17,7 +17,7 @@
 
 ```bash
 # 安装 uv (如果尚未安装)
-pip install uv
+https://docs.astral.sh/uv/getting-started/installation/
 
 # 安装项目依赖
 uv sync
@@ -107,25 +107,50 @@ govio-cli std-recommend
 
 推荐器会基于已有配置和 CSV 文件，为未贯标列推荐合适的数据标准，结果输出到配置的 `output_dir`。
 
-向导会引导你完成以下步骤：
+### 查询工具 (Skills)
 
-1. **选择图数据库后端**
-   - NetworkX: 使用本地 GML 文件
-   - FalkorDB: 连接 FalkorDB 图数据库
+配置完成后，可使用 Skills 工具集进行图数据库查询。配置从 `~/.govio/config.yaml` 自动读取。
 
-2. **NetworkX 模式**
-   - 选择是否从 CSV 文件生成新的 GML 文件
-   - 如果选择生成，输入 CSV 目录路径
-   - 如果不生成，输入已有的 GML 文件路径
+**目录结构：**
 
-3. **FalkorDB 模式**
-   - 输入 FalkorDB 连接信息（host, port, graph name）
+```
+skills/govio/
+├── SKILL.md              # 技能定义（AI Agent 使用）
+├── reference.md          # 参考文档
+├── assets/               # 资源文件
+│   ├── schema.md         # 图数据库模式文件
+│   ├── ontology.gml      # NetworkX GML 数据文件
+│   └── names/
+│       └── node_names.md # 节点名称索引
+└── scripts/
+    ├── query.py          # 统一查询入口（自动根据配置选择后端）
+    ├── load_names.py     # 加载标准名称
+    └── load_schema.py    # 加载图模式
+```
 
-4. **自动生成 Assets**
-   - 配置文件保存到 `~/.govio/config.yaml`
-   - Assets 生成到 `skills/govio/assets/`
-     - `schema.md`: 图结构定义
-     - `names/`: 节点名称索引
+**查询示例：**
+
+```bash
+# FalkorDB 模式（根据 config.yaml 自动选择）
+uv run python skills/govio/scripts/query.py "MATCH (n:PhysicalTable) RETURN n.name LIMIT 5"
+
+# 支持 stdin 输入
+echo "MATCH (n:Application) RETURN n.name" | uv run python skills/govio/scripts/query.py
+
+# NetworkX 模式（查询代码作为 Python 代码执行，结果赋给 result 变量）
+uv run python skills/govio/scripts/query.py "result = [n for n, d in g.nodes(data=True) if d.get('node_type') == 'PhysicalTable'][:5]"
+```
+
+**查询规则：**
+
+- FalkorDB：使用 Cypher 查询语言，必须以 `MATCH` 开头
+- NetworkX：使用 Python 代码操作 `g`（NetworkX 图对象），结果赋值给 `result`
+
+**AI Agent 使用：**
+
+当 AI Agent 加载 `SKILL.md` 后，可直接使用自然语言查询，例如：
+- "查询 CRM 应用有几张表"
+- "查找所有包含 '用户' 的表名"
 
 ### CSV 文件格式要求
 

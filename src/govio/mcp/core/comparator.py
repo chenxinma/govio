@@ -36,12 +36,7 @@ class TableComparator:
         compare = Compare(df1=source, df2=target, join_columns=join_columns)
 
         return {
-            "match_rate": compare.percent_match,
-            "rows_matched": compare.count_matching_rows(),
-            "rows_in_source": compare.df1_rows,
-            "rows_in_target": compare.df2_rows,
-            "rows_only_in_source": compare.df1_unq_rows,
-            "rows_only_in_target": compare.df2_unq_rows,
+            "report": compare.report()
         }
 
     def compare(
