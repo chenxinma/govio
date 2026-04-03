@@ -10,14 +10,6 @@ from .recommender import create_recommender
 from .relationship import load_relationships
 
 
-class Mode(Enum):
-    CSV = "csv"
-    RECOMMEND = "recommend"
-
-    def __str__(self):
-        return self.value
-
-
 def reorder_index(dfs: list[pd.DataFrame]):
     base_index: int = 1
 
@@ -176,30 +168,3 @@ def data_standard_recommend(
         df_complies_with[[":ID(Col)", ":ID(Standard)"]].rename(
             columns={":ID(Col)": "START_ID(Col)", ":ID(Standard)": "END_ID(Standard)"}
         ).to_csv(output / "COMPLIES_WITH.csv", index=False)
-
-
-def eval_test():
-    load_dotenv()
-    db = os.getenv("KUNDB_URL", "")
-    workspace_uuid = "82ee37374b314a938bf28170ab4db7cf"
-    std_loader = StandardLoader(db, workspace_uuid)
-    # 加载数据
-    std_compliance = std_loader.StdCompliance  # 已贯标列
-
-    # 创建推荐器
-    recommender = create_recommender(
-        std_compliance=std_compliance,
-        k_neighbors=5,  # 使用5个最近邻
-        top_n=3,  # 返回Top 3推荐
-    )
-
-    db_loader = DatabaseLoader(db, workspace_uuid, ["ihrmdb"])
-    df_columns = db_loader.Col
-
-    result = recommender.evaluate(
-        df_columns[
-            df_columns["column"] == "ihrmdb.basic_api_access_log.application_name"
-        ],
-        {"ihrmdb.basic_api_access_log.application_name": ""},
-    )
-    print(result)

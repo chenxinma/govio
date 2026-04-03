@@ -1,4 +1,4 @@
 from .config import ConfigManager
-from .onboard import onboard
+from .main import main
 
-__all__ = ["ConfigManager", "onboard"]
+__all__ = ["ConfigManager", "main"]

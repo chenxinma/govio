@@ -5,10 +5,8 @@
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from govio import NetworkXGraph, FalkorDBGraph
+from ..graph import NetworkXGraph, FalkorDBGraph
 
 
 class AssetsGenerator:
@@ -22,7 +20,7 @@ class AssetsGenerator:
     """
 
     def __init__(
-        self, graph: "NetworkXGraph | FalkorDBGraph", output_dir: Path
+        self, graph: NetworkXGraph | FalkorDBGraph, output_dir: Path
     ) -> None:
         self.graph = graph
         self.output_dir = output_dir
@@ -59,6 +57,9 @@ class AssetsGenerator:
         格式: JSON Lines，每行一个节点
         {"id": "node_id", "name": "节点名称", "node_type": "Application"}
         """
+        if not type(self.graph) is NetworkXGraph:
+            return
+
         g = self.graph.G
 
         nodes = [
@@ -85,6 +86,9 @@ class AssetsGenerator:
         按应用分组，每个应用一个文件
         格式: {name}_{app_name_en}.md
         """
+        if not type(self.graph) is FalkorDBGraph:
+            return
+
         # 查询所有应用
         apps_query = """
         MATCH (app:Application)

@@ -125,6 +125,3 @@ def gml_generate():
 
     build_graph(args.csv, os.path.join(args.output, "ontology.gml"))
 
-
-if __name__ == "__main__":
-    gml_generate()

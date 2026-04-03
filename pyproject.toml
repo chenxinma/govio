@@ -9,6 +9,7 @@ dependencies = [
     "dotenv>=0.9.9",
     "duckdb>=0.10.0",
     "falkordb>=1.4.0",
+    "falkordb-bulk-loader>=1.0.7",
     "mcp>=1.0.0",
     "networkx>=3.6.1",
     "openpyxl>=3.1.5",
@@ -42,6 +43,5 @@ exclude = [
 ]
 
 [project.scripts]
-gml_generate = "govio:gml_generate"
 mcp-server = "govio.mcp.server:main"
-onboard = "govio.cli:onboard"
+govio-cli = "govio.cli:main"

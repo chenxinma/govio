@@ -9,6 +9,7 @@ import sys
 import pandas as pd
 
 from govio import NetworkXGraph, FalkorDBGraph
+from govio.cli.config import ConfigManager
 
 
 ASSETS_DIR = Path(__file__).parent.parent / "assets"
@@ -26,6 +27,15 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def load_config() -> dict:
+    """从全局配置文件加载配置"""
+    config_manager = ConfigManager()
+    if not config_manager.exists():
+        print(f"配置文件不存在: {config_manager.config_path}")
+        sys.exit(1)
+    return config_manager.load()
 
 
 def output_result(data):
@@ -59,10 +69,13 @@ def output_result(data):
         logger.info("result rows: %s", str(_size))
 
 
-def cmd_networkx(args):
+def cmd_networkx(args, config: dict):
     """NetworkX 子命令处理"""
-    gml_path = Path(args.gml_path)
+    gml_path = config.get("networkx", {}).get("gml_path")
+    if not gml_path:
+        gml_path = args.gml_path or str(ASSETS_DIR / "ontology.gml")
 
+    gml_path = Path(gml_path)
     if not gml_path.exists():
         print(f"GML file not found: {gml_path}")
         sys.exit(1)
@@ -79,12 +92,14 @@ def cmd_networkx(args):
     output_result(data)
 
 
-def cmd_falkordb(args):
+def cmd_falkordb(args, config: dict):
     """FalkorDB 子命令处理"""
-    host = args.host or os.getenv("FALKORDB_HOST", "localhost")
-    port = args.port or int(os.getenv("FALKORDB_PORT", "6379"))
+    falkordb_config = config.get("falkordb", {})
+    host = falkordb_config.get("host", "localhost")
+    port = falkordb_config.get("port", 6379)
+    graph_name = falkordb_config.get("graph", "ontology")
 
-    g = FalkorDBGraph(graph=args.graph_name, host=host, port=port)
+    g = FalkorDBGraph(graph=graph_name, host=host, port=port)
 
     _cypher = args.cypher
     if not _cypher.upper().startswith("MATCH"):
@@ -98,47 +113,34 @@ def cmd_falkordb(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="统一图数据库查询入口")
-    subparsers = parser.add_subparsers(dest="backend", help="选择图后端")
+    parser = argparse.ArgumentParser(
+        description="图数据库查询工具（配置从 ~/.govio/config.yaml 读取）"
+    )
 
-    # NetworkX 子命令
-    nx_parser = subparsers.add_parser("networkx", help="使用 NetworkX 本地图查询")
-    nx_parser.add_argument(
-        "--gml-path",
-        type=str,
-        default=str(ASSETS_DIR / "ontology.gml"),
-        help="GML 文件路径",
-    )
-    nx_parser.add_argument(
-        "--code", type=str, required=True, help="NetworkX Python 查询代码"
-    )
-    nx_parser.set_defaults(func=cmd_networkx)
-
-    # FalkorDB 子命令
-    falkor_parser = subparsers.add_parser("falkordb", help="使用 FalkorDB 图数据库查询")
-    falkor_parser.add_argument(
-        "--graph-name", type=str, default="ontology", help="图名称"
-    )
-    falkor_parser.add_argument(
-        "--host",
-        type=str,
-        help="数据库主机 (默认: localhost 或 FALKORDB_HOST 环境变量)",
-    )
-    falkor_parser.add_argument(
-        "--port", type=int, help="数据库端口 (默认: 6379 或 FALKORDB_PORT 环境变量)"
-    )
-    falkor_parser.add_argument(
-        "--cypher", type=str, required=True, help="Cypher 查询语句"
-    )
-    falkor_parser.set_defaults(func=cmd_falkordb)
-
-    args = parser.parse_args()
-
-    if not args.backend:
-        parser.print_help()
+    if len(sys.argv) > 1:
+        query_text = sys.argv[1]
+    elif not sys.stdin.isatty():
+        query_text = sys.stdin.read().strip()
+    else:
+        print("请提供查询语句（NetworkX 用 Python 代码，FalkorDB 用 Cypher）")
+        print('用法: python query.py "MATCH (n) RETURN n LIMIT 10"')
         sys.exit(1)
 
-    args.func(args)
+    config = load_config()
+    backend = config.get("backend")
+
+    if backend == "networkx":
+        cmd_networkx(Namespace(code=query_text), config)
+    elif backend == "falkordb":
+        cmd_falkordb(Namespace(cypher=query_text), config)
+    else:
+        print(f"不支持的 backend: {backend}")
+        sys.exit(1)
+
+
+class Namespace:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
 
 if __name__ == "__main__":

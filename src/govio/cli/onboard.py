@@ -8,7 +8,7 @@ from ..core.assets_generator import AssetsGenerator
 from ..metadata.gen_networkx import build_graph
 
 
-SKILLS_ASSETS_DIR = Path(".skills/govio/assets")
+SKILLS_ASSETS_DIR = Path("skills/govio/assets")
 
 
 def validate_csv_directory(csv_dir: Path) -> bool:
@@ -69,21 +69,32 @@ def prompt_csv_config(config_manager: ConfigManager) -> dict[str, Any]:
     csv_dir = input(f"请输入 CSV 输出目录 [默认: {default_csv_dir}]: ").strip()
     csv_dir = csv_dir or default_csv_dir
 
+    default_workspace_uuid = existing_config.get(
+        "workspace_uuid", "82ee37374b314a938bf28170ab4db7cf"
+    )
+    workspace_uuid = input(
+        f"请输入工作区 UUID [默认: {default_workspace_uuid}]: "
+    ).strip()
+    workspace_uuid = workspace_uuid or default_workspace_uuid
+
+    default_output_dir = existing_config.get("output_dir", csv_dir)
+    output_dir = input(f"请输入推荐输出目录 [默认: {default_output_dir}]: ").strip()
+    output_dir = output_dir or default_output_dir
+
     return {
         "kundb": kundb,
         "app_list": app_list,
         "app_map": app_map,
         "relationship": relationship if relationship else None,
         "csv_dir": csv_dir,
+        "workspace_uuid": workspace_uuid,
+        "output_dir": output_dir,
     }
 
 
 def generate_csv(config: dict[str, Any]) -> None:
     """根据配置生成 CSV 文件"""
     from ..metadata.utility import make_csv
-    from ..metadata.database import DatabaseLoader
-    from ..metadata.application import AppInfoLoader
-    from ..metadata.standard import StandardLoader
     import pandas as pd
 
     kundb = config["kundb"]
@@ -91,7 +102,7 @@ def generate_csv(config: dict[str, Any]) -> None:
     app_map = config["app_map"]
     relationship = config.get("relationship")
     csv_dir = Path(config["csv_dir"])
-    workspace_uuid = "82ee37374b314a938bf28170ab4db7cf"
+    workspace_uuid = config.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
 
     if not csv_dir.exists():
         csv_dir.mkdir(parents=True, exist_ok=True)
@@ -165,7 +176,79 @@ def prompt_networkx_config() -> dict[str, Any]:
     return {"backend": "networkx", "networkx": {"gml_path": str(gml_path)}}
 
 
-def prompt_falkordb_config() -> dict[str, Any]:
+def delete_falkordb_graph(host: str, port: int, graph_name: str) -> None:
+    """删除 FalkorDB 中的图（如果存在）"""
+    import falkordb
+
+    try:
+        client = falkordb.FalkorDB(host=host, port=port)
+        client.execute_command("DEL", graph_name)
+        print(f"✓ 已删除现有图: {graph_name}")
+    except Exception:
+        pass
+
+
+def import_csv_to_falkordb(
+    csv_dir: Path, host: str, port: int, graph_name: str
+) -> None:
+    """使用 falkordb-bulk-insert 将 CSV 导入 FalkorDB
+
+    Args:
+        csv_dir: CSV 文件目录
+        host: FalkorDB 主机地址
+        port: FalkorDB 端口
+        graph_name: 图数据库名称
+    """
+    import subprocess
+
+    csv_path = Path(csv_dir)
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV 目录不存在: {csv_path}")
+
+    print("\n正在检查并清理已有数据...")
+    delete_falkordb_graph(host, port, graph_name)
+
+    node_files = [
+        ("PhysicalTable", csv_path / "PhysicalTable.csv"),
+        ("Col", csv_path / "Col.csv"),
+        ("Application", csv_path / "Application.csv"),
+        ("Standard", csv_path / "Standard.csv"),
+    ]
+
+    relation_files = [
+        ("HAS_COLUMN", csv_path / "HAS_COLUMN.csv"),
+        ("USE", csv_path / "USE.csv"),
+    ]
+
+    extra_rel_file = csv_path / "RELATES_TO.csv"
+    if extra_rel_file.exists():
+        relation_files.append(("RELATES_TO", extra_rel_file))
+
+    cmd = ["falkordb-bulk-insert", graph_name]
+
+    for label, filepath in node_files:
+        if filepath.exists():
+            cmd.extend(["--nodes-with-label", label, str(filepath)])
+
+    for rel_type, filepath in relation_files:
+        if filepath.exists():
+            cmd.extend(["--relations-with-type", rel_type, str(filepath)])
+
+    server_url = f"redis://{host}:{port}"
+    cmd.extend(["--server-url", server_url])
+
+    print(f"\n正在执行: {' '.join(cmd)}")
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        raise RuntimeError(f"falkordb-bulk-insert 失败: {result.stderr}")
+
+    print(result.stdout)
+    print("✓ CSV 数据已导入 FalkorDB")
+
+
+def prompt_falkordb_config(csv_dir: Path) -> dict[str, Any]:
     """提示用户输入 FalkorDB 配置"""
     print("\n--- FalkorDB 配置 ---\n")
 
@@ -177,6 +260,13 @@ def prompt_falkordb_config() -> dict[str, Any]:
         print(f"❌ 端口必须是数字: {port_str}")
         port = 6379
     graph_name = input("请输入图数据库名称 [默认: ontology]: ").strip() or "ontology"
+
+    print("\n正在导入 CSV 数据到 FalkorDB...")
+    try:
+        import_csv_to_falkordb(csv_dir, host, port, graph_name)
+    except Exception as e:
+        print(f"❌ 导入 CSV 到 FalkorDB 失败: {e}")
+        raise
 
     return {
         "backend": "falkordb",
@@ -211,11 +301,13 @@ def onboard():
 
     backend = prompt_backend_choice()
 
+    csv_dir = Path(csv_config["csv_dir"])
+
     if backend == "networkx":
         config = prompt_networkx_config()
         full_config.update(config)
     else:
-        config = prompt_falkordb_config()
+        config = prompt_falkordb_config(csv_dir)
         full_config.update(config)
 
     print("\n正在保存配置...")
