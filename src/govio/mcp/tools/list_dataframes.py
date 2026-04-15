@@ -2,10 +2,10 @@
 
 from typing import Any
 
-from govio.mcp.core.dataframe_store import DataFrameStore
+from govio.cli.observe_store import ObserveStore
 
 
-def list_dataframes(store: DataFrameStore) -> dict[str, Any]:
+def list_dataframes(store: ObserveStore) -> dict[str, Any]:
     """列出已加载的 DataFrame
 
     Args:

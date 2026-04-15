@@ -2,10 +2,10 @@
 
 from typing import Any
 
-from govio.mcp.core.dataframe_store import DataFrameStore
+from govio.cli.observe_store import ObserveStore
 
 
-def release_dataframe(store: DataFrameStore, name: str) -> dict[str, Any]:
+def release_dataframe(store: ObserveStore, name: str) -> dict[str, Any]:
     """释放 DataFrame
 
     Args:

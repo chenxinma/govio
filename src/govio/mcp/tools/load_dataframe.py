@@ -2,12 +2,12 @@
 
 from typing import Any
 
+from govio.cli.observe_store import DataFrameInfo, ObserveStore
 from govio.mcp.core.database import DatabaseManager
-from govio.mcp.core.dataframe_store import DataFrameStore
 
 
 def load_dataframe(
-    store: DataFrameStore,
+    store: ObserveStore,
     db_manager: DatabaseManager,
     datasource: str,
     name: str,
