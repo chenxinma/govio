@@ -27,7 +27,7 @@ def load_dataframe(
     """
     try:
         df = db_manager.execute_sql(datasource, sql)
-        info = store.store(name, df)
+        info = store.store(name, df, datasource, sql)
 
         return {
             "success": True,
