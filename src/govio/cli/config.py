@@ -78,9 +78,11 @@ class ConfigManager:
         if "datasources" in config:
             datasources = config["datasources"]
             if not isinstance(datasources, dict):
-                raise ValueError("datasources must be a dictionary")
+                raise ValueError("datasources 必须为字典类型")
             for name, ds_data in datasources.items():
+                if not isinstance(ds_data, dict):
+                    raise ValueError(f"数据源 '{name}' 配置必须为字典类型")
                 if "url" not in ds_data:
-                    raise ValueError(f"datasource '{name}' missing 'url' field")
+                    raise ValueError(f"数据源 '{name}' 缺少 'url' 字段")
 
         return True
