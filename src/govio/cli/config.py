@@ -75,4 +75,12 @@ class ConfigManager:
             if not graph_path.exists():
                 raise ValueError(f"graph_dir 不存在: {graph_path}")
 
+        if "datasources" in config:
+            datasources = config["datasources"]
+            if not isinstance(datasources, dict):
+                raise ValueError("datasources must be a dictionary")
+            for name, ds_data in datasources.items():
+                if "url" not in ds_data:
+                    raise ValueError(f"datasource '{name}' missing 'url' field")
+
         return True
