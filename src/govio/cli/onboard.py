@@ -274,6 +274,53 @@ def prompt_falkordb_config(csv_dir: Path) -> dict[str, Any]:
     }
 
 
+def prompt_datasource_config() -> dict[str, Any] | None:
+    """提示用户配置数据源（可选）"""
+    print("\n=== 步骤 2: 数据源配置（可选）===\n")
+    print("是否配置数据源供 observe 命令使用？")
+    print("  - 可以添加 MySQL、DuckDB 等数据源")
+    print("  - 后续可用 govio observe load 查询这些数据源")
+    print()
+
+    add_ds = input("是否添加数据源？ (yes/no) [默认: no]: ").strip().lower()
+    if add_ds not in ("yes", "y"):
+        return None
+
+    datasources = {}
+    while True:
+        print("\n添加数据源：")
+        name = input("  数据源名称: ").strip()
+        if not name:
+            print("  名称不能为空")
+            continue
+
+        url = input("  URL (如 mysql+pymysql://user:pass@host/db 或 duckdb:///path): ").strip()
+        if not url:
+            print("  URL 不能为空")
+            continue
+
+        connect_args_str = input("  连接参数 (JSON 格式，可直接回车跳过) [默认: {}]: ").strip()
+        connect_args = {}
+        if connect_args_str:
+            import json
+            try:
+                connect_args = json.loads(connect_args_str)
+            except json.JSONDecodeError:
+                print("  JSON 格式错误，使用空参数")
+                connect_args = {}
+
+        datasources[name] = {
+            "url": url,
+            "connect_args": connect_args,
+        }
+
+        more = input("\n是否继续添加数据源？ (yes/no) [默认: no]: ").strip().lower()
+        if more not in ("yes", "y"):
+            break
+
+    return datasources
+
+
 def onboard():
     """Onboard 向导主函数"""
     config_manager = ConfigManager()
@@ -313,6 +360,11 @@ def onboard():
     print("\n正在保存配置...")
     config_manager.save(full_config)
     print(f"✓ 配置已保存到: {config_manager.config_path}")
+
+    datasources = prompt_datasource_config()
+    if datasources:
+        full_config["datasources"] = datasources
+        config_manager.save(full_config)
 
     backend_file = SKILLS_ASSETS_DIR / "backend.txt"
     backend_file.write_text(backend + "\n")
