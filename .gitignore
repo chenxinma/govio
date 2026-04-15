@@ -17,3 +17,6 @@ uv.lock
 assets/
 .iflow
 .worktrees/
+
+# observe DataFrame storage
+.govio/observe/
