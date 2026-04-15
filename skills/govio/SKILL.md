@@ -10,6 +10,8 @@ allowed-tools: Read, Grep, Glob
 
 ## Purpose
 
+**必须先读取 `assets/schema.md` 确认当前图结构。**
+
 元数据查询：用户可以询问关于数据资产的元数据信息，如数据资产的名称、描述、来源、状态等。
 表字段比较：用户可以比较不同表之间的字段差异，如字段名称、数据类型、是否必填等。
 SQL 生成：用户可以根据需求描述，自动生成符合要求的 SQL 语句。
@@ -33,10 +35,11 @@ cat assets/backend.txt
 ## Best Practices
 
 1. 使用 Grep 查询`assets/names/node_names.md`获得被记载的标准名称
-2. 严格按照 `assets/schema.md` 的图结构进行查询
+2. **必须先阅读 `assets/schema.md`** 了解当前图结构（节点、属性、关联关系），schema.md 内容会随数据变化
 3. 根据配置的 backend 选择对应的查询方式
 4. `uv run python -c ...` 脚本取数应该控制输出行数一次获取应小于300行
 5. **注意：遵守有限读取原则，仅在必要时读取 schema.md**
+6. **列名属性**：Col 节点使用 `column_name` 属性表示列名，不要直接使用 `name`
 
 ## Resource Resolution
 

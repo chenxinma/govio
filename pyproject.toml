@@ -43,5 +43,4 @@ exclude = [
 ]
 
 [project.scripts]
-mcp-server = "govio.mcp.server:main"
 govio-cli = "govio.cli:main"
