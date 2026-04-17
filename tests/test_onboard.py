@@ -1,5 +1,6 @@
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
 
 
 def create_test_csv_files(csv_dir: Path):
@@ -230,3 +231,70 @@ app1,table1
     assert config_path.exists()
     assert (tmp_path / "assets" / "schema.md").exists()
     assert (tmp_path / "assets" / "names" / "node_names.md").exists()
+
+
+class TestPromptConnectArgs:
+    """测试 prompt_connect_args 函数"""
+
+    def test_empty_input(self):
+        """测试空输入返回空字典"""
+        from govio.cli.onboard import prompt_connect_args
+
+        with patch("builtins.input", return_value=""):
+            result = prompt_connect_args()
+            assert result == {}
+
+    def test_single_kv(self):
+        """测试单个 key-value 输入"""
+        from govio.cli.onboard import prompt_connect_args
+
+        responses = ["ssl=true", ""]
+        with patch("builtins.input", side_effect=responses):
+            result = prompt_connect_args()
+            assert result == {"ssl": True}
+
+    def test_multiple_kv(self):
+        """测试多个 key-value 输入"""
+        from govio.cli.onboard import prompt_connect_args
+
+        responses = ["ssl=true", "timeout=30", "name=test", ""]
+        with patch("builtins.input", side_effect=responses):
+            result = prompt_connect_args()
+            assert result == {"ssl": True, "timeout": 30, "name": "test"}
+
+    def test_invalid_format_then_valid(self):
+        """测试格式错误后继续输入"""
+        from govio.cli.onboard import prompt_connect_args
+
+        responses = ["invalid", "key=value", ""]
+        with patch("builtins.input", side_effect=responses):
+            result = prompt_connect_args()
+            assert result == {"key": "value"}
+
+    def test_keep_existing(self):
+        """测试保留已有参数"""
+        from govio.cli.onboard import prompt_connect_args
+
+        existing = {"ssl": True, "timeout": 30}
+        with patch("builtins.input", return_value=""):
+            result = prompt_connect_args(existing)
+            assert result == existing
+
+    def test_replace_existing(self):
+        """测试替换已有参数"""
+        from govio.cli.onboard import prompt_connect_args
+
+        existing = {"ssl": True}
+        responses = ["no", "timeout=60", ""]
+        with patch("builtins.input", side_effect=responses):
+            result = prompt_connect_args(existing)
+            assert result == {"timeout": 60}
+
+    def test_float_value(self):
+        """测试浮点数值"""
+        from govio.cli.onboard import prompt_connect_args
+
+        responses = ["ratio=0.5", ""]
+        with patch("builtins.input", side_effect=responses):
+            result = prompt_connect_args()
+            assert result == {"ratio": 0.5}
