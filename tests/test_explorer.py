@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from govio.mcp.core.explorer import RelationExplorer
+from govio.observe_data.core.explorer import RelationExplorer
 
 
 class TestRelationExplorerCaseInsensitive:

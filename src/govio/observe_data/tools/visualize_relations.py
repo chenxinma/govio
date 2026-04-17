@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from govio.mcp.core.visualizer import RelationVisualizer
+from ..core.visualizer import RelationVisualizer
 
 
 def visualize_relations(

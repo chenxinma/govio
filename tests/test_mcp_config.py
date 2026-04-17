@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from govio.mcp.config import DataSourceConfig, load_config
+from govio.observe_data.config import DataSourceConfig, load_config
 
 
 def test_load_config_success():

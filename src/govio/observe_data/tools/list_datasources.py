@@ -2,10 +2,10 @@
 
 from typing import Any
 
-from govio.mcp.core.database import DatabaseManager
+from ..core.database import DatabaseManager
 
 
-def list_datasources(db_manager: DatabaseManager) -> dict[str, Any]:
+def list_datasources(db_manager: DatabaseManager) -> list[dict[str, Any]]:
     """列出可用的数据源
 
     Args:
@@ -27,4 +27,4 @@ def list_datasources(db_manager: DatabaseManager) -> dict[str, Any]:
             }
         )
 
-    return {"success": True, "datasources": datasources}
+    return datasources

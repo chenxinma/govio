@@ -57,7 +57,7 @@ class AssetsGenerator:
         格式: JSON Lines，每行一个节点
         {"id": "node_id", "name": "节点名称", "node_type": "Application"}
         """
-        if not type(self.graph) is NetworkXGraph:
+        if type(self.graph) is not NetworkXGraph:
             return
 
         g = self.graph.G
@@ -86,7 +86,7 @@ class AssetsGenerator:
         按应用分组，每个应用一个文件
         格式: {name}_{app_name_en}.md
         """
-        if not type(self.graph) is FalkorDBGraph:
+        if type(self.graph) is not FalkorDBGraph:
             return
 
         # 查询所有应用

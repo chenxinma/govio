@@ -9,20 +9,18 @@ import json
 import sys
 
 from .config import ConfigManager
-from .observe_store import ObserveStore
-from ..mcp.core.database import DatabaseManager
-from ..mcp.tools.compare_tables import compare_tables
-from ..mcp.tools.explore_relations import explore_relations
-from ..mcp.tools.list_dataframes import list_dataframes
-from ..mcp.tools.load_dataframe import load_dataframe as mcp_load_dataframe
-from ..mcp.tools.release_dataframe import release_dataframe as mcp_release_dataframe
-from ..mcp.tools.visualize_relations import visualize_relations
-from ..mcp.tools.list_datasources import list_datasources
+from ..observe_data.core.observe_store import ObserveStore
+from ..observe_data.core.database import DatabaseManager
+from ..observe_data.tools.list_dataframes import list_dataframes
+from ..observe_data.tools.load_dataframe import load_dataframe
+from ..observe_data.tools.release_dataframe import release_dataframe
+from ..observe_data.tools.visualize_relations import visualize_relations
+from ..observe_data.tools.list_datasources import list_datasources
 
 
 def get_db_manager(config: dict) -> DatabaseManager:
     """从配置创建 DatabaseManager"""
-    from ..mcp.config import DataSourceConfig
+    from ..observe_data.config import DataSourceConfig
 
     datasources = config.get("datasources", {})
     ds_configs = {
@@ -43,7 +41,7 @@ def cmd_load(config: dict, name: str, datasource: str, sql: str) -> None:
     """加载 DataFrame"""
     db_manager = get_db_manager(config)
     store = ObserveStore()
-    result = mcp_load_dataframe(
+    result = load_dataframe(
         store=store,
         db_manager=db_manager,
         datasource=datasource,
@@ -63,7 +61,7 @@ def cmd_list(config: dict) -> None:
 def cmd_release(config: dict, name: str) -> None:
     """释放 DataFrame"""
     store = ObserveStore()
-    result = mcp_release_dataframe(store=store, name=name)
+    result = release_dataframe(store=store, name=name)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -83,7 +81,7 @@ def cmd_compare(
         print(json.dumps({"success": False, "error": f"DataFrame '{target_df}' 不存在"}))
         return
 
-    from ..mcp.core.comparator import TableComparator
+    from ..observe_data.core.comparator import TableComparator
 
     comparator = TableComparator()
     result = comparator.compare(source, target, join_columns)
@@ -106,7 +104,7 @@ def cmd_explore(config: dict, dataframes: list[str] | None = None) -> None:
             return
         df_dict[name] = df
 
-    from ..mcp.core.explorer import RelationExplorer
+    from ..observe_data.core.explorer import RelationExplorer
 
     explorer = RelationExplorer()
     relations = explorer.explore(df_dict)

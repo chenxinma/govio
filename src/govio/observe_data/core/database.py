@@ -7,7 +7,7 @@ import pandas as pd
 from duckdb import DuckDBPyConnection
 from sqlalchemy import Engine, create_engine, text
 
-from govio.mcp.config import DataSourceConfig
+from govio.observe_data.config import DataSourceConfig
 
 
 class DatabaseManager:

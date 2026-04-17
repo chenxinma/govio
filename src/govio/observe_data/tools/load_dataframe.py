@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from govio.cli.observe_store import DataFrameInfo, ObserveStore
-from govio.mcp.core.database import DatabaseManager
+from ..core.observe_store import ObserveStore
+from ..core.database import DatabaseManager
 
 
 def load_dataframe(

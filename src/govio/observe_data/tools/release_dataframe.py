@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from govio.cli.observe_store import ObserveStore
+from govio.observe_data.core.observe_store import ObserveStore
 
 
 def release_dataframe(store: ObserveStore, name: str) -> dict[str, Any]:

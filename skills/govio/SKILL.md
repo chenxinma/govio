@@ -34,10 +34,10 @@ cat assets/backend.txt
 
 ## Best Practices
 
-1. 使用 Grep 查询`assets/names/node_names.md`获得被记载的标准名称
-2. **必须先阅读 `assets/schema.md`** 了解当前图结构（节点、属性、关联关系），schema.md 内容会随数据变化
-3. 根据配置的 backend 选择对应的查询方式
-4. `uv run python -c ...` 脚本取数应该控制输出行数一次获取应小于300行
+1. **优先使用 `query.py` 查询**，自动适配后端，无需手动导入
+2. 使用 Grep 查询`assets/names/node_names.md`获得被记载的标准名称
+3. **必须先阅读 `assets/schema.md`** 了解当前图结构（节点、属性、关联关系），schema.md 内容会随数据变化
+4. 查询取数应控制输出行数，一次获取小于 300 行
 5. **注意：遵守有限读取原则，仅在必要时读取 schema.md**
 6. **列名属性**：Col 节点使用 `column_name` 属性表示列名，不要直接使用 `name`
 
@@ -62,54 +62,56 @@ govio/
 
 ## Usage
 
-### 直接使用 query.py（推荐）
+**优先使用 `query.py` 进行查询**，它会自动根据 `assets/backend.txt` 选择后端，无需手动导入。
 
-query.py 会自动读取 `assets/backend.txt` 选择后端：
+### query.py 基本用法
 
 ```bash
-# NetworkX 后端：传入 Python 代码
+# 通用格式：uv run python skills/govio/scripts/query.py "查询语句"
+# NetworkX 后端传 Python 代码，FalkorDB 后端传 Cypher
+```
+
+### query.py 查询示例
+
+#### 查询图模式（通用）
+
+```bash
 uv run python skills/govio/scripts/query.py "print(g.schema)"
-
-# FalkorDB 后端：传入 Cypher 查询
-uv run python skills/govio/scripts/query.py "MATCH (n) RETURN n LIMIT 10"
 ```
 
-### NetworkX 后端查询示例
-
-Q: 查询CRM应用有几张表
+#### 查询 CRM 应用有几张表（FalkorDB）
 
 ```bash
-uv run python -c "
-from govio import NetworkXGraph
-g = NetworkXGraph('assets/ontology.gml')
-
-app_node = next((n for n, d in g.G.nodes(data=True) if d.get('name')=='CRM' and d.get('node_type')=='Application'), None)
-if app_node:
-    count = sum(
-        1 for neighbor in g.G.successors(app_node)
-        if g.G.get_edge_data(app_node, neighbor).get('edge_type') == 'USE'
-        and g.G.nodes[neighbor].get('node_type') == 'PhysicalTable'
-    )
-    result = count
-else:
-    result = 0
-"
+uv run python skills/govio/scripts/query.py "MATCH (app:Application {name: 'CRM'})-[:USE]->(t:PhysicalTable) RETURN count(t) AS table_count"
 ```
 
-### FalkorDB 后端查询示例
-
-Q: 查询CRM应用有几张表
+#### 查询 CRM 应用使用的所有表（FalkorDB）
 
 ```bash
-uv run python -c "
-from govio import FalkorDBGraph
-g = FalkorDBGraph(graph='ontology', host='localhost', port=6379)
-
-cypher = '''
-MATCH (app:Application {name: 'CRM'})-[:USE]->(t:PhysicalTable)
-RETURN count(t) AS table_count
-'''
-result = g.query(cypher)
-"
+uv run python skills/govio/scripts/query.py "MATCH (app:Application {name: 'CRM'})-[:USE]->(t:PhysicalTable) RETURN t.name, t.full_table_name"
 ```
+
+#### 查询 CUSTOMER 表的所有字段（FalkorDB）
+
+```bash
+uv run python skills/govio/scripts/query.py "MATCH (t:PhysicalTable {name: 'CUSTOMER'})-[:HAS_COLUMN]->(c:Col) RETURN c.column_name, c.dtype ORDER BY c.order_no"
+```
+
+#### 查询所有应用及其表数量（FalkorDB）
+
+```bash
+uv run python skills/govio/scripts/query.py "MATCH (app:Application)-[:USE]->(t:PhysicalTable) RETURN app.name, count(t) AS table_count ORDER BY table_count DESC"
+```
+
+#### 查询 NetworkX 图节点数
+
+```bash
+uv run python skills/govio/scripts/query.py "result = g.G.number_of_nodes()"
+```
+
+### 注意事项
+
+- Cypher 查询必须用**双引号**包裹参数
+- 结果超过 10 行时自动输出到 `assets/output-*.json` 文件
+- Cypher 查询必须以 `MATCH` 开头
 

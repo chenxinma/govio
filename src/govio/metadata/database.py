@@ -1,16 +1,22 @@
-from pathlib import Path
 import textwrap
 import pandas as pd
 from sqlalchemy import create_engine
 
 class DatabaseLoader:
-    def __init__(self, db: str, workspace_uuid: str, schema_limits: list[str] | None = None) -> None:
+    def __init__(self, db: str, workspace_uuid: str, 
+                       schema_limits: list[str] | None = None,
+                       app_names: list[str] | None = None) -> None:
         self.engine = create_engine(db)
         self.workspace_uuid = workspace_uuid
+        self.app_names_map = None
+
         if schema_limits:
             self.schema_str = "'" +  "','".join(schema_limits) + "'"
+            if app_names and len(schema_limits) == len(app_names):
+                self.app_names_map = dict(zip(schema_limits, app_names))
         else:
             self.schema_str = None
+        
     
     def _convert_data_type(self, row: pd.Series) -> str:
         """根据数据库类型和字段属性转换数据类型
@@ -39,7 +45,7 @@ class DatabaseLoader:
             if row['scale'] > 0: # type: ignore
                 return f"decimal({row['precision']}, {row['scale']})"
             if row['precision'] == 0: # type: ignore
-                return f"decimal(38,20)"
+                return "decimal(38,20)"
             return f"decimal({row['precision']})"
         
         # 其他类型转为小写
@@ -119,6 +125,7 @@ class DatabaseLoader:
                 and d2.workspace_uuid ='{self.workspace_uuid}'
             """)
         df_tables = pd.read_sql(sql, self.engine)
+        df_tables
         return df_tables
     
     @property

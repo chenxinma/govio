@@ -3,8 +3,8 @@
 import tempfile
 
 
-from govio.mcp.config import DataSourceConfig
-from govio.mcp.core.database import DatabaseManager
+from govio.observe_data.config import DataSourceConfig
+from govio.observe_data.core.database import DatabaseManager
 
 
 def test_database_manager_with_duckdb():
