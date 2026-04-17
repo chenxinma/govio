@@ -422,7 +422,7 @@ def onboard():
                 .lower()
             )
             if skip in ("yes", "y"):
-                full_config = existing_config
+                full_config = dict(existing_config)
                 datasources = prompt_datasource_config(full_config.get("datasources"))
                 if datasources is not None:
                     full_config["datasources"] = datasources
