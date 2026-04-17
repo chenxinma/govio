@@ -303,6 +303,9 @@ def prompt_connect_args(existing: dict[str, Any] | None = None) -> dict[str, Any
             continue
         key, _, value = line.partition("=")
         key = key.strip()
+        if not key:
+            print("  格式错误，key 不能为空")
+            continue
         value = value.strip()
         if value.lower() in ("true", "false"):
             value = value.lower() == "true"
