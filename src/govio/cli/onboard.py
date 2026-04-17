@@ -322,56 +322,79 @@ def prompt_connect_args(existing: dict[str, Any] | None = None) -> dict[str, Any
     return connect_args
 
 
-def prompt_datasource_config() -> dict[str, Any] | None:
-    """提示用户配置数据源（可选）"""
-    print("\n=== 步骤 2: 数据源配置（可选）===\n")
-    print("是否配置数据源供 observe 命令使用？")
-    print("  - 可以添加 MySQL、DuckDB 等数据源")
-    print("  - 后续可用 govio observe load 查询这些数据源")
-    print()
+def prompt_datasource_config(
+    existing_datasources: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """提示用户配置数据源（可选）
 
-    add_ds = input("是否添加数据源？ (yes/no) [默认: no]: ").strip().lower()
-    if add_ds not in ("yes", "y"):
-        return None
+    Args:
+        existing_datasources: 已有的数据源配置
 
-    datasources = {}
+    Returns:
+        dict: 数据源配置字典，None 表示无数据源
+    """
+    print("\n=== 数据源配置（可选）===\n")
+    print("配置数据源供 observe 命令使用")
+    print("可添加 MySQL、DuckDB 等数据源\n")
+
+    datasources: dict[str, Any] = (
+        dict(existing_datasources) if existing_datasources else {}
+    )
+
     while True:
-        print("\n添加数据源：")
-        name = input("  数据源名称: ").strip()
-        if not name:
-            print("  名称不能为空")
-            continue
+        if datasources:
+            print("已配置的数据源:")
+            for name, ds in datasources.items():
+                print(f"  - {name}: {ds['url']}")
+            print()
 
-        url = input(
-            "  URL (如 mysql+pymysql://user:pass@host/db 或 duckdb:///path): "
-        ).strip()
-        if not url:
-            print("  URL 不能为空")
-            continue
+        print("操作选项:")
+        print("  1. 添加数据源")
+        print("  2. 删除数据源")
+        print("  3. 完成配置")
 
-        connect_args_str = input(
-            "  连接参数 (JSON 格式，可直接回车跳过) [默认: {}]: "
-        ).strip()
-        connect_args = {}
-        if connect_args_str:
-            import json
+        choice = input("\n请选择操作 (1/2/3) [默认: 3]: ").strip() or "3"
 
+        if choice == "1":
+            name = input("  数据源名称: ").strip()
+            if not name:
+                print("  名称不能为空")
+                continue
+            url = input("  URL (如 mysql+pymysql://user:pass@host/db): ").strip()
+            if not url:
+                print("  URL 不能为空")
+                continue
+            existing_args = datasources.get(name, {}).get("connect_args")
+            connect_args = prompt_connect_args(existing_args)
+            datasources[name] = {"url": url, "connect_args": connect_args}
+            print(f"  已添加数据源: {name}")
+
+        elif choice == "2":
+            if not datasources:
+                print("  没有可删除的数据源")
+                continue
+            print("  选择要删除的数据源:")
+            names = list(datasources.keys())
+            for i, n in enumerate(names, 1):
+                print(f"    {i}. {n}")
+            del_choice = input("  输入编号 (或直接回车取消): ").strip()
+            if not del_choice:
+                continue
             try:
-                connect_args = json.loads(connect_args_str)
-            except json.JSONDecodeError:
-                print("  JSON 格式错误，使用空参数")
-                connect_args = {}
+                idx = int(del_choice) - 1
+                if 0 <= idx < len(names):
+                    removed = names[idx]
+                    del datasources[removed]
+                    print(f"  已删除: {removed}")
+                else:
+                    print("  无效编号")
+            except ValueError:
+                print("  请输入数字编号")
 
-        datasources[name] = {
-            "url": url,
-            "connect_args": connect_args,
-        }
-
-        more = input("\n是否继续添加数据源？ (yes/no) [默认: no]: ").strip().lower()
-        if more not in ("yes", "y"):
+        elif choice == "3":
             break
 
-    return datasources
+    return datasources if datasources else None
 
 
 def onboard():
