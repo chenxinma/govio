@@ -411,6 +411,27 @@ def onboard():
     config_manager = ConfigManager()
 
     if config_manager.exists():
+        existing_config = config_manager.load()
+        has_backend = "backend" in existing_config
+
+        if has_backend:
+            print(f"\n⚠️  检测到已有配置 (backend: {existing_config['backend']})")
+            skip = (
+                input("是否跳过 CSV/Graph 配置，仅配置数据源？ (yes/no) [默认: no]: ")
+                .strip()
+                .lower()
+            )
+            if skip in ("yes", "y"):
+                full_config = existing_config
+                datasources = prompt_datasource_config(full_config.get("datasources"))
+                if datasources is not None:
+                    full_config["datasources"] = datasources
+                else:
+                    full_config.pop("datasources", None)
+                config_manager.save(full_config)
+                print(f"\n✅ 配置已更新: {config_manager.config_path}")
+                return
+
         print("\n⚠️  配置文件已存在")
         overwrite = input("是否覆盖现有配置？ (yes/no): ").strip().lower()
         if overwrite not in ["yes", "y"]:
@@ -432,7 +453,6 @@ def onboard():
     }
 
     backend = prompt_backend_choice()
-
     csv_dir = Path(csv_config["csv_dir"])
 
     if backend == "networkx":
@@ -456,17 +476,14 @@ def onboard():
     print(f"✓ Backend 已写入: {backend_file}")
 
     print("\n正在生成 assets...")
-
     try:
         graph_obj = GraphFactory.create(config)
         generator = AssetsGenerator(graph_obj, SKILLS_ASSETS_DIR)
         generator.generate_all()
-
         print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")
         print("\n✅ Onboard 完成！")
         print(f"\n配置文件: {config_manager.config_path}")
         print(f"Assets 目录: {SKILLS_ASSETS_DIR}")
-
     except Exception as e:
         print(f"\n❌ 生成 assets 失败: {e}")
         sys.exit(1)
