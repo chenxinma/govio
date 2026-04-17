@@ -274,6 +274,51 @@ def prompt_falkordb_config(csv_dir: Path) -> dict[str, Any]:
     }
 
 
+def prompt_connect_args(existing: dict[str, Any] | None = None) -> dict[str, Any]:
+    """交互式输入连接参数（key=value 格式）
+
+    Args:
+        existing: 已有的连接参数
+
+    Returns:
+        dict: 连接参数字典
+    """
+    connect_args: dict[str, Any] = {}
+
+    if existing:
+        print(f"  当前连接参数: {existing}")
+        keep = input("  是否保留现有参数？ (yes/no) [默认: yes]: ").strip().lower()
+        if keep not in ("no", "n"):
+            return existing
+
+    print("  输入连接参数 (key=value 格式，空行结束):")
+    print("  示例: ssl=true, timeout=30")
+
+    while True:
+        line = input("  > ").strip()
+        if not line:
+            break
+        if "=" not in line:
+            print("  格式错误，请使用 key=value 格式")
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if value.lower() in ("true", "false"):
+            value = value.lower() == "true"
+        else:
+            try:
+                value = int(value)
+            except ValueError:
+                try:
+                    value = float(value)
+                except ValueError:
+                    pass
+        connect_args[key] = value
+
+    return connect_args
+
+
 def prompt_datasource_config() -> dict[str, Any] | None:
     """提示用户配置数据源（可选）"""
     print("\n=== 步骤 2: 数据源配置（可选）===\n")
@@ -294,15 +339,20 @@ def prompt_datasource_config() -> dict[str, Any] | None:
             print("  名称不能为空")
             continue
 
-        url = input("  URL (如 mysql+pymysql://user:pass@host/db 或 duckdb:///path): ").strip()
+        url = input(
+            "  URL (如 mysql+pymysql://user:pass@host/db 或 duckdb:///path): "
+        ).strip()
         if not url:
             print("  URL 不能为空")
             continue
 
-        connect_args_str = input("  连接参数 (JSON 格式，可直接回车跳过) [默认: {}]: ").strip()
+        connect_args_str = input(
+            "  连接参数 (JSON 格式，可直接回车跳过) [默认: {}]: "
+        ).strip()
         connect_args = {}
         if connect_args_str:
             import json
+
             try:
                 connect_args = json.loads(connect_args_str)
             except json.JSONDecodeError:
