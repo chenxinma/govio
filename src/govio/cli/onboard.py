@@ -364,7 +364,16 @@ def prompt_datasource_config(
             if not url:
                 print("  URL 不能为空")
                 continue
-            existing_args = datasources.get(name, {}).get("connect_args")
+            if name in datasources:
+                overwrite = (
+                    input(f"  数据源 '{name}' 已存在，是否覆盖？ (yes/no) [默认: no]: ")
+                    .strip()
+                    .lower()
+                )
+                if overwrite not in ("yes", "y"):
+                    print("  已取消添加")
+                    continue
+            existing_args = datasources.get(name, {}).get("connect_args") or None
             connect_args = prompt_connect_args(existing_args)
             datasources[name] = {"url": url, "connect_args": connect_args}
             print(f"  已添加数据源: {name}")
