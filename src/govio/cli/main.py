@@ -1,9 +1,11 @@
 import argparse
+from pathlib import Path
 import sys
 
 from .onboard import onboard
 from .std_recommend import std_recommend
 from .observe import observe
+from .query import query
 
 
 def main():
@@ -15,6 +17,20 @@ def main():
 
     sub.add_parser("onboard", help="初始化配置向导")
     sub.add_parser("std-recommend", help="数据标准推荐")
+
+    # query 子命令
+    p_query = sub.add_parser("query", help="知识图谱查询")
+    p_query.add_argument(
+        "--assets",
+        type=Path,
+        default=Path("skills/govio/assets"),
+        help="Assets 目录路径 (默认: skills/govio/assets)",
+    )
+    p_query.add_argument(
+        "query_text",
+        nargs="?",
+        help="查询语句（NetworkX 用 Python 代码，FalkorDB 用 Cypher）",
+    )
 
     # observe 子命令：保留未知参数传递给 observe()
     p_observe = sub.add_parser("observe", help="数据表探查")
@@ -28,6 +44,13 @@ def main():
         onboard()
     elif args.action == "std-recommend":
         std_recommend()
+    elif args.action == "query":
+        # 将 query 参数设为 sys.argv 供 query() 解析
+        q_argv = ["govio-cli", "query", "--assets", str(args.assets)]
+        if args.query_text:
+            q_argv.append(args.query_text)
+        sys.argv = q_argv
+        query()
     elif args.action == "observe":
         # 将 observe 子命令参数设为 sys.argv 供 observe() 解析
         sys.argv = ["govio-cli"] + args.observe_args
