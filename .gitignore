@@ -20,3 +20,4 @@ assets/
 
 # observe DataFrame storage
 .govio/observe/
+.claude/settings.local.json

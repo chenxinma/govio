@@ -28,7 +28,6 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "falkordb-bulk-loader>=1.0.7",
     "pytest>=9.0.2",
     "ruff>=0.15.6",
 ]
