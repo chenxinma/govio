@@ -2,6 +2,8 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
+import pytest
+
 
 def create_test_csv_files(csv_dir: Path):
     """创建测试用的 CSV 文件"""
@@ -114,13 +116,19 @@ def test_prompt_networkx_config(monkeypatch, tmp_path):
     assert "gml_path" in config["networkx"]
 
 
-def test_prompt_falkordb_config(monkeypatch):
+def test_prompt_falkordb_config(monkeypatch, tmp_path):
     from govio.cli.onboard import prompt_falkordb_config
+
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
 
     inputs = iter(["localhost", "6379", "test_graph"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    monkeypatch.setattr(
+        "govio.cli.onboard.import_csv_to_falkordb", lambda *a, **kw: None
+    )
 
-    config = prompt_falkordb_config()
+    config = prompt_falkordb_config(csv_dir)
 
     assert config["backend"] == "falkordb"
     assert config["falkordb"]["host"] == "localhost"
@@ -141,13 +149,19 @@ def test_prompt_backend_choice_invalid_input(monkeypatch, capsys):
     assert "无效选项" in captured.out
 
 
-def test_prompt_falkordb_config_invalid_port(monkeypatch, capsys):
+def test_prompt_falkordb_config_invalid_port(monkeypatch, capsys, tmp_path):
     from govio.cli.onboard import prompt_falkordb_config
+
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
 
     inputs = iter(["localhost", "invalid", "6379", "test_graph"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    monkeypatch.setattr(
+        "govio.cli.onboard.import_csv_to_falkordb", lambda *a, **kw: None
+    )
 
-    config = prompt_falkordb_config()
+    config = prompt_falkordb_config(csv_dir)
 
     assert config["falkordb"]["port"] == 6379
 
@@ -231,6 +245,130 @@ app1,table1
     assert config_path.exists()
     assert (tmp_path / "assets" / "schema.md").exists()
     assert (tmp_path / "assets" / "names" / "node_names.md").exists()
+
+
+def test_onboard_new_falkordb(monkeypatch, tmp_path):
+    """测试 onboard --new-falkordb 跳过 CSV 生成直接导入 FalkorDB"""
+    import importlib
+    from govio.cli.config import ConfigManager
+
+    onboard_module = importlib.import_module("govio.cli.onboard")
+
+    # Create test CSV files
+    csv_dir = tmp_path / "csv"
+    create_test_csv_files(csv_dir)
+
+    # Patch SKILLS_ASSETS_DIR
+    onboard_module.SKILLS_ASSETS_DIR = tmp_path / "assets"
+    onboard_module.SKILLS_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Mock config path
+    config_path = tmp_path / ".govio" / "config.yaml"
+
+    def mock_config_manager():
+        return ConfigManager(config_path)
+
+    monkeypatch.setattr(onboard_module, "ConfigManager", mock_config_manager)
+
+    # Mock FalkorDB import and graph factory
+    monkeypatch.setattr(
+        "govio.cli.onboard.import_csv_to_falkordb", lambda *a, **kw: None
+    )
+
+    # Mock inputs: host, port, graph_name
+    inputs = iter(["localhost", "6379", "test_graph"])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    # Mock GraphFactory and AssetsGenerator
+    from unittest.mock import MagicMock
+
+    mock_graph = MagicMock()
+    monkeypatch.setattr(
+        "govio.cli.onboard.GraphFactory",
+        MagicMock(create=MagicMock(return_value=mock_graph)),
+    )
+    mock_generator = MagicMock()
+    monkeypatch.setattr(
+        "govio.cli.onboard.AssetsGenerator",
+        MagicMock(return_value=mock_generator),
+    )
+
+    onboard_module.onboard(new_falkordb=csv_dir)
+
+    # Verify config saved with falkordb backend
+    saved_config = ConfigManager(config_path).load()
+    assert saved_config["backend"] == "falkordb"
+    assert saved_config["csv_dir"] == str(csv_dir)
+    assert saved_config["falkordb"]["host"] == "localhost"
+    assert saved_config["falkordb"]["graph"] == "test_graph"
+
+    # Verify backend.txt
+    assert (tmp_path / "assets" / "backend.txt").read_text().strip() == "falkordb"
+
+
+def test_onboard_new_networkx(monkeypatch, tmp_path):
+    """测试 onboard --new-networkx 跳过 CSV 生成直接生成 GML"""
+    import importlib
+    from govio.cli.config import ConfigManager
+
+    onboard_module = importlib.import_module("govio.cli.onboard")
+
+    # Create test CSV files
+    csv_dir = tmp_path / "csv"
+    create_test_csv_files(csv_dir)
+
+    # Patch SKILLS_ASSETS_DIR
+    onboard_module.SKILLS_ASSETS_DIR = tmp_path / "assets"
+    onboard_module.SKILLS_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Mock config path
+    config_path = tmp_path / ".govio" / "config.yaml"
+
+    def mock_config_manager():
+        return ConfigManager(config_path)
+
+    monkeypatch.setattr(onboard_module, "ConfigManager", mock_config_manager)
+
+    # Mock build_graph and graph factory
+    from unittest.mock import MagicMock
+
+    monkeypatch.setattr(
+        "govio.cli.onboard.build_graph", lambda *a, **kw: None
+    )
+    mock_graph = MagicMock()
+    monkeypatch.setattr(
+        "govio.cli.onboard.GraphFactory",
+        MagicMock(create=MagicMock(return_value=mock_graph)),
+    )
+    mock_generator = MagicMock()
+    monkeypatch.setattr(
+        "govio.cli.onboard.AssetsGenerator",
+        MagicMock(return_value=mock_generator),
+    )
+
+    onboard_module.onboard(new_networkx=csv_dir)
+
+    # Verify config saved with networkx backend
+    saved_config = ConfigManager(config_path).load()
+    assert saved_config["backend"] == "networkx"
+    assert saved_config["csv_dir"] == str(csv_dir)
+    assert "gml_path" in saved_config["networkx"]
+
+    # Verify backend.txt
+    assert (tmp_path / "assets" / "backend.txt").read_text().strip() == "networkx"
+
+
+def test_onboard_new_falkordb_and_new_networkx_exclusive(monkeypatch, tmp_path, capsys):
+    """测试 --new-falkordb 和 --new-networkx 不能同时使用"""
+    import importlib
+
+    onboard_module = importlib.import_module("govio.cli.onboard")
+
+    with pytest.raises(SystemExit):
+        onboard_module.onboard(new_falkordb=tmp_path / "csv", new_networkx=tmp_path / "csv")
+
+    captured = capsys.readouterr()
+    assert "不能同时使用" in captured.out
 
 
 class TestPromptConnectArgs:

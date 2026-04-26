@@ -15,7 +15,19 @@ def main():
     )
     sub = parser.add_subparsers(dest="action")
 
-    sub.add_parser("onboard", help="初始化配置向导")
+    p_onboard = sub.add_parser("onboard", help="初始化配置向导")
+    p_onboard.add_argument(
+        "--new-falkordb",
+        type=Path,
+        metavar="CSV_DIR",
+        help="跳过 CSV 生成，直接将指定目录的 CSV 导入 FalkorDB",
+    )
+    p_onboard.add_argument(
+        "--new-networkx",
+        type=Path,
+        metavar="CSV_DIR",
+        help="跳过 CSV 生成，直接从指定目录的 CSV 生成 GML 文件",
+    )
     sub.add_parser("std-recommend", help="数据标准推荐")
 
     # query 子命令
@@ -41,7 +53,7 @@ def main():
     args = parser.parse_args()
 
     if args.action == "onboard":
-        onboard()
+        onboard(new_falkordb=args.new_falkordb, new_networkx=args.new_networkx)
     elif args.action == "std-recommend":
         std_recommend()
     elif args.action == "query":

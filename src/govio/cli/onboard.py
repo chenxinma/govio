@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -193,6 +194,8 @@ def import_csv_to_falkordb(
 ) -> None:
     """使用 falkordb-bulk-insert 将 CSV 导入 FalkorDB
 
+    通过 Python API 调用，避免 Windows 上 CLI 入口点损坏的问题。
+
     Args:
         csv_dir: CSV 文件目录
         host: FalkorDB 主机地址
@@ -224,7 +227,7 @@ def import_csv_to_falkordb(
     if extra_rel_file.exists():
         relation_files.append(("RELATES_TO", extra_rel_file))
 
-    cmd = ["falkordb-bulk-insert", graph_name]
+    cmd = [sys.executable, "-m", "falkordb_bulk_loader.bulk_insert", graph_name]
 
     for label, filepath in node_files:
         if filepath.exists():
@@ -239,7 +242,8 @@ def import_csv_to_falkordb(
 
     print(f"\n正在执行: {' '.join(cmd)}")
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    env = {**os.environ, "PYTHONUTF8": "1"}
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
     if result.returncode != 0:
         raise RuntimeError(f"falkordb-bulk-insert 失败: {result.stderr}")
@@ -406,9 +410,111 @@ def prompt_datasource_config(
     return datasources if datasources else None
 
 
-def onboard():
-    """Onboard 向导主函数"""
+def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
+    """Onboard 向导主函数
+
+    Args:
+        new_falkordb: 若提供，跳过 CSV 生成，直接将该目录的 CSV 导入 FalkorDB
+        new_networkx: 若提供，跳过 CSV 生成，直接从该目录的 CSV 生成 GML 文件
+    """
     config_manager = ConfigManager()
+
+    if new_falkordb and new_networkx:
+        print("❌ --new-falkordb 和 --new-networkx 不能同时使用")
+        sys.exit(1)
+
+    if new_networkx:
+        csv_dir = Path(new_networkx).resolve()
+        if not validate_csv_directory(csv_dir):
+            print(f"❌ CSV 目录无效或缺少必需文件: {csv_dir}")
+            sys.exit(1)
+
+        existing_config = {}
+        if config_manager.exists():
+            try:
+                existing_config = config_manager.load()
+            except Exception:
+                pass
+
+        print(f"\n=== 跳过 CSV 生成，直接生成 GML 文件 ===")
+        print(f"CSV 目录: {csv_dir}\n")
+
+        gml_path = SKILLS_ASSETS_DIR / "ontology.gml"
+        print("正在从 CSV 文件生成 GML 文件...")
+        build_graph(str(csv_dir), str(gml_path))
+        print(f"✓ GML 文件已生成: {gml_path}")
+
+        config = {"backend": "networkx", "networkx": {"gml_path": str(gml_path)}}
+        full_config = {
+            **existing_config,
+            "csv_dir": str(csv_dir),
+            **config,
+        }
+
+        config_manager.save(full_config)
+        print(f"✓ 配置已保存到: {config_manager.config_path}")
+
+        backend_file = SKILLS_ASSETS_DIR / "backend.txt"
+        backend_file.write_text("networkx\n")
+        print(f"✓ Backend 已写入: {backend_file}")
+
+        print("\n正在生成 assets...")
+        try:
+            graph_obj = GraphFactory.create(config)
+            generator = AssetsGenerator(graph_obj, SKILLS_ASSETS_DIR)
+            generator.generate_all()
+            print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")
+            print("\n✅ Onboard 完成！")
+            print(f"\n配置文件: {config_manager.config_path}")
+            print(f"Assets 目录: {SKILLS_ASSETS_DIR}")
+        except Exception as e:
+            print(f"\n❌ 生成 assets 失败: {e}")
+            sys.exit(1)
+        return
+
+    if new_falkordb:
+        csv_dir = Path(new_falkordb).resolve()
+        if not validate_csv_directory(csv_dir):
+            print(f"❌ CSV 目录无效或缺少必需文件: {csv_dir}")
+            sys.exit(1)
+
+        existing_config = {}
+        if config_manager.exists():
+            try:
+                existing_config = config_manager.load()
+            except Exception:
+                pass
+
+        print(f"\n=== 跳过 CSV 生成，直接导入 FalkorDB ===")
+        print(f"CSV 目录: {csv_dir}\n")
+
+        config = prompt_falkordb_config(csv_dir)
+        full_config = {
+            **existing_config,
+            "csv_dir": str(csv_dir),
+            **config,
+        }
+
+        config_manager.save(full_config)
+        print(f"✓ 配置已保存到: {config_manager.config_path}")
+
+        backend_file = SKILLS_ASSETS_DIR / "backend.txt"
+        backend_file.write_text("falkordb\n")
+        print(f"✓ Backend 已写入: {backend_file}")
+
+        print("\n正在生成 assets...")
+        try:
+            graph_obj = GraphFactory.create(config)
+            generator = AssetsGenerator(graph_obj, SKILLS_ASSETS_DIR)
+            generator.generate_all()
+            print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")
+            print("\n✅ Onboard 完成！")
+            print(f"\n配置文件: {config_manager.config_path}")
+            print(f"Assets 目录: {SKILLS_ASSETS_DIR}")
+        except Exception as e:
+            print(f"\n❌ 生成 assets 失败: {e}")
+            sys.exit(1)
+        return
 
     if config_manager.exists():
         existing_config = config_manager.load()
