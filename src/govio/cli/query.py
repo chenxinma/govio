@@ -6,7 +6,6 @@
 from datetime import datetime
 import json
 import logging
-import os
 from pathlib import Path
 import sys
 
@@ -73,12 +72,12 @@ def cmd_networkx(code: str, assets_dir: Path, gml_path: str | None = None):
     if not gml_path:
         gml_path = str(assets_dir / "ontology.gml")
 
-    gml_path = Path(gml_path)
-    if not gml_path.exists():
+    gml_path = Path(gml_path) # pyright: ignore[reportAssignmentType]
+    if not gml_path.exists(): # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
         print(f"GML file not found: {gml_path}")
         sys.exit(1)
 
-    gf = NetworkXGraph(gml_path)
+    gf = NetworkXGraph(gml_path) # pyright: ignore[reportArgumentType]
     g = gf.G
 
     logger.info("NetworkX Code: " + code)

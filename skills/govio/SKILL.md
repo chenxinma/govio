@@ -54,6 +54,7 @@ govio/
 │   ├── backend.txt            # 后端配置 (networkx 或 falkordb)
 │   ├── schema.md              # 图数据库模式文件
 │   ├── ontology.gml           # 数据治理元模型数据文件(GML格式)
+│   ├── metrics_index.md       # 指标索引（原子/派生分组）
 │   ├── govio-*.whl            # govio 包 (uvx 自动解析依赖)
 │   └── names/
 │        └── node_names.md     # 已知节点的名称，作为标准名称备参考
@@ -114,4 +115,39 @@ uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/ass
 - Cypher 查询必须用**双引号**包裹参数
 - 结果超过 10 行时自动输出到 `assets/output-*.json` 文件
 - Cypher 查询必须以 `MATCH` 开头
+
+## 指标查询
+
+先读取 `assets/metrics_index.md` 获取指标概览，再进行深度查询。
+
+### 指标血缘溯源（查找上游依赖）
+
+```bash
+# FalkorDB: 查找 burndown_amt 的所有上游指标
+uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/assets "MATCH p=(m:Metric {code: 'burndown_amt'})-[:DERIVED_FROM*1..5]->(up:Metric) RETURN up.code, up.name, up.type"
+```
+
+### 影响分析（查找下游影响）
+
+```bash
+# FalkorDB: 查找 bill_income_amt 变更会影响哪些指标
+uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/assets "MATCH (m:Metric {code: 'bill_income_amt'})<-[:DERIVED_FROM*1..5]-(dep:Metric) RETURN dep.code, dep.name, dep.formula"
+```
+
+### 指标数据溯源
+
+```bash
+# FalkorDB: 查找指标的来源表
+uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/assets "MATCH (m:Metric {code: 'bill_income_amt'})-[:USES_TABLE]->(t:PhysicalTable) RETURN t.full_table_name, t.name"
+
+# FalkorDB: 查找指标引用的列
+uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/assets "MATCH (m:Metric {code: 'bill_income_amt'})-[:REFERS_COLUMN]->(c:Col) RETURN c.column_name, c.data_type"
+```
+
+### 维度发现
+
+```bash
+# FalkorDB: 查找指标可按哪些维度拆分
+uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/assets "MATCH (m:Metric {code: 'burndown_amt'})-[d:DIMENSION_USED]->(dim:Dimension) RETURN dim.code, dim.name, d.usage_type"
+```
 

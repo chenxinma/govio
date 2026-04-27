@@ -7,10 +7,11 @@ from .database import DatabaseLoader
 from .standard import StandardLoader
 from .recommender import create_recommender
 from .relationship import load_relationships
+from .metric import MetricLoader
 
 
-def reorder_index(dfs: list[pd.DataFrame]):
-    base_index: int = 1
+def reorder_index(dfs: list[pd.DataFrame], start: int = 1):
+    base_index: int = start
 
     for df in dfs:
         _end_index = base_index + df.shape[0]
@@ -26,6 +27,7 @@ def make_csv(
     app_list_file: str,
     df_app_db_map: pd.DataFrame,
     relationship_file: str | None = None,
+    metric_file: str | None = None,
 ):
     db_loader = DatabaseLoader(db, workspace_uuid, df_app_db_map["schema"].to_list())
     app_loader = AppInfoLoader(app_list_file, df_app_db_map["name"].to_list())
@@ -104,6 +106,70 @@ def make_csv(
             print(f"成功生成 RELATES_TO.csv，包含 {len(df_relates_to)} 个关系")
         except Exception as e:
             print(f"警告: 无法加载关系文件: {e}")
+
+    if metric_file:
+        try:
+            metric_loader = MetricLoader(metric_file, df_tables, df_columns)
+            df_metrics = metric_loader.Metric
+            df_dimensions = metric_loader.Dimension
+
+            # 计算 Metric/Dimension 的 ID 起始偏移（接续已有节点）
+            metric_offset = (
+                len(df_tables) + len(df_columns) + len(df_apps) + len(df_stds) + 1
+            )
+            dim_offset = metric_offset + len(df_metrics)
+            reorder_index([df_metrics, df_dimensions], start=metric_offset)
+
+            df_metrics.to_csv(output / "Metric.csv", index_label=":ID(Metric)")
+            files.append("-n " + str(output / "Metric.csv"))
+
+            df_dimensions.to_csv(
+                output / "Dimension.csv", index_label=":ID(Dimension)"
+            )
+            files.append("-n " + str(output / "Dimension.csv"))
+
+            # USES_TABLE 边
+            uses_table = metric_loader.uses_table_edges.copy()
+            if not uses_table.empty:
+                uses_table[":START_ID(Metric)"] += metric_offset
+                uses_table.to_csv(output / "USES_TABLE.csv", index=False)
+                files.append("-r " + str(output / "USES_TABLE.csv"))
+
+            # REFERS_COLUMN 边
+            refers_col = metric_loader.refers_column_edges.copy()
+            if not refers_col.empty:
+                refers_col[":START_ID(Metric)"] += metric_offset
+                refers_col.to_csv(output / "REFERS_COLUMN.csv", index=False)
+                files.append("-r " + str(output / "REFERS_COLUMN.csv"))
+
+            # DERIVED_FROM 边
+            derived_from = metric_loader.derived_from_edges.copy()
+            if not derived_from.empty:
+                derived_from[":START_ID(Metric)"] += metric_offset
+                derived_from[":END_ID(Metric)"] += metric_offset
+                derived_from.to_csv(output / "DERIVED_FROM.csv", index=False)
+                files.append("-r " + str(output / "DERIVED_FROM.csv"))
+
+            # DIMENSION_USED 边
+            dim_used = metric_loader.dimension_used_edges.copy()
+            if not dim_used.empty:
+                dim_used[":START_ID(Metric)"] += metric_offset
+                dim_used[":END_ID(Dimension)"] += dim_offset
+                dim_used.to_csv(output / "DIMENSION_USED.csv", index=False)
+                files.append("-r " + str(output / "DIMENSION_USED.csv"))
+
+            # SUPERSEDES 边
+            supersedes = metric_loader.supersedes_edges
+            if not supersedes.empty:
+                supersedes.to_csv(output / "SUPERSEDES.csv", index=False)
+                files.append("-r " + str(output / "SUPERSEDES.csv"))
+
+            print(
+                f"成功生成指标数据：{len(df_metrics)} 个指标, "
+                f"{len(df_dimensions)} 个维度"
+            )
+        except Exception as e:
+            print(f"警告: 无法加载指标定义文件: {e}")
 
     s = f"falkordb-bulk-insert {{GRAPH}} {'  '.join(files)}"
     print("Bulk insert usage:")

@@ -143,8 +143,9 @@ class RelationshipLoader:
             return False, None, None
 
         if full_col_name in col_names.values:
-            return True, column_name, \
-                self.df_columns[self.df_columns["column"]==full_col_name].get("full_table_name", pd.Series()).values[0]
+            matched = self.df_columns[self.df_columns["column"]==full_col_name]
+            ft = matched["full_table_name"].values[0] if "full_table_name" in matched.columns and not matched.empty else None
+            return True, column_name, ft
 
         col_names_lower = {str(c).lower(): c for c in col_names.values}
         full_col_name_lower = full_col_name.lower()
@@ -155,8 +156,9 @@ class RelationshipLoader:
             logger.info(
                 f"{context}: 列名大小写不匹配，'{column_name}' -> '{actual_simple_name}'"
             )
-            return True, actual_simple_name, \
-                self.df_columns[self.df_columns["column"]==actual_col_name].get("full_table_name", pd.Series()).values[0]
+            matched = self.df_columns[self.df_columns["column"]==actual_col_name]
+            ft = matched["full_table_name"].values[0] if "full_table_name" in matched.columns and not matched.empty else None
+            return True, actual_simple_name, ft
 
 
         logger.warning(f"{context}: 列 '{full_col_name}' 不存在于 Col 数据中，跳过")
@@ -195,12 +197,14 @@ class RelationshipLoader:
             if not valid:
                 return False
             normalized_source_cols.append(actual_col)
-            full_table_names.add(full_table_name)
+            if full_table_name is not None:
+                full_table_names.add(full_table_name)
         rel["source"]["Cols"] = normalized_source_cols
         if len(full_table_names) > 1:
             logger.warning(f"source 表 {source_table}, 元数据定义出现重复")
             return False
-        rel["source"]["ID"] = self._get_table_id(full_table_names.pop())
+        source_id_table = full_table_names.pop() if full_table_names else source_table
+        rel["source"]["ID"] = self._get_table_id(source_id_table)
 
 
         normalized_target_cols = []
@@ -212,12 +216,14 @@ class RelationshipLoader:
             if not valid:
                 return False
             normalized_target_cols.append(actual_col)
-            full_table_names.add(full_table_name)
+            if full_table_name is not None:
+                full_table_names.add(full_table_name)
         rel["target"]["Cols"] = normalized_target_cols
         if len(full_table_names) > 1:
             logger.warning(f"target 表 {target_table}, 元数据定义出现重复")
             return False
-        rel["target"]["ID"] = self._get_table_id(full_table_names.pop())
+        target_id_table = full_table_names.pop() if full_table_names else target_table
+        rel["target"]["ID"] = self._get_table_id(target_id_table)
 
         return True
 

@@ -66,6 +66,12 @@ def prompt_csv_config(config_manager: ConfigManager) -> dict[str, Any]:
     ).strip()
     relationship = relationship or default_relationship
 
+    default_metric = existing_config.get("metric", "")
+    metric = input(
+        f"请输入指标定义 JSON 文件路径（可选，直接回车跳过） [默认: {default_metric}]: "
+    ).strip()
+    metric = metric or default_metric
+
     default_csv_dir = existing_config.get("csv_dir", "")
     csv_dir = input(f"请输入 CSV 输出目录 [默认: {default_csv_dir}]: ").strip()
     csv_dir = csv_dir or default_csv_dir
@@ -87,6 +93,7 @@ def prompt_csv_config(config_manager: ConfigManager) -> dict[str, Any]:
         "app_list": app_list,
         "app_map": app_map,
         "relationship": relationship if relationship else None,
+        "metric": metric if metric else None,
         "csv_dir": csv_dir,
         "workspace_uuid": workspace_uuid,
         "output_dir": output_dir,
@@ -102,6 +109,7 @@ def generate_csv(config: dict[str, Any]) -> None:
     app_list = config["app_list"]
     app_map = config["app_map"]
     relationship = config.get("relationship")
+    metric = config.get("metric")
     csv_dir = Path(config["csv_dir"])
     workspace_uuid = config.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
 
@@ -117,6 +125,7 @@ def generate_csv(config: dict[str, Any]) -> None:
         app_list_file=app_list,
         df_app_db_map=df_app_db_map,
         relationship_file=relationship,
+        metric_file=metric,
     )
 
 
@@ -216,6 +225,8 @@ def import_csv_to_falkordb(
         ("Col", csv_path / "Col.csv"),
         ("Application", csv_path / "Application.csv"),
         ("Standard", csv_path / "Standard.csv"),
+        ("Metric", csv_path / "Metric.csv"),
+        ("Dimension", csv_path / "Dimension.csv"),
     ]
 
     relation_files = [
@@ -226,6 +237,18 @@ def import_csv_to_falkordb(
     extra_rel_file = csv_path / "RELATES_TO.csv"
     if extra_rel_file.exists():
         relation_files.append(("RELATES_TO", extra_rel_file))
+
+    # 指标相关的边文件
+    metric_rel_files = [
+        ("USES_TABLE", csv_path / "USES_TABLE.csv"),
+        ("REFERS_COLUMN", csv_path / "REFERS_COLUMN.csv"),
+        ("DERIVED_FROM", csv_path / "DERIVED_FROM.csv"),
+        ("DIMENSION_USED", csv_path / "DIMENSION_USED.csv"),
+        ("SUPERSEDES", csv_path / "SUPERSEDES.csv"),
+    ]
+    for rel_type, filepath in metric_rel_files:
+        if filepath.exists():
+            relation_files.append((rel_type, filepath))
 
     cmd = [sys.executable, "-m", "falkordb_bulk_loader.bulk_insert", graph_name]
 
@@ -436,7 +459,7 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
             except Exception:
                 pass
 
-        print(f"\n=== 跳过 CSV 生成，直接生成 GML 文件 ===")
+        print("\n=== 跳过 CSV 生成，直接生成 GML 文件 ===")
         print(f"CSV 目录: {csv_dir}\n")
 
         gml_path = SKILLS_ASSETS_DIR / "ontology.gml"
@@ -485,7 +508,7 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
             except Exception:
                 pass
 
-        print(f"\n=== 跳过 CSV 生成，直接导入 FalkorDB ===")
+        print("\n=== 跳过 CSV 生成，直接导入 FalkorDB ===")
         print(f"CSV 目录: {csv_dir}\n")
 
         config = prompt_falkordb_config(csv_dir)
