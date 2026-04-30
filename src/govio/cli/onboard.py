@@ -477,10 +477,6 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
         config_manager.save(full_config)
         print(f"✓ 配置已保存到: {config_manager.config_path}")
 
-        backend_file = SKILLS_ASSETS_DIR / "backend.txt"
-        backend_file.write_text("networkx\n")
-        print(f"✓ Backend 已写入: {backend_file}")
-
         print("\n正在生成 assets...")
         try:
             graph_obj = GraphFactory.create(config)
@@ -520,10 +516,6 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
 
         config_manager.save(full_config)
         print(f"✓ 配置已保存到: {config_manager.config_path}")
-
-        backend_file = SKILLS_ASSETS_DIR / "backend.txt"
-        backend_file.write_text("falkordb\n")
-        print(f"✓ Backend 已写入: {backend_file}")
 
         print("\n正在生成 assets...")
         try:
@@ -599,10 +591,6 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
     if datasources:
         full_config["datasources"] = datasources
         config_manager.save(full_config)
-
-    backend_file = SKILLS_ASSETS_DIR / "backend.txt"
-    backend_file.write_text(backend + "\n")
-    print(f"✓ Backend 已写入: {backend_file}")
 
     print("\n正在生成 assets...")
     try:

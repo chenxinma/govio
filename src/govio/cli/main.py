@@ -2,6 +2,8 @@ import argparse
 from pathlib import Path
 import sys
 
+from govio.cli.config import ConfigManager
+
 from .onboard import onboard
 from .std_recommend import std_recommend
 from .observe import observe
@@ -32,16 +34,20 @@ def main():
 
     # query 子命令
     p_query = sub.add_parser("query", help="知识图谱查询")
+    code_type = "NetworkX 用 Python 代码，FalkorDB 用 Cypher"
+    config_manager = ConfigManager()
+    if config_manager.exists():
+        config = config_manager.load()
+        backend = config.get("backend")
+        if backend == "falkordb":
+            code_type = "Cypher"
+        elif backend == "networkx":
+            code_type = "Python 代码"
+
     p_query.add_argument(
-        "--assets",
-        type=Path,
-        default=Path("skills/govio/assets"),
-        help="Assets 目录路径 (默认: skills/govio/assets)",
-    )
-    p_query.add_argument(
-        "query_text",
-        nargs="?",
-        help="查询语句（NetworkX 用 Python 代码，FalkorDB 用 Cypher）",
+        "-c",
+        "--code",
+        help=f"查询语句（{code_type}）",
     )
 
     # observe 子命令：保留未知参数传递给 observe()
@@ -57,12 +63,7 @@ def main():
     elif args.action == "std-recommend":
         std_recommend()
     elif args.action == "query":
-        # 将 query 参数设为 sys.argv 供 query() 解析
-        q_argv = ["govio-cli", "query", "--assets", str(args.assets)]
-        if args.query_text:
-            q_argv.append(args.query_text)
-        sys.argv = q_argv
-        query()
+        query(args.code)
     elif args.action == "observe":
         # 将 observe 子命令参数设为 sys.argv 供 observe() 解析
         sys.argv = ["govio-cli"] + args.observe_args

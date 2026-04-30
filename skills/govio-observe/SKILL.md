@@ -76,8 +76,14 @@ Plan 保存位置: `docs/govio/plans/YYYY-MM-DD-[task-name].md`
 `observe-dataset-ops` 包含四个操作，对应 CLI 命令：
 - `list_ds()` → `uvx --from skills/govio/assets/govio-*.whl govio-cli observe show-datasource`
 - `list_dfs()` → `uvx --from skills/govio/assets/govio-*.whl govio-cli observe list`
-- `load_df()` → `uvx --from skills/govio/assets/govio-*.whl govio-cli observe load <name> <datasource> <sql>`
-- `release_df()` → `uvx --from skills/govio/assets/govio-*.whl govio-cli observe release <name>`
+- `load_df()` → `uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name <name> --datasource <ds> --sql <sql>`
+- `release_df()` → `uvx --from skills/govio/assets/govio-*.whl govio-cli observe release --name <name>`
+
+### CLI命令说明
+
+所有参数均为关键字参数，顺序无关：
+- `govio-cli observe load --name <name> --datasource <ds> --sql <sql>`
+- `govio-cli observe release --name <name>`
 
 ### load 加载的两种方式
 
@@ -86,7 +92,7 @@ Plan 保存位置: `docs/govio/plans/YYYY-MM-DD-[task-name].md`
 当用户已明确知道要查询的表和字段时，直接传入 SQL：
 
 ```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe load customers mysql "SELECT customer_id, name, email FROM customers"
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name customers --datasource mysql --sql "SELECT customer_id, name, email FROM customers"
 ```
 
 **方式 2：通过 govio skill 查询元数据后生成 SQL**
@@ -99,14 +105,14 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe load customers mysq
 Agent: "我先查询知识图谱获取 CRM 的表结构..."
 
 [调用 govio skill 查询]
-uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/assets "MATCH (app:Application {name: 'CRM'})-[:USE]->(t:PhysicalTable)-[:HAS_COLUMN]->(c:Col) RETURN t.full_table_name, c.column_name, c.dtype ORDER BY t.full_table_name, c.order_no"
+uvx --from skills/govio/assets/govio-*.whl govio-cli query --query "MATCH (app:Application {name: 'CRM'})-[:USE]->(t:PhysicalTable)-[:HAS_COLUMN]->(c:Col) RETURN t.full_table_name, c.column_name, c.dtype ORDER BY t.full_table_name, c.order_no"
 
 → 获得表名和字段信息
 
 Agent: "根据元数据，生成加载 SQL..."
 
 [执行 load 命令]
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe load crm_customers crm_db "SELECT customer_id, name, email, phone FROM crm.customers"
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name crm_customers --datasource crm_db --sql "SELECT customer_id, name, email, phone FROM crm.customers"
 ```
 
 ## 使用模式
@@ -239,7 +245,7 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe load crm_customers 
 ## Task 1: 加载源数据
 
 **使用 Skill**: observe-dataset-ops.load_df
-**CLI 命令**: `uvx --from skills/govio/assets/govio-*.whl govio-cli observe load legacy_customers legacy_db "SELECT customer_id, name, email FROM customers"`
+**CLI 命令**: `uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name legacy_customers --datasource legacy_db --sql "SELECT customer_id, name, email FROM customers"`
 
 - [ ] 执行加载命令
 - [ ] 验证加载成功（rows > 0）
@@ -247,7 +253,7 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe load crm_customers 
 ## Task 2: 加载目标数据
 
 **使用 Skill**: observe-dataset-ops.load_df
-**CLI 命令**: `uvx --from skills/govio/assets/govio-*.whl govio-cli observe load new_customers new_db "SELECT customer_id, name, email FROM customers"`
+**CLI 命令**: `uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name new_customers --datasource new_db --sql "SELECT customer_id, name, email FROM customers"`
 
 - [ ] 执行加载命令
 - [ ] 验证加载成功
@@ -255,7 +261,7 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe load crm_customers 
 ## Task 3: 比对数据
 
 **使用 Skill**: observe-compare-dfs
-**CLI 命令**: `uvx --from skills/govio/assets/govio-*.whl govio-cli observe compare legacy_customers new_customers --join-columns customer_id`
+**CLI 命令**: `uvx --from skills/govio/assets/govio-*.whl govio-cli observe compare --source legacy_customers --target new_customers --join-columns customer_id`
 
 - [ ] 执行比对命令
 - [ ] 验证 match_rate >= 99%
@@ -265,8 +271,8 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe load crm_customers 
 
 **使用 Skill**: observe-dataset-ops.release_df
 
-- [ ] `uvx --from skills/govio/assets/govio-*.whl govio-cli observe release legacy_customers`
-- [ ] `uvx --from skills/govio/assets/govio-*.whl govio-cli observe release new_customers`
+- [ ] `uvx --from skills/govio/assets/govio-*.whl govio-cli observe release --name legacy_customers`
+- [ ] `uvx --from skills/govio/assets/govio-*.whl govio-cli observe release --name new_customers`
 ```
 
 ## 与 Govio Skill 的协作
@@ -281,7 +287,7 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe load crm_customers 
 Agent: "我先查询一下知识图谱，看看这两个系统的表结构..."
 
 [调用 govio skill 查询表结构]
-uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/assets "MATCH (app:Application)-[:USE]->(t:PhysicalTable)-[:HAS_COLUMN]->(c:Col) WHERE app.name IN ['CRM', 'ERP'] RETURN app.name, t.full_table_name, c.column_name, c.dtype ORDER BY app.name, t.full_table_name, c.order_no"
+uvx --from skills/govio/assets/govio-*.whl govio-cli query --query "MATCH (app:Application)-[:USE]->(t:PhysicalTable)-[:HAS_COLUMN]->(c:Col) WHERE app.name IN ['CRM', 'ERP'] RETURN app.name, t.full_table_name, c.column_name, c.dtype ORDER BY app.name, t.full_table_name, c.order_no"
 
 → 获得表名、字段信息
 
@@ -289,8 +295,8 @@ Agent: "根据查询结果，CRM 有 customers 表，ERP 有 customer_master 表
 现在生成加载 SQL..."
 
 [生成并执行 load 命令]
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe load crm_customers crm "SELECT customer_id, name, email FROM customers"
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe load erp_customers erp "SELECT id, full_name, email_addr FROM customer_master"
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name crm_customers --datasource crm --sql "SELECT customer_id, name, email FROM customers"
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name erp_customers --datasource erp --sql "SELECT id, full_name, email_addr FROM customer_master"
 ```
 
 ### 场景 2：发现可用表后选择加载
@@ -301,7 +307,7 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe load erp_customers 
 Agent: "我先查询知识图谱中销售系统的数据资产..."
 
 [调用 govio skill 查询]
-uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/assets "MATCH (app:Application {name: '销售系统'})-[:USE]->(t:PhysicalTable) RETURN t.name, t.full_table_name"
+uvx --from skills/govio/assets/govio-*.whl govio-cli query --query "MATCH (app:Application {name: '销售系统'})-[:USE]->(t:PhysicalTable) RETURN t.name, t.full_table_name"
 
 → 返回: orders, order_items, products, customers
 
@@ -311,8 +317,8 @@ Agent: "销售系统有以下表：orders, order_items, products, customers
 用户: "加载 orders 和 customers"
 
 [执行 load 命令]
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe load sales_orders sales_db "SELECT * FROM orders"
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe load sales_customers sales_db "SELECT * FROM customers"
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name sales_orders --datasource sales_db --sql "SELECT * FROM orders"
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name sales_customers --datasource sales_db --sql "SELECT * FROM customers"
 ```
 
 ## 注意事项

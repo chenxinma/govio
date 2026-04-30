@@ -20,7 +20,7 @@
 | 编号 | 检查项 | 量化方式 |
 |------|--------|----------|
 | P-1 | 首次行动是读取 `assets/schema.md` | 是 = 1 分，否 = 0 |
-| P-2 | 读取 `assets/backend.txt` 选择后端 | 是 = 1 分，否 = 0 |
+| P-2 | 根据 `~/.govio/config.yaml` 选择后端 | 是 = 1 分，否 = 0 |
 | P-3 | 优先使用 `govio-query` 而非手动 Python 代码 | 使用 govio-query = 1 分，手动导入 = 0.5 分，两者都没用 = 0 |
 | P-4 | 使用 `Grep` 查询 `node_names.md` 获取标准名称 | 需要名称解析时执行 = 1 分，未执行 = 0 |
 | P-5 | 查询结果行数 ≤ 300 | 是 = 1 分，否 = 0 |
@@ -99,8 +99,8 @@ def score_run(trace: list[Event]) -> dict:
     first_read = next(e for e in trace if e.type == "tool_call" and e.tool in ("Read", "Grep", "Bash"))
     scores["P-1"] = 1 if "schema.md" in first_read.target else 0
 
-    # P-2: 读取 backend.txt
-    scores["P-2"] = 1 if any("backend.txt" in e.target for e in trace if e.type == "tool_call") else 0
+    # P-2: 读取 config.yaml 获取后端配置
+    scores["P-2"] = 1 if any("config.yaml" in e.target for e in trace if e.type == "tool_call") else 0
 
     # P-3: 优先使用 govio-query
     query_calls = [e for e in trace if "govio-query" in e.target]
@@ -176,7 +176,7 @@ def score_run(trace: list[Event]) -> dict:
 ### T-01: 查询 CRM 应用使用了哪些物理表
 
 **期望过程**：
-1. 读取 `schema.md` → 2. 读取 `backend.txt` → 3. 使用 `govio-query` 执行查询 → 4. 格式化输出
+1. 读取 `schema.md` → 2. 使用 `govio-cli query` 执行查询（自动从 `~/.govio/config.yaml` 读取后端配置） → 3. 格式化输出
 
 **期望输出**：CRM 应用关联的所有 PhysicalTable 节点的 name / full_table_name 列表
 
@@ -299,7 +299,7 @@ def score_run(trace: list[Event]) -> dict:
 | 编号 | 检查项 | 量化 |
 |------|--------|------|
 | N-1 | 未调用 govio-query | 未调用=1, 调用=0 |
-| N-2 | 未读取 schema.md / backend.txt | 未读取=1, 读取=0 |
+| N-2 | 未读取 schema.md / config.yaml | 未读取=1, 读取=0 |
 | N-3 | 未使用数据治理相关工具链 | 未使用=1, 使用=0 |
 
 ---
@@ -333,4 +333,4 @@ Rubric 评分（每个提示词单独评）：
 - [ ] 构建检查：`govio-query` 命令是否能成功执行
 - [ ] 运行时冒烟：`uvx --from skills/govio/assets/govio-*.whl govio-query` 退出码 = 0
 - [ ] 权限回归：skill 仅使用 `allowed-tools: Read, Grep, Glob`，未尝试写入或执行其他命令
-- [ ] 后端切换测试：将 `backend.txt` 改为另一个后端，验证查询逻辑自动适配
+- [ ] 后端切换测试：修改 `~/.govio/config.yaml` 中的 `backend` 字段，验证查询逻辑自动适配

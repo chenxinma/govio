@@ -1,7 +1,7 @@
 """Govio 知识图谱统一查询入口
 
 支持通过 CLI 或作为包内模块调用。
-用法: govio query --assets <path> "查询语句"
+用法: govio query --query "查询语句"
 """
 from datetime import datetime
 import json
@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 
 from govio import NetworkXGraph, FalkorDBGraph
+from .config import ConfigManager
 import pandas as pd
 
 
@@ -27,16 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_backend(assets_dir: Path) -> str:
-    """从 assets/backend.txt 读取 backend 类型"""
-    backend_file = assets_dir / "backend.txt"
-    if not backend_file.exists():
-        print(f"Backend 配置文件不存在: {backend_file}")
-        sys.exit(1)
-    return backend_file.read_text().strip()
-
-
-def output_result(data, assets_dir: Path):
+def output_result(data):
     """输出查询结果"""
     if not data:
         print("Data not found.")
@@ -50,9 +42,11 @@ def output_result(data, assets_dir: Path):
         data = [data]
 
     if _size > 0:
-        if _size > 10:
+        if _size > 20:
+            output_dir = Path(".") / ".govio"
+            output_dir.mkdir(parents=True, exist_ok=True)
             fname = (
-                assets_dir / f"output-{datetime.now().strftime('%Y%m%d%H%M%s')}.json"
+                output_dir / f"output-{datetime.now().strftime('%Y%m%d%H%M%s')}.json"
             )
             df = pd.DataFrame(data)
             df.to_json(
@@ -67,17 +61,14 @@ def output_result(data, assets_dir: Path):
         logger.info("result rows: %s", str(_size))
 
 
-def cmd_networkx(code: str, assets_dir: Path, gml_path: str | None = None):
+def cmd_networkx(code: str, gml_path: str):
     """NetworkX 查询处理"""
-    if not gml_path:
-        gml_path = str(assets_dir / "ontology.gml")
-
-    gml_path = Path(gml_path) # pyright: ignore[reportAssignmentType]
-    if not gml_path.exists(): # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
-        print(f"GML file not found: {gml_path}")
+    gml_file = Path(gml_path)
+    if not gml_file.exists():
+        print(f"GML file not found: {gml_file}")
         sys.exit(1)
 
-    gf = NetworkXGraph(gml_path) # pyright: ignore[reportArgumentType]
+    gf = NetworkXGraph(gml_file) # pyright: ignore[reportArgumentType]
     g = gf.G
 
     logger.info("NetworkX Code: " + code)
@@ -85,10 +76,10 @@ def cmd_networkx(code: str, assets_dir: Path, gml_path: str | None = None):
     local_vars = {"g": g}
     exec(code, locals=local_vars)
     data = local_vars.get("result")
-    output_result(data, assets_dir)
+    output_result(data)
 
 
-def cmd_falkordb(cypher: str, assets_dir: Path, host: str = "localhost", port: int = 6379, graph_name: str = "ontology"):
+def cmd_falkordb(cypher: str, host: str = "localhost", port: int = 6379, graph_name: str = "ontology"):
     """FalkorDB 查询处理"""
     g = FalkorDBGraph(graph=graph_name, host=host, port=port)
 
@@ -99,47 +90,39 @@ def cmd_falkordb(cypher: str, assets_dir: Path, host: str = "localhost", port: i
     logger.info("Cypher: " + cypher)
 
     data = g.query(cypher)
-    output_result(data, assets_dir)
+    output_result(data)
 
 
-def query():
+def query(query_text):
     """Query CLI 主函数"""
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Govio 知识图谱查询")
-    parser.add_argument(
-        "--assets",
-        type=Path,
-        default=Path("skills/govio/assets"),
-        help="Assets 目录路径 (默认: skills/govio/assets)",
-    )
-    parser.add_argument(
-        "query",
-        nargs="?",
-        help="查询语句（NetworkX 用 Python 代码，FalkorDB 用 Cypher）",
-    )
-
-    args = parser.parse_args()
-
-    if args.query:
-        query_text = args.query
-    elif not sys.stdin.isatty():
-        query_text = sys.stdin.read().strip()
-    else:
-        parser.print_help()
+    
+    config_manager = ConfigManager()
+    if not config_manager.exists():
+        print("配置文件不存在，请先运行 govio-cli onboard")
         sys.exit(1)
 
-    assets_dir = args.assets
-    backend = load_backend(assets_dir)
+    config = config_manager.load()
+    backend = config.get("backend")
+    if not backend:
+        print("配置文件缺少 'backend' 字段，请重新运行 govio-cli onboard")
+        sys.exit(1)
 
     if backend == "networkx":
-        cmd_networkx(query_text, assets_dir)
+        gml_path = config.get("networkx", {}).get("gml_path")
+        if not gml_path:
+            print("配置文件缺少 networkx.gml_path 字段")
+            sys.exit(1)
+        cmd_networkx(query_text, gml_path)
     elif backend == "falkordb":
-        cmd_falkordb(query_text, assets_dir)
+        falkordb_config = config.get("falkordb", {})
+        cmd_falkordb(
+            query_text,
+            host=falkordb_config.get("host", "localhost"),
+            port=falkordb_config.get("port", 6379),
+            graph_name=falkordb_config.get("graph", "ontology"),
+        )
     else:
         print(f"不支持的 backend: {backend}")
         sys.exit(1)
 
 
-if __name__ == "__main__":
-    query()
