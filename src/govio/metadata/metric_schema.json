@@ -1,0 +1,194 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Govio Metric Definition",
+  "description": "指标定义文件 schema，用于校验 govio 指标元数据",
+  "type": "object",
+  "required": ["version", "metrics"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "shared_dimensions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/dimension"
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/metric"
+      },
+      "minItems": 1
+    }
+  },
+  "definitions": {
+    "dimension": {
+      "type": "object",
+      "required": ["code", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "granularity": {
+          "type": ["string", "null"]
+        },
+        "values_example": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "source_column": {
+      "type": "object",
+      "required": ["column_name", "role"],
+      "additionalProperties": false,
+      "properties": {
+        "column_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "enum": ["measure", "filter", "dimension_ref"]
+        }
+      }
+    },
+    "source_table": {
+      "type": "object",
+      "required": ["full_table_name"],
+      "additionalProperties": false,
+      "properties": {
+        "full_table_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/source_column"
+          }
+        }
+      }
+    },
+    "dimension_ref": {
+      "type": "object",
+      "required": ["code", "usage_type"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "usage_type": {
+          "type": "string",
+          "enum": ["filter", "group", "slice"]
+        }
+      }
+    },
+    "metric": {
+      "type": "object",
+      "required": ["code", "name", "business_definition", "type", "unit", "data_type", "source_layer"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "business_definition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": ["atomic", "derived"]
+        },
+        "formula": {
+          "type": ["string", "null"]
+        },
+        "unit": {
+          "type": "string"
+        },
+        "data_type": {
+          "type": "string"
+        },
+        "owner": {
+          "type": ["string", "null"]
+        },
+        "update_frequency": {
+          "type": ["string", "null"]
+        },
+        "statistical_scope": {
+          "type": ["string", "null"]
+        },
+        "time_scope": {
+          "type": ["string", "null"]
+        },
+        "source_layer": {
+          "type": "string",
+          "enum": ["DWD", "DWS", "DM"]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "effective_from": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "source_tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/source_table"
+          }
+        },
+        "derived_from": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/dimension_ref"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "atomic" }
+            }
+          },
+          "then": {
+            "required": ["source_tables"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "const": "derived" }
+            }
+          },
+          "then": {
+            "required": ["derived_from", "formula"]
+          }
+        }
+      ]
+    }
+  }
+}

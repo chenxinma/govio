@@ -2,6 +2,7 @@
 
 提供数据表比较、关系探索、数据表加载释放等功能。
 DataFrame 持久化到 .govio/observe/ 目录。
+所有子命令参数均为关键字参数。
 """
 
 import argparse
@@ -133,32 +134,32 @@ def observe():
     # show-datasource
     sub.add_parser("show-datasource", help="显示已配置的数据源")
 
-    # load <name> <datasource> <sql>
+    # load --name --datasource --sql
     p = sub.add_parser("load", help="加载 DataFrame")
-    p.add_argument("name", help="DataFrame 名称")
-    p.add_argument("datasource", help="数据源名称")
-    p.add_argument("sql", help="查询 SQL")
+    p.add_argument("--name", required=True, help="DataFrame 名称")
+    p.add_argument("--datasource", required=True, help="数据源名称")
+    p.add_argument("--sql", required=True, help="查询 SQL")
 
     # list
     sub.add_parser("list", help="列出已加载的 DataFrame")
 
-    # release <name>
+    # release --name
     p = sub.add_parser("release", help="释放 DataFrame")
-    p.add_argument("name", help="DataFrame 名称")
+    p.add_argument("--name", required=True, help="DataFrame 名称")
 
-    # compare <source> <target> --join-columns col1,col2
+    # compare --source --target --join-columns col1,col2
     p = sub.add_parser("compare", help="比对两个 DataFrame")
-    p.add_argument("source", help="源 DataFrame 名称")
-    p.add_argument("target", help="目标 DataFrame 名称")
+    p.add_argument("--source", required=True, help="源 DataFrame 名称")
+    p.add_argument("--target", required=True, help="目标 DataFrame 名称")
     p.add_argument("--join-columns", required=True, help="比对列，逗号分隔")
 
-    # explore [df1 df2 ...]
+    # explore --dataframes df1 df2 ...
     p = sub.add_parser("explore", help="探查 DataFrame 之间的关系")
-    p.add_argument("dataframes", nargs="*", help="DataFrame 名称列表")
+    p.add_argument("--dataframes", nargs="*", help="DataFrame 名称列表")
 
-    # visualize-relations <json>
+    # visualize-relations --relations <json>
     p = sub.add_parser("visualize-relations", help="生成关系图谱")
-    p.add_argument("relations", help="关系 JSON")
+    p.add_argument("--relations", required=True, help="关系 JSON")
 
     args = parser.parse_args(sys.argv[1:])
 

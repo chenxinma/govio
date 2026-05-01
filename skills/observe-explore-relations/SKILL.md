@@ -10,14 +10,14 @@ description: 探查 DataFrame 之间的关系。当需要发现表之间的关�
 ## CLI 命令
 
 ```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore [dataframe ...]
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore [--dataframes df1 df2 ...]
 ```
 
 ## 参数
 
 | 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| dataframes | positional | 否 | DataFrame 名称列表。省略时探查所有已加载的 DataFrame |
+| --dataframes | keyword | 否 | DataFrame 名称列表。省略时探查所有已加载的 DataFrame |
 
 ## 使用场景
 
@@ -31,8 +31,8 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore [dataframe 
 必须先使用 `uvx --from skills/govio/assets/govio-*.whl govio-cli observe load` 加载数据：
 
 ```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe load customers prod_db "SELECT * FROM customers"
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe load orders prod_db "SELECT * FROM orders"
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name customers --datasource prod_db --sql "SELECT * FROM customers"
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe load --name orders --datasource prod_db --sql "SELECT * FROM orders"
 ```
 
 ## 调用方式
@@ -40,7 +40,7 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe load orders prod_db
 探查指定的 DataFrame：
 
 ```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore customers orders products
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore --dataframes customers orders products
 ```
 
 探查所有已加载的 DataFrame（省略参数）：
@@ -95,7 +95,7 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore
 
 **执行**:
 ```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore customers orders
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore --dataframes customers orders
 ```
 
 **返回**:
@@ -117,10 +117,10 @@ uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore customers o
 
 ```bash
 # 先探查关系，保存 JSON
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore customers orders > relations.json
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe explore --dataframes customers orders > relations.json
 
 # 生成图谱数据
-uvx --from skills/govio/assets/govio-*.whl govio-cli observe visualize-relations "$(cat relations.json)"
+uvx --from skills/govio/assets/govio-*.whl govio-cli observe visualize-relations --relations "$(cat relations.json)"
 ```
 
 返回结果包含 `nodes` 和 `edges`，可用于关系图谱渲染。

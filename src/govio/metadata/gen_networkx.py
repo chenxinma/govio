@@ -9,6 +9,8 @@ govio.metadata.gen_networkx
 - Col.csv
 - Application.csv
 - Standard.csv
+- Metric.csv
+- Dimension.csv
 
 `csv文件的第一列，列名:ID({node_name})，以node_name标明图的节点类型，后续列都作为节点的属性`
 `csv文件必定包含name列作为节点名称显示`
@@ -18,6 +20,11 @@ govio.metadata.gen_networkx
 - HAS_COLUMN.csv     | PhysicalTable与Col的关系，物理表所包含的列
 - USE.csv            | Application与PhysicalTable的关系，应用用到的物理表
 - COMPLIES_WITH.csv  | Col与Standard的关系，列贯标的数据标准
+- USES_TABLE.csv     | Metric与PhysicalTable的关系，指标数据来源表
+- REFERS_COLUMN.csv  | Metric与Col的关系，指标引用的列
+- DERIVED_FROM.csv   | Metric与Metric的关系，派生指标依赖的上游指标
+- DIMENSION_USED.csv | Metric与Dimension的关系，指标维度
+- SUPERSEDES.csv     | Metric与Metric的关系，指标版本演进
 
 `csv文件的第一、二列，列名:START_ID({node_from}),:END_ID({node_to})，定义了Edge的 from node id 和 to node id`
 """
@@ -34,7 +41,7 @@ from tqdm import tqdm
 
 
 def load_nodes(csv_dir: str) -> list[dict[str, Any]]:
-    node_files = ["PhysicalTable.csv", "Col.csv", "Application.csv", "Standard.csv"]
+    node_files = ["PhysicalTable.csv", "Col.csv", "Application.csv", "Standard.csv", "Metric.csv", "Dimension.csv"]
     nodes_list = []
     for filename in node_files:
         filepath = Path(csv_dir) / filename
@@ -55,7 +62,9 @@ def load_nodes(csv_dir: str) -> list[dict[str, Any]]:
 
 
 def load_edges(csv_dir: str) -> pd.DataFrame:
-    edge_files = ["HAS_COLUMN.csv", "USE.csv", "COMPLIES_WITH.csv", "RELATES_TO.csv"]
+    edge_files = ["HAS_COLUMN.csv", "USE.csv", "COMPLIES_WITH.csv", "RELATES_TO.csv",
+                   "USES_TABLE.csv", "REFERS_COLUMN.csv", "DERIVED_FROM.csv",
+                   "DIMENSION_USED.csv", "SUPERSEDES.csv"]
     edges_list = []
     for filename in edge_files:
         filepath = Path(csv_dir) / filename

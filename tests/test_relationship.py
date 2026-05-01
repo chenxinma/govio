@@ -99,8 +99,8 @@ def test_load_relationships_success(sample_tables, sample_columns, valid_json_da
         df = load_relationships(f.name, sample_tables, sample_columns)
 
         assert len(df) == 1
-        assert df.iloc[0]["source"] == "db.schema.table1"
-        assert df.iloc[0]["target"] == "db.schema.table2"
+        assert df.iloc[0]["source"] == 0  # index of db.schema.table1 in sample_tables
+        assert df.iloc[0]["target"] == 1  # index of db.schema.table2 in sample_tables
         assert df.iloc[0]["relationship_type"] == "many_to_one"
         assert df.iloc[0]["source_columns"] == "col1"
         assert df.iloc[0]["target_columns"] == "col_a"

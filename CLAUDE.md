@@ -39,13 +39,16 @@ gml_generate --csv ./output -o ./output
 - `standard.py` — `StandardLoader`: loads data standards and compliance info from governance DB.
 - `relationship.py` — `RelationshipLoader` / `load_relationships()`: validates table relationships from JSON (supports one_to_one, one_to_many, many_to_one, many_to_many). Returns edges DataFrame.
 - `recommender.py` — `create_recommender()`: k-NN collaborative filtering for recommending data standards to non-compliant columns. Uses configurable weights (table, name, comment, type, numeric).
+- `metric.py` — `MetricLoader` / `load_metrics()`: loads metric definitions from JSON (validated by `metric_schema.json`), produces Metric/Dimension node DataFrames and edge DataFrames (USES_TABLE, REFERS_COLUMN, DERIVED_FROM, DIMENSION_USED, SUPERSEDES). Validates source table references, derived_from references, and DAG property.
 - `gen_networkx.py` — `build_graph()`: converts CSV node/edge files to NetworkX GML format. Reads specific CSV naming conventions (`:ID(NodeType)` columns for nodes, `:START_ID`/`:END_ID` for edges).
 - `utility.py` — CLI entry point (`run()`), orchestrates the full pipeline: load metadata → generate CSVs → optionally produce GML. Also contains `data_standard_recommend()` for batch recommendation mode.
 
 ### Graph model
 
-Node types: `PhysicalTable`, `Col`, `Application`, `Standard`
-Edge types: `HAS_COLUMN` (table→col), `USE` (app→table), `COMPLIES_WITH` (col→standard), `RELATES_TO` (table→table)
+Node types: `PhysicalTable`, `Col`, `Application`, `Standard`, `Metric`, `Dimension`
+Edge types: `HAS_COLUMN` (table→col), `USE` (app→table), `COMPLIES_WITH` (col→standard), `RELATES_TO` (table→table), `USES_TABLE` (metric→table), `REFERS_COLUMN` (metric→col), `DERIVED_FROM` (metric→metric), `DIMENSION_USED` (metric→dimension), `SUPERSEDES` (metric→metric)
+
+`Calculation` node type and `CALCULATED_BY`/`BASED_ON` edges are reserved for future shared calculation templates.
 
 CSV files use FalkorDB bulk-import header conventions (`:ID(Type)`, `:START_ID(Type)`, `:END_ID(Type)`). The GML generator parses these headers to reconstruct typed graphs.
 
@@ -53,7 +56,8 @@ CSV files use FalkorDB bulk-import header conventions (`:ID(Type)`, `:START_ID(T
 
 1. `metadata` CLI → DatabaseLoader + AppInfoLoader + StandardLoader → CSV files (node + edge)
 2. `metadata --relationship` appends RELATES_TO.csv
-3. `metadata -m recommend` generates COMPLIES_WITH.csv via recommender
+3. `metadata` with `--metric` (via onboard) appends Metric.csv, Dimension.csv, and metric edge CSVs
+4. `metadata -m recommend` generates COMPLIES_WITH.csv via recommender
 4. `gml_generate` → CSV files → NetworkX GML graph
 5. `NetworkXGraph` loads GML for query/inspection
 

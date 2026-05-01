@@ -57,21 +57,30 @@ class AssetsGenerator:
         格式: JSON Lines，每行一个节点
         {"id": "node_id", "name": "节点名称", "node_type": "Application"}
         """
-        if type(self.graph) is not NetworkXGraph:
-            return
+        if not type(self.graph) is NetworkXGraph:
+            return None
 
         g = self.graph.G
 
         nodes = [
             {
                 "id": node_id,
-                "name": g.nodes[node_id]["name"],
+                "name": g.nodes[node_id].get("name") or g.nodes[node_id].get("code", ""),
                 "node_type": g.nodes[node_id]["node_type"],
             }
             for node_id in g.nodes()
-            if g.nodes[node_id].get("name")
-            and g.nodes[node_id]["name"] != "0"
-            and isinstance(g.nodes[node_id]["name"], str)
+            if (
+                g.nodes[node_id].get("name") or g.nodes[node_id].get("code")
+            )
+            and (
+                g.nodes[node_id].get("name") != "0"
+                if g.nodes[node_id].get("name")
+                else True
+            )
+            and isinstance(
+                g.nodes[node_id].get("name") or g.nodes[node_id].get("code", ""),
+                str,
+            )
         ]
 
         if nodes:
@@ -86,9 +95,8 @@ class AssetsGenerator:
         按应用分组，每个应用一个文件
         格式: {name}_{app_name_en}.md
         """
-        if type(self.graph) is not FalkorDBGraph:
-            return
-
+        if not type(self.graph) is FalkorDBGraph:
+            return None
         # 查询所有应用
         apps_query = """
         MATCH (app:Application)
@@ -143,7 +151,85 @@ class AssetsGenerator:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(md_content))
 
+    def generate_metric_index(self) -> None:
+        """生成指标索引文件 metrics_index.md
+
+        按原子/派生分组列出所有指标，供 LLM 快速概览。
+        """
+        lines = ["# 指标索引\n"]
+        metrics = []
+
+        if type(self.graph) is NetworkXGraph and hasattr(self.graph, "G"):
+            g = self.graph.G
+            metrics = [
+                (nid, g.nodes[nid])
+                for nid in g.nodes()
+                if g.nodes[nid].get("node_type") == "Metric"
+            ]
+        elif type(self.graph) is FalkorDBGraph:
+            # FalkorDB: 查询所有 Metric 节点
+            try:
+                result = self.graph.query(
+                    "MATCH (m:Metric) RETURN m.code, m.name, m.type, "
+                    "m.formula, m.business_definition, m.source_layer, m.unit "
+                    "ORDER BY m.type, m.code"
+                )
+                metrics = [
+                    (
+                        row[0], # pyright: ignore
+                        {
+                            "code": row[0], # pyright: ignore
+                            "name": row[1], # pyright: ignore
+                            "type": row[2], # pyright: ignore
+                            "formula": row[3], # pyright: ignore
+                            "business_definition": row[4], # pyright: ignore
+                            "source_layer": row[5], # pyright: ignore
+                            "unit": row[6], # pyright: ignore
+                        },
+                    )
+                    for row in result
+                ]
+            except Exception:
+                pass
+
+        if not metrics:
+            return
+
+        # 原子指标
+        atomic = [(nid, attrs) for nid, attrs in metrics if attrs.get("type") == "atomic"]
+        derived = [(nid, attrs) for nid, attrs in metrics if attrs.get("type") == "derived"]
+
+        if atomic:
+            lines.append("## 原子指标\n")
+            lines.append("| 编码 | 名称 | 业务定义 | 数仓层级 | 单位 |")
+            lines.append("|------|------|----------|----------|------|")
+            for _, attrs in atomic:
+                lines.append(
+                    f"| {attrs.get('code', '')} | {attrs.get('name', '')} | "
+                    f"{attrs.get('business_definition', '')} | "
+                    f"{attrs.get('source_layer', '')} | {attrs.get('unit', '')} |"
+                )
+            lines.append("")
+
+        if derived:
+            lines.append("## 派生指标\n")
+            lines.append("| 编码 | 名称 | 公式 | 业务定义 | 单位 |")
+            lines.append("|------|------|------|----------|------|")
+            for _, attrs in derived:
+                lines.append(
+                    f"| {attrs.get('code', '')} | {attrs.get('name', '')} | "
+                    f"`{attrs.get('formula', '')}` | "
+                    f"{attrs.get('business_definition', '')} | "
+                    f"{attrs.get('unit', '')} |"
+                )
+            lines.append("")
+
+        file_path = self.output_dir / "metrics_index.md"
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
     def generate_all(self) -> None:
         """生成所有资产文件"""
         self.generate_schema()
         self.generate_names()
+        self.generate_metric_index()

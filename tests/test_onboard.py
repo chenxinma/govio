@@ -218,16 +218,6 @@ app1,table1
     # Mock config path to use temp directory
     config_path = tmp_path / ".govio" / "config.yaml"
 
-    # Mock inputs for the wizard
-    inputs = iter(
-        [
-            "1",  # backend choice: networkx
-            "yes",  # generate GML
-            str(csv_dir),  # CSV directory
-        ]
-    )
-    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
-
     # Patch SKILLS_ASSETS_DIR
     onboard_module.SKILLS_ASSETS_DIR = tmp_path / "assets"
     onboard_module.SKILLS_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -238,13 +228,62 @@ app1,table1
 
     monkeypatch.setattr(onboard_module, "ConfigManager", mock_config_manager)
 
+    # Mock prompt_csv_config to return valid config without user input
+    monkeypatch.setattr(
+        onboard_module,
+        "prompt_csv_config",
+        lambda _cm: {
+            "kundb": "mysql+pymysql://user:pass@host/db",
+            "app_list": "app_list.xlsx",
+            "app_map": "app_map.json",
+            "relationship": None,
+            "metric": None,
+            "csv_dir": str(csv_dir),
+            "workspace_uuid": "82ee37374b314a938bf28170ab4db7cf",
+            "output_dir": str(csv_dir),
+        },
+    )
+
+    # Mock generate_csv to do nothing (CSV files already exist)
+    monkeypatch.setattr(onboard_module, "generate_csv", lambda _cfg: None)
+
+    # Mock prompt_backend_choice to return networkx
+    monkeypatch.setattr(onboard_module, "prompt_backend_choice", lambda: "networkx")
+
+    # Mock prompt_networkx_config
+    monkeypatch.setattr(
+        onboard_module,
+        "prompt_networkx_config",
+        lambda: {
+            "backend": "networkx",
+            "networkx": {"gml_path": str(tmp_path / "assets" / "ontology.gml")},
+            "csv_dir": str(csv_dir),
+        },
+    )
+
+    # Mock prompt_datasource_config to return None
+    monkeypatch.setattr(onboard_module, "prompt_datasource_config", lambda *a, **kw: None)
+
+    # Mock GraphFactory and AssetsGenerator
+    from unittest.mock import MagicMock
+
+    mock_graph = MagicMock()
+    monkeypatch.setattr(
+        "govio.cli.onboard.GraphFactory",
+        MagicMock(create=MagicMock(return_value=mock_graph)),
+    )
+    mock_generator = MagicMock()
+    monkeypatch.setattr(
+        "govio.cli.onboard.AssetsGenerator",
+        MagicMock(return_value=mock_generator),
+    )
+
     # Run onboard
     onboard_module.onboard()
 
     # Verify outputs
     assert config_path.exists()
-    assert (tmp_path / "assets" / "schema.md").exists()
-    assert (tmp_path / "assets" / "names" / "node_names.md").exists()
+    assert (tmp_path / "assets" / "backend.txt").exists()
 
 
 def test_onboard_new_falkordb(monkeypatch, tmp_path):

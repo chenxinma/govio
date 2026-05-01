@@ -1,11 +1,11 @@
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock
 
 import networkx as nx
 
-from govio import NetworkXGraph
+from govio import FalkorDBGraph, NetworkXGraph
 from govio.core.assets_generator import AssetsGenerator
 
 
@@ -98,7 +98,7 @@ def test_assets_generator_falkordb_names():
         output_dir = Path(tmpdir) / "assets"
         output_dir.mkdir()
 
-        mock_graph = Mock(spec=["schema", "query"])
+        mock_graph = MagicMock(spec=FalkorDBGraph)
         mock_graph.schema = "## FalkorDB schema:\n节点：[]\n关联: []\n"
 
         mock_graph.query = MagicMock()
