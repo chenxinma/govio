@@ -35,7 +35,7 @@ cat assets/backend.txt
 ## Best Practices
 
 1. **优先使用 `govio-query` 查询**，自动适配后端，无需手动导入
-2. 使用 Grep 查询`assets/names/node_names.md`获得被记载的标准名称
+2. 使用 Grep 查询 `assets/names/` 下对应文件获得被记载的标准名称（见下方"节点名称文件"说明）
 3. **必须先阅读 `assets/schema.md`** 了解当前图结构（节点、属性、关联关系），schema.md 内容会随数据变化
 4. 查询取数应控制输出行数，一次获取小于 300 行
 5. **注意：遵守有限读取原则，仅在必要时读取 schema.md**
@@ -55,8 +55,9 @@ govio/
 │   ├── schema.md              # 图数据库模式文件
 │   ├── ontology.gml           # 数据治理元模型数据文件(GML格式)
 │   ├── govio-*.whl            # govio 包 (uvx 自动解析依赖)
-│   └── names/
-│        └── node_names.md     # 已知节点的名称，作为标准名称备参考
+│   └── names/                 # 已知节点的名称，作为标准名称备参考
+│        ├── node_names.md     #   (networkx 后端) 所有节点名称汇总
+│        └── *.md              #   (falkordb 后端) 按应用系统分文件，格式: {应用名}_{缩写}.md
 ```
 
 ## Usage
@@ -108,6 +109,20 @@ uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/ass
 ```bash
 uvx --from skills/govio/assets/govio-*.whl govio-query --assets skills/govio/assets "result = g.G.number_of_nodes()"
 ```
+
+### 查询终止策略
+
+当查询目标可能不存在于知识图谱中时，必须遵守**有限尝试原则**，避免无限循环查询：
+
+1. **最多 3 次尝试**：对同一语义目标的查询（换关键词、换查询方式都算同一目标），最多尝试 3 次
+2. **先查节点名称**：确认目标关键词是否存在于已记载的节点名称中。若不存在，可直接判定无结果。查询方式因后端而异：
+   - **networkx**：Grep 搜索 `assets/names/node_names.md`（单一汇总文件）
+   - **falkordb**：Grep 搜索 `assets/names/` 目录下所有 `*.md` 文件，或先用 Glob 列出文件名定位到具体应用（文件名格式：`{应用名}_{缩写}.md`，如 `薪税生产系统_PAYPRO.md`），再针对性搜索
+3. **逐步放宽策略**：
+   - 第 1 次：精确匹配（如 `name: '银行'`）
+   - 第 2 次：模糊/包含匹配（如 `name CONTAINS '银行'` 或搜索描述字段）
+   - 第 3 次：同义词扩展（如 `金融`、`bank` 等）
+4. **及时终止并告知**：3 次尝试后仍无结果，**必须**停止查询，明确告知用户"知识图谱中未找到相关数据"，而非继续尝试其他查询方式
 
 ### 注意事项
 
