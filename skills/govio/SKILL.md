@@ -1,162 +1,93 @@
 ---
 name: govio
-description: 数据治理知识图谱,当需要做"元数据查询、表字段比较、SQL 生成"等数据治理相关工作时运行。
+description: Use when 查询数据治理元数据（应用、表、字段、指标、数据标准、业务领域）、比较表结构差异、生成 Cypher/SQL 查询。不适用于数据迁移脚本、代码调试、功能开发。
 allowed-tools: Read, Grep, Glob
 ---
 
 # Data Governance Knowledge Graph
 
-作为一名数据治理专家，根据知识图谱中的信息提供数据治理的支持。
+## Steps（强制顺序）
 
-## Purpose
+**Step 0** ⚠️ 读取 `assets/schema.md`（**仅此一次，不得重复读取**）
 
-**必须先读取 `assets/schema.md` 确认当前图结构。**
+**Step 1** 如果 prompt 含中文系统名，用 Grep 搜索 `assets/names/` 获取标准英文代码（见"名称解析"）
 
-元数据查询：用户可以询问关于数据资产的元数据信息，如数据资产的名称、描述、来源、状态等。
-表字段比较：用户可以比较不同表之间的字段差异，如字段名称、数据类型、是否必填等。
-SQL 生成：用户可以根据需求描述，自动生成符合要求的 SQL 语句。
+**Step 2** 使用 `govio-cli query --code "..."` 执行查询（自动适配后端）
 
-## Backend Selection
+**Step 3** 格式化输出：中文回答，应用名/表名/字段名等技术术语保留英文原文
 
-后端类型由全局配置 `~/.govio/config.yaml` 中的 `backend` 字段决定（通过 `govio-cli onboard` 设置）。
+## 后端
 
-**不同后端的查询方式不同**：
+后端类型由 `~/.govio/config.yaml` 决定（通过 `govio-cli onboard` 设置）。
 
-| 后端 | 查询语言 | 参考文档 |
+| 后端 | 查询语言 | 深度参考 |
 |------|---------|---------|
-| `networkx` | Python 代码，操作 `g` 对象 | [reference-networkx.md](reference-networkx.md) |
-| `falkordb` | Cypher 查询 | [reference-falkordb.md](reference-falkordb.md) |
+| `falkordb` | Cypher | [reference-falkordb.md](reference-falkordb.md) |
+| `networkx` | Python，操作 `g` 对象 | [reference-networkx.md](reference-networkx.md) |
 
-## Best Practices
+## Cypher 语法规范
 
-1. **优先使用 `govio-query` 查询**，自动适配后端，无需手动导入
-2. 使用 Grep 查询 `assets/names/` 下对应文件获得被记载的标准名称（见下方"节点名称文件"说明）
-3. **必须先阅读 `assets/schema.md`** 了解当前图结构（节点、属性、关联关系），schema.md 内容会随数据变化
-4. 查询取数应控制输出行数，一次获取小于 300 行
-5. **注意：遵守有限读取原则，仅在必要时读取 schema.md**
-6. **列名属性**：Col 节点使用 `column_name` 属性表示列名，不要直接使用 `name`
+- 属性值**必须用双引号**：`{name: "AEP"}` 而非 `{name: 'AEP'}`
+- 必须以 `MATCH` 开头
+- **必须包含 `LIMIT 300`**（明确需全量除外）
+- Col 节点用 `column_name` 属性表示列名，不要用 `name`
 
-## Resource Resolution
+## 常用查询模板
 
-When this skill is loaded, the base directory is provided:
+| 场景 | FalkorDB (Cypher) | NetworkX (Python) |
+|------|-------------------|--------------------|
+| 所有应用 | `MATCH (app:Application) RETURN app.name, app.app_name_en, app.business_domain LIMIT 300` | `apps = [d for _,d in g.G.nodes(data=True) if d.get("node_type")=="Application"]` |
+| 应用下的表 | `MATCH (app:Application {name: "AEP"})-[:USE]->(t:PhysicalTable) RETURN t.name, t.full_table_name LIMIT 300` | `tables = [g.G.nodes[v] for u,v,e in g.G.edges(data=True) if g.G.nodes[u].get("name")=="AEP" and e.get("edge_type")=="USE"]` |
+| 表的字段 | `MATCH (t:PhysicalTable {name: "T1"})-[:HAS_COLUMN]->(c:Col) RETURN c.column_name, c.dtype ORDER BY c.order_no LIMIT 300` | `cols = sorted([g.G.nodes[v] for u,v,e in g.G.edges(data=True) if g.G.nodes[u].get("name")=="T1" and e.get("edge_type")=="HAS_COLUMN"], key=lambda x: x.get("order_no",0))` |
+| 两应用同名表 | `MATCH (app1:Application {name: "A"})-[:USE]->(t1:PhysicalTable), (app2:Application {name: "B"})-[:USE]->(t2:PhysicalTable) WHERE t1.name = t2.name RETURN t1.name LIMIT 300` | 复杂查询参见 reference-networkx.md |
+| 聚合排序 | `MATCH (app:Application)-[:USE]->(t:PhysicalTable) RETURN app.name, count(t) AS cnt ORDER BY cnt DESC LIMIT 300` | `from collections import Counter; cnt = Counter(g.G.nodes[u].get("name") for u,v,e in g.G.edges(data=True) if g.G.nodes[u].get("node_type")=="Application" and e.get("edge_type")=="USE")` |
+| 按业务领域筛选 | `MATCH (app:Application {business_domain: "财务管理"}) RETURN app.name, app.app_name_en LIMIT 300` | `apps = [d for _,d in g.G.nodes(data=True) if d.get("node_type")=="Application" and d.get("business_domain")=="财务管理"]` |
 
-```
-govio/
-├── SKILL.md                   # 技能定义
-├── reference-networkx.md      # NetworkX 后端参考
-├── reference-falkordb.md      # FalkorDB 后端参考
-├── assets/                    # 资源文件
-│   ├── schema.md              # 图数据库模式文件
-│   ├── ontology.gml           # 数据治理元模型数据文件(GML格式)
-│   ├── metrics_index.md       # 指标索引（原子/派生分组）
-│   ├── govio-*.whl            # govio 包 (uvx 自动解析依赖)
-│   └── names/                 # 已知节点的名称，作为标准名称备参考
-│        ├── node_names.md     #   (networkx 后端) 所有节点名称汇总
-│        └── *.md              #   (falkordb 后端) 按应用系统分文件，格式: {应用名}_{缩写}.md
-```
+## 名称解析
 
-## Usage
+当 prompt 包含中文系统名（如"报价单中心系统""薪税系统"），**必须先 Grep 确认标准英文代码**：
 
-**优先使用 `govio-cli query` 命令进行查询**，它会自动根据 `~/.govio/config.yaml` 选择后端，无需手动导入。
-
-### govio-cli query 基本用法
-
-```bash
-# 通用格式（uvx 自动从 whl 解析 govio 及其所有依赖，无需手动安装）
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "查询语句"
-# NetworkX 后端传 Python 代码，FalkorDB 后端传 Cypher
-```
-
-### govio-cli query 查询示例
-
-#### 查询图模式（通用）
-
-```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "print(g.schema)"
-```
-
-#### 查询 CRM 应用有几张表（FalkorDB）
-
-```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "MATCH (app:Application {name: 'CRM'})-[:USE]->(t:PhysicalTable) RETURN count(t) AS table_count"
-```
-
-#### 查询 CRM 应用使用的所有表（FalkorDB）
-
-```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "MATCH (app:Application {name: 'CRM'})-[:USE]->(t:PhysicalTable) RETURN t.name, t.full_table_name"
-```
-
-#### 查询 CUSTOMER 表的所有字段（FalkorDB）
-
-```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "MATCH (t:PhysicalTable {name: 'CUSTOMER'})-[:HAS_COLUMN]->(c:Col) RETURN c.column_name, c.dtype ORDER BY c.order_no"
-```
-
-#### 查询所有应用及其表数量（FalkorDB）
-
-```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "MATCH (app:Application)-[:USE]->(t:PhysicalTable) RETURN app.name, count(t) AS table_count ORDER BY table_count DESC"
-```
-
-#### 查询 NetworkX 图节点数
-
-```bash
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "result = g.G.number_of_nodes()"
-```
-
-### 查询终止策略
-
-当查询目标可能不存在于知识图谱中时，必须遵守**有限尝试原则**，避免无限循环查询：
-
-1. **最多 3 次尝试**：对同一语义目标的查询（换关键词、换查询方式都算同一目标），最多尝试 3 次
-2. **先查节点名称**：确认目标关键词是否存在于已记载的节点名称中。若不存在，可直接判定无结果。查询方式因后端而异：
-   - **networkx**：Grep 搜索 `assets/names/node_names.md`（单一汇总文件）
-   - **falkordb**：Grep 搜索 `assets/names/` 目录下所有 `*.md` 文件，或先用 Glob 列出文件名定位到具体应用（文件名格式：`{应用名}_{缩写}.md`，如 `薪税生产系统_PAYPRO.md`），再针对性搜索
-3. **逐步放宽策略**：
-   - 第 1 次：精确匹配（如 `name: '银行'`）
-   - 第 2 次：模糊/包含匹配（如 `name CONTAINS '银行'` 或搜索描述字段）
-   - 第 3 次：同义词扩展（如 `金融`、`bank` 等）
-4. **及时终止并告知**：3 次尝试后仍无结果，**必须**停止查询，明确告知用户"知识图谱中未找到相关数据"，而非继续尝试其他查询方式
-
-### 注意事项
-
-- Cypher 查询必须用**双引号**包裹参数
-- 结果超过 10 行时自动输出到当前目录下的 `.govio/output-*.json` 文件
-- Cypher 查询必须以 `MATCH` 开头
+- **networkx 后端**：Grep 搜索 `assets/names/node_names.md`
+- **falkordb 后端**：Grep 搜索 `assets/names/` 下所有 `*.md` 文件，或先用 Glob 列出文件名定位（格式：`{应用名}_{缩写}.md`，如 `薪税生产系统_PAYPRO.md`）
 
 ## 指标查询
 
 先读取 `assets/metrics_index.md` 获取指标概览，再进行深度查询。
 
-### 指标血缘溯源（查找上游依赖）
+| 场景 | Cypher 模板 |
+|------|------------|
+| 血缘溯源 | `MATCH (m:Metric {code: "XXX"})-[:DERIVED_FROM*1..5]->(up:Metric) RETURN up.code, up.name, up.type LIMIT 300` |
+| 影响分析 | `MATCH (m:Metric {code: "XXX"})<-[:DERIVED_FROM*1..5]-(dep:Metric) RETURN dep.code, dep.name, dep.formula LIMIT 300` |
+| 来源表 | `MATCH (m:Metric {code: "XXX"})-[:USES_TABLE]->(t:PhysicalTable) RETURN t.full_table_name, t.name LIMIT 300` |
+| 引用列 | `MATCH (m:Metric {code: "XXX"})-[:REFERS_COLUMN]->(c:Col) RETURN c.column_name, c.data_type LIMIT 300` |
+| 维度发现 | `MATCH (m:Metric {code: "XXX"})-[d:DIMENSION_USED]->(dim:Dimension) RETURN dim.code, dim.name, d.usage_type LIMIT 300` |
 
-```bash
-# FalkorDB: 查找 burndown_amt 的所有上游指标
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "MATCH p=(m:Metric {code: 'burndown_amt'})-[:DERIVED_FROM*1..5]->(up:Metric) RETURN up.code, up.name, up.type"
+## 查询终止策略
+
+对同一语义目标最多 **3 次尝试**，逐步放宽：
+
+1. 精确匹配（`name: "银行"`）
+2. 模糊/包含匹配（`name CONTAINS "银行"`）
+3. 同义词扩展（`金融`、`bank` 等）
+
+3 次后仍无结果，**必须停止**并告知"知识图谱中未找到相关数据"。
+
+## 排除场景
+
+以下场景**不要**触发本技能：
+- 数据迁移脚本编写
+- 代码调试/修复
+- 功能模块开发
+- 数据库运维操作
+
+## 资源文件
+
 ```
-
-### 影响分析（查找下游影响）
-
-```bash
-# FalkorDB: 查找 bill_income_amt 变更会影响哪些指标
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "MATCH (m:Metric {code: 'bill_income_amt'})<-[:DERIVED_FROM*1..5]-(dep:Metric) RETURN dep.code, dep.name, dep.formula"
+assets/
+├── schema.md          # 图模式（Step 0 必读，仅读一次）
+├── ontology.gml       # GML 元模型数据（NetworkX 后端）
+├── metrics_index.md   # 指标索引（原子/派生分组）
+└── names/             # 标准名称
+     ├── node_names.md #   (networkx) 全部节点名称汇总
+     └── *.md          #   (falkordb) 按应用分文件，格式: {应用名}_{缩写}.md
 ```
-
-### 指标数据溯源
-
-```bash
-# FalkorDB: 查找指标的来源表
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "MATCH (m:Metric {code: 'bill_income_amt'})-[:USES_TABLE]->(t:PhysicalTable) RETURN t.full_table_name, t.name"
-
-# FalkorDB: 查找指标引用的列
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "MATCH (m:Metric {code: 'bill_income_amt'})-[:REFERS_COLUMN]->(c:Col) RETURN c.column_name, c.data_type"
-```
-
-### 维度发现
-
-```bash
-# FalkorDB: 查找指标可按哪些维度拆分
-uvx --from skills/govio/assets/govio-*.whl govio-cli query --code "MATCH (m:Metric {code: 'burndown_amt'})-[d:DIMENSION_USED]->(dim:Dimension) RETURN dim.code, dim.name, d.usage_type"
-```
-

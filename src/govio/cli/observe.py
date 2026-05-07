@@ -14,7 +14,7 @@ from ..observe_data.core.observe_store import ObserveStore
 from ..observe_data.core.database import DatabaseManager
 from ..observe_data.tools.list_dataframes import list_dataframes
 from ..observe_data.tools.load_dataframe import load_dataframe
-from ..observe_data.tools.release_dataframe import release_dataframe
+from ..observe_data.tools.release_dataframe import release_dataframe, release_all_dataframes
 from ..observe_data.tools.visualize_relations import visualize_relations
 from ..observe_data.tools.list_datasources import list_datasources
 
@@ -59,10 +59,13 @@ def cmd_list(config: dict) -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
-def cmd_release(config: dict, name: str) -> None:
+def cmd_release(config: dict, name: str | None, release_all: bool) -> None:
     """释放 DataFrame"""
     store = ObserveStore()
-    result = release_dataframe(store=store, name=name)
+    if release_all:
+        result = release_all_dataframes(store=store)
+    else:
+        result = release_dataframe(store=store, name=name)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -143,9 +146,10 @@ def observe():
     # list
     sub.add_parser("list", help="列出已加载的 DataFrame")
 
-    # release --name
+    # release --name / --all
     p = sub.add_parser("release", help="释放 DataFrame")
-    p.add_argument("--name", required=True, help="DataFrame 名称")
+    p.add_argument("--name", help="DataFrame 名称")
+    p.add_argument("--all", action="store_true", help="释放所有已加载的 DataFrame")
 
     # compare --source --target --join-columns col1,col2
     p = sub.add_parser("compare", help="比对两个 DataFrame")
@@ -186,7 +190,10 @@ def observe():
         case "list":
             cmd_list(config)
         case "release":
-            cmd_release(config, args.name)
+            if not args.all and not args.name:
+                print("请指定 --name 或 --all")
+                sys.exit(1)
+            cmd_release(config, args.name, args.all)
         case "compare":
             cols = [c.strip() for c in args.join_columns.split(",")]
             cmd_compare(config, args.source, args.target, cols)

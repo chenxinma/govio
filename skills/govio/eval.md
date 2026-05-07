@@ -23,11 +23,10 @@
 | 编号 | 检查项 | 量化方式 |
 |------|--------|----------|
 | P-1 | 首次行动是读取 `assets/schema.md` | 是 = 1 分，否 = 0 |
-| P-2 | 根据 `~/.govio/config.yaml` 选择后端 | 是 = 1 分，否 = 0 |
-| P-3 | 优先使用 `govio-query` 而非手动 Python 代码 | 使用 govio-query = 1 分，手动导入 = 0.5 分，两者都没用 = 0 |
-| P-4 | 使用 `Grep` 查询 `node_names.md` 获取标准名称 | 需要名称解析时执行 = 1 分，未执行 = 0 |
-| P-5 | 查询结果行数 ≤ 300 | 是 = 1 分，否 = 0 |
-| P-6 | 正确使用 `column_name` 而非 `name` 引用 Col 节点列名 | 正确 = 1 分，错误 = 0 |
+| P-2 | 优先使用 `govio-cli query` 而非手动 Python 代码 | 使用 govio-cli query = 1 分，手动导入 = 0.5 分，两者都没用 = 0 |
+| P-3 | 使用 `Grep` 查询 `names/` 目录获取标准名称 | 需要名称解析时执行 = 1 分，未执行 = 0 |
+| P-4 | 查询结果行数 ≤ 300 | 是 = 1 分，否 = 0 |
+| P-5 | 正确使用 `column_name` 而非 `name` 引用 Col 节点列名 | 正确 = 1 分，错误 = 0 |
 
 ### 1.3 风格目标（Style）
 
@@ -57,9 +56,9 @@
 
 | ID | 提示词 | 测试重点 |
 |----|--------|----------|
-| explicit-01 | 使用 $govio 技能查询元数据，列出所有应用 | P-1/P-2/P-3/O-1/O-5，返回 15 个应用 |
-| explicit-02 | 用 $govio 查询会计引擎应用有哪些表 | P-1/P-3/O-1，AEP 应用下 50 张表 |
-| explicit-03 | 使用 $govio 查询 ITS_USER.T_INVOICE 表有哪些字段 | P-1/P-6/O-1，Col 节点 column_name 属性 |
+| explicit-01 | 使用 $govio 技能查询元数据，列出所有应用 | P-1/P-2/O-1/O-5，返回 15 个应用 |
+| explicit-02 | 用 $govio 查询会计引擎应用有哪些表 | P-1/P-2/O-1，AEP 应用下 50 张表 |
+| explicit-03 | 使用 $govio 查询 ITS_USER.T_INVOICE 表有哪些字段 | P-1/P-5/O-1，Col 节点 column_name 属性 |
 
 ### 2.2 隐式调用（implicit_invocation，5 条）
 
@@ -121,26 +120,27 @@ def score_run(trace: list[Event]) -> dict:
     first_read = next(e for e in trace if e.type == "tool_call" and e.tool in ("Read", "Grep", "Bash"))
     scores["P-1"] = 1 if "schema.md" in first_read.target else 0
 
-    # P-2: 读取 config.yaml 获取后端配置
-    scores["P-2"] = 1 if any("config.yaml" in e.target for e in trace if e.type == "tool_call") else 0
-
-    # P-3: 优先使用 govio-query
-    query_calls = [e for e in trace if "govio-query" in e.target]
+    # P-2: 优先使用 govio-cli query
+    query_calls = [e for e in trace if "govio-cli query" in e.target or "govio-query" in e.target]
     python_calls = [e for e in trace if "python -c" in e.target and "govio" in e.target]
     if query_calls:
-        scores["P-3"] = 1
+        scores["P-2"] = 1
     elif python_calls:
-        scores["P-3"] = 0.5
+        scores["P-2"] = 0.5
     else:
-        scores["P-3"] = 0
+        scores["P-2"] = 0
 
-    # P-5: 查询结果 ≤ 300 行
+    # P-3: Grep names/ 获取标准名称
+    names_grep = [e for e in trace if e.tool == "Grep" and "names/" in getattr(e, "target", "")]
+    scores["P-3"] = 1 if names_grep else 0
+
+    # P-4: 查询结果 ≤ 300 行
     outputs = [e for e in trace if e.type == "tool_result"]
-    scores["P-5"] = 1 if all(len(e.content.splitlines()) <= 300 for e in outputs) else 0
+    scores["P-4"] = 1 if all(len(e.content.splitlines()) <= 300 for e in outputs) else 0
 
-    # P-6: Col 节点使用 column_name
+    # P-5: Col 节点使用 column_name
     cypher_or_code = " ".join(e.target for e in trace if e.type == "tool_call")
-    scores["P-6"] = 0 if "Col" in cypher_or_code and "c.name" in cypher_or_code and "column_name" not in cypher_or_code else 1
+    scores["P-5"] = 0 if "Col" in cypher_or_code and "c.name" in cypher_or_code and "column_name" not in cypher_or_code else 1
 
     # S-1: Cypher 双引号
     if any("MATCH" in e.target for e in trace):
@@ -198,11 +198,11 @@ def score_run(trace: list[Event]) -> dict:
 ### explicit-01: 使用 $govio 技能查询元数据，列出所有应用
 
 **期望过程**：
-1. 读取 `schema.md` → 2. 使用 `govio-cli query` 执行查询（自动从 `~/.govio/config.yaml` 读取后端配置） → 3. 格式化输出
+1. 读取 `schema.md` → 2. 使用 `govio-cli query` 执行查询 → 3. 格式化输出
 
 **期望输出**：15 个应用列表，含 PDM/IHRM/IHRO/HPM/PO/PAYPRO/SQC/AEP/SSOP/IOMS/SPRT/NHRS/CDPS/ITS/BILL
 
-**自动评分项**：P-1=1, P-2=1, P-3=1, P-5=1, S-3=1, E-1=1, E-4=1
+**自动评分项**：P-1=1, P-2=1, P-4=1, S-3=1, E-1=1, E-4=1
 
 **Rubric 项**：准确性 5, 完整性 5, 可操作性 5
 
@@ -210,11 +210,11 @@ def score_run(trace: list[Event]) -> dict:
 
 ### explicit-02: 用 $govio 查询会计引擎应用有哪些表
 
-**期望过程**：读取 schema.md → 读取 backend.txt → govio-query 查询 AEP→PhysicalTable → 格式化输出
+**期望过程**：读取 schema.md → govio-cli query 查询 AEP→PhysicalTable → 格式化输出
 
 **期望输出**：AEP 应用下 50 张表，包括 AEP_ASSACT_DIM(辅助核算维度), AEP_BUSINESS_UNIT_MAPPING(事业部映射) 等
 
-**自动评分项**：P-1=1, P-2=1, P-3=1, P-5=1, S-3=1
+**自动评分项**：P-1=1, P-2=1, P-4=1, S-3=1
 
 **Rubric 项**：准确性 5, 完整性 5
 
@@ -222,13 +222,13 @@ def score_run(trace: list[Event]) -> dict:
 
 ### explicit-03: 使用 $govio 查询 ITS_USER.T_INVOICE 表有哪些字段
 
-**期望过程**：读取 schema.md → Grep node_names.md 确认标准名称 → govio-query 查询 PhysicalTable→Col → 使用 column_name 属性
+**期望过程**：读取 schema.md → Grep names/ 确认标准名称 → govio-cli query 查询 PhysicalTable→Col → 使用 column_name 属性
 
-**关键陷阱**：Col 节点必须使用 `column_name` 而非 `name`（P-6）
+**关键陷阱**：Col 节点必须使用 `column_name` 而非 `name`（P-5）
 
 **期望输出**：T_INVOICE 表字段列表，含 INV_NO, SELLER_TAX_NO, BUYER_NAME, TAX_AMOUNT, TAX_INCLUDE_AMOUNT 等
 
-**自动评分项**：P-1=1, P-4=1, P-6=1, S-1=1, S-2=1
+**自动评分项**：P-1=1, P-3=1, P-5=1, S-1=1, S-2=1
 
 **Rubric 项**：准确性 5, 完整性 5
 
@@ -244,13 +244,13 @@ def score_run(trace: list[Event]) -> dict:
 
 ### implicit-02: 查询元数据，列出金额相关的字段
 
-**期望过程**：读取 schema.md → govio-query 查询 column_name 含 Pay/Amount/Tax/Rate/Price/Fee 等关键词的 Col 节点
+**期望过程**：读取 schema.md → govio-cli query 查询 column_name 含 Pay/Amount/Tax/Rate/Price/Fee 等关键词的 Col 节点
 
 **核心评估点**：O-5 触发 + 关键词匹配能力。来源：真实对话样例。
 
 **期望输出**：金额相关字段，涉及 14 个应用（SPRT 无金额字段），IHRO(784)/SSOP(768) 居多
 
-**自动评分项**：P-1=1, P-3=1, P-5=1, O-5=1
+**自动评分项**：P-1=1, P-2=1, P-4=1, O-5=1
 
 **Rubric 项**：准确性 5, 完整性 3+
 
@@ -258,13 +258,13 @@ def score_run(trace: list[Event]) -> dict:
 
 ### implicit-03: 我想知道报价单中心系统里有哪些数据表
 
-**期望过程**：Grep node_names.md 匹配"报价单中心"→ 确认对应 SQC → 查询 USE 边
+**期望过程**：Grep names/ 匹配"报价单中心"→ 确认对应 SQC → 查询 USE 边
 
-**核心评估点**：中文应用名隐式匹配（P-4），skill 触发（O-5）
+**核心评估点**：中文应用名隐式匹配（P-3），skill 触发（O-5）
 
 **期望输出**：SQC 下 29 张表，含 ofr_comb_quotation(组合报价单表), ofr_comb_quotation_dtl(组合报价单明细表) 等
 
-**自动评分项**：P-4=1, P-3=1, O-5=1
+**自动评分项**：P-3=1, P-2=1, O-5=1
 
 **Rubric 项**：准确性 5, 完整性 5
 
@@ -272,11 +272,11 @@ def score_run(trace: list[Event]) -> dict:
 
 ### implicit-04: 财务管理领域的应用有哪些？
 
-**期望过程**：读取 schema.md → govio-query 按 business_domain 筛选 Application 节点
+**期望过程**：读取 schema.md → govio-cli query 按 business_domain 筛选 Application 节点
 
 **期望输出**：3 个应用：AEP(会计引擎), ITS(发票管理), CDPS(收付费管理)
 
-**自动评分项**：P-1=1, P-3=1, O-5=1, S-3=1
+**自动评分项**：P-1=1, P-2=1, O-5=1, S-3=1
 
 **Rubric 项**：准确性 5, 完整性 5
 
@@ -284,13 +284,13 @@ def score_run(trace: list[Event]) -> dict:
 
 ### implicit-05: 外包雇员管理系统和外包项目管理系统各自用了多少张表
 
-**期望过程**：Grep node_names.md 确认中文名对应 IHRM/IHRO → 分别查询表数量
+**期望过程**：Grep names/ 确认中文名对应 IHRM/IHRO → 分别查询表数量
 
 **期望输出**：IHRM 有 67 张表，IHRO 有 403 张表
 
 **关键陷阱**：是否合并为一次查询（E-3）
 
-**自动评分项**：P-4=1, P-3=1, E-3=1, O-5=1
+**自动评分项**：P-3=1, P-2=1, E-3=1, O-5=1
 
 **Rubric 项**：准确性 5, 完整性 5
 
@@ -298,13 +298,13 @@ def score_run(trace: list[Event]) -> dict:
 
 ### contextual-01: 对接发票管理系统的开票接口，先了解 T_INVOICE 字段结构
 
-**期望过程**：读取 schema.md → Grep node_names.md 确认"发票管理"= ITS → 查询 T_INVOICE 字段
+**期望过程**：读取 schema.md → Grep names/ 确认"发票管理"= ITS → 查询 T_INVOICE 字段
 
 **核心评估点**：从业务上下文提取元数据查询需求，O-5 触发
 
 **期望输出**：T_INVOICE 表字段，含 INV_NO(发票号码), STATUS(开票状态), TAX_AMOUNT(税额) 等
 
-**自动评分项**：P-1=1, P-4=1, P-6=1, O-5=1
+**自动评分项**：P-1=1, P-3=1, P-5=1, O-5=1
 
 **Rubric 项**：准确性 5, 可操作性 5
 
@@ -312,11 +312,11 @@ def score_run(trace: list[Event]) -> dict:
 
 ### contextual-02: 梳理外服内部机构管理系统的数据资产
 
-**期望过程**：Grep node_names.md 确认 IOMS → 查询 USE + HAS_COLUMN → 列出表及字段
+**期望过程**：Grep names/ 确认 IOMS → 查询 USE + HAS_COLUMN → 列出表及字段
 
 **期望输出**：IOMS 仅 2 张表：fsg_company_info(公司基本信息表), fsg_company_shareholder(公司股东信息表) 及其字段
 
-**自动评分项**：P-4=1, P-3=1, P-5=1, O-5=1
+**自动评分项**：P-3=1, P-2=1, P-4=1, O-5=1
 
 **Rubric 项**：准确性 5, 完整性 5
 
@@ -324,11 +324,11 @@ def score_run(trace: list[Event]) -> dict:
 
 ### contextual-03: 薪税系统里有没有跟银行相关的表
 
-**期望过程**：Grep node_names.md 确认 PAYPRO → 查询 PAYPRO 下表名/字段含 BANK 的 PhysicalTable
+**期望过程**：Grep names/ 确认 PAYPRO → 查询 PAYPRO 下表名/字段含 BANK 的 PhysicalTable
 
 **核心评估点**：关键词筛选 + 应用范围限定
 
-**自动评分项**：P-4=1, P-3=1, O-5=1
+**自动评分项**：P-3=1, P-2=1, O-5=1
 
 **Rubric 项**：准确性 5, 完整性 3+
 
@@ -342,7 +342,7 @@ def score_run(trace: list[Event]) -> dict:
 
 **期望输出**：共有的表如 FSG_DICT(字典表)
 
-**自动评分项**：P-6=1, S-3=1, E-3=1, O-3=1
+**自动评分项**：P-5=1, S-3=1, E-3=1, O-3=1
 
 **Rubric 项**：差异识别 5, 呈现方式 5, 关联字段分析 3+
 
@@ -350,13 +350,13 @@ def score_run(trace: list[Event]) -> dict:
 
 ### contextual-05: BILL 应用中表名包含 FEE 或 SRV 的字段
 
-**期望过程**：Grep node_names.md 确认 BILL → 查询 HAS_COLUMN 下 column_name 含 FEE/SRV 的 Col 节点
+**期望过程**：Grep names/ 确认 BILL → 查询 HAS_COLUMN 下 column_name 含 FEE/SRV 的 Col 节点
 
-**核心评估点**：数据标准治理场景 + 关键词筛选，P-6 验证 column_name
+**核心评估点**：数据标准治理场景 + 关键词筛选，P-5 验证 column_name
 
 **期望输出**：如 BIL_SRV_FEE_RCV_DTL 表中的服务费相关字段
 
-**自动评分项**：P-4=1, P-6=1, P-3=1
+**自动评分项**：P-3=1, P-5=1, P-2=1
 
 **Rubric 项**：准确性 5, 完整性 3+
 
@@ -406,8 +406,8 @@ def score_run(trace: list[Event]) -> dict:
 
 | 编号 | 检查项 | 量化 |
 |------|--------|------|
-| N-1 | 未调用 govio-query | 未调用=1, 调用=0 |
-| N-2 | 未读取 schema.md / config.yaml | 未读取=1, 读取=0 |
+| N-1 | 未调用 govio-cli query | 未调用=1, 调用=0 |
+| N-2 | 未读取 schema.md | 未读取=1, 读取=0 |
 | N-3 | 未使用数据治理相关工具链 | 未使用=1, 使用=0 |
 
 ---
@@ -416,7 +416,7 @@ def score_run(trace: list[Event]) -> dict:
 
 **期望输出**：2 张表（最小应用），边界情况验证少量数据返回的准确性
 
-**自动评分项**：P-1=1, P-3=1, O-1=1
+**自动评分项**：P-1=1, P-2=1, O-1=1
 
 **Rubric 项**：准确性 5
 
@@ -424,7 +424,7 @@ def score_run(trace: list[Event]) -> dict:
 
 ### edge-02: 由埃森哲维护的应用
 
-**期望过程**：读取 schema.md → govio-query 按 external_vendor 筛选
+**期望过程**：读取 schema.md → govio-cli query 按 external_vendor 筛选
 
 **期望输出**：7 个应用：PDM, NHRS, AEP, HPM, SQC, SPRT, BILL
 
@@ -440,7 +440,7 @@ def score_run(trace: list[Event]) -> dict:
 
 **核心评估点**：数据质量检查场景，空值/缺失值查询
 
-**自动评分项**：P-1=1, P-3=1, O-1=1
+**自动评分项**：P-1=1, P-2=1, O-1=1
 
 **Rubric 项**：准确性 5, 完整性 3+
 
@@ -448,13 +448,13 @@ def score_run(trace: list[Event]) -> dict:
 
 ### edge-04: 所有应用及其表数量，按表数量降序
 
-**期望过程**：读取 schema.md → govio-query 聚合查询 → 降序输出
+**期望过程**：读取 schema.md → govio-cli query 聚合查询 → 降序输出
 
 **期望输出**：IHRO(403) > SSOP(383) > PDM(123) > IHRM(67) > AEP(50) > PAYPRO(49) > CDPS(46) > PO(44) > HPM(62) > NHRS(58) > SQC(29) > SPRT(28) > BILL(35) > ITS(9) > IOMS(2)
 
 **来源**：对话样例中 agent 的实际输出模式
 
-**自动评分项**：P-3=1, S-2=1, S-3=1, E-3=1
+**自动评分项**：P-2=1, S-2=1, S-3=1, E-3=1
 
 **Rubric 项**：准确性 5, 完整性 5
 
@@ -467,11 +467,11 @@ def score_run(trace: list[Event]) -> dict:
 
 自动评分项权重：
   结果目标 (O-1~O-5): 每项 1 分，共 5 分
-  过程目标 (P-1~P-6): 每项 1 分，共 6 分
+  过程目标 (P-1~P-5): 每项 1 分，共 5 分
   风格目标 (S-1~S-4): 每项 1 分，共 4 分
   效率目标 (E-1~E-4): 每项 1 分，共 4 分
   负向控制 (N-1~N-3): 每项 1 分，共 3 分
-  → 自动评分满分 = 22 分
+  → 自动评分满分 = 21 分
 
 Rubric 评分（每个提示词单独评）：
   回答质量 3 维度 × 5 分 = 15 分（元数据查询类）
@@ -486,7 +486,7 @@ Rubric 评分（每个提示词单独评）：
 
 - [ ] 命令计数预算：单次交互工具调用 ≤ 8 次
 - [ ] Token 预算监控：单次交互总 token ≤ 4000
-- [ ] 构建检查：`govio-query` 命令是否能成功执行
-- [ ] 运行时冒烟：`uvx --from skills/govio/assets/govio-*.whl govio-query` 退出码 = 0
+- [ ] 构建检查：`govio-cli query` 命令是否能成功执行
+- [ ] 运行时冒烟：`govio-cli query --code "print(g.schema)"` 退出码 = 0
 - [ ] 权限回归：skill 仅使用 `allowed-tools: Read, Grep, Glob`，未尝试写入或执行其他命令
 - [ ] 后端切换测试：修改 `~/.govio/config.yaml` 中的 `backend` 字段，验证查询逻辑自动适配
