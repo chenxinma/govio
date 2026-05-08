@@ -111,8 +111,8 @@ def cmd_explore(config: dict, dataframes: list[str] | None = None) -> None:
     from ..observe_data.core.explorer import RelationExplorer
 
     explorer = RelationExplorer()
-    relations = explorer.explore(df_dict)
-    print(json.dumps({"success": True, "relations": relations}, ensure_ascii=False, indent=2))
+    result = explorer.explore(df_dict)
+    print(json.dumps({"success": True, **result}, ensure_ascii=False, indent=2))
 
 
 def cmd_visualize(config: dict, relations_json: str) -> None:

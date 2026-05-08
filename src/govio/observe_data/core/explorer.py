@@ -73,9 +73,12 @@ class RelationExplorer:
 
         return relations
 
-    def explore(self, dataframes: dict[str, pd.DataFrame]) -> list[dict[str, Any]]:
+    def explore(
+        self, dataframes: dict[str, pd.DataFrame]
+    ) -> dict[str, list[dict[str, Any]]]:
         """探查所有 DataFrame 之间的关系"""
-        all_relations = []
+        foreign_keys: list[dict[str, Any]] = []
+        column_similarities: list[dict[str, Any]] = []
         names = list(dataframes.keys())
 
         for i, name1 in enumerate(names):
@@ -83,17 +86,12 @@ class RelationExplorer:
                 df1 = dataframes[name1]
                 df2 = dataframes[name2]
 
-                relations = self.infer_foreign_keys(df1, name1, df2, name2)
-                all_relations.extend(relations)
+                foreign_keys.extend(self.infer_foreign_keys(df1, name1, df2, name2))
+                foreign_keys.extend(self.infer_foreign_keys(df2, name2, df1, name1))
 
-                relations = self.infer_foreign_keys(df2, name2, df1, name1)
-                all_relations.extend(relations)
-
-                similarities = self.find_column_similarity(df1, df2)
-                for sim in similarities:
-                    all_relations.append(
+                for sim in self.find_column_similarity(df1, df2):
+                    column_similarities.append(
                         {
-                            "type": "column_similarity",
                             "table1": name1,
                             "column1": sim["column"],
                             "table2": name2,
@@ -102,4 +100,7 @@ class RelationExplorer:
                         }
                     )
 
-        return all_relations
+        return {
+            "foreign_keys": foreign_keys,
+            "column_similarities": column_similarities,
+        }

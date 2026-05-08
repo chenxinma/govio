@@ -125,7 +125,7 @@ class TestRelationExplorerCaseInsensitive:
         assert len(relations) == 0
 
     def test_column_similarity_included_in_explore(self):
-        """测试 explore() 输出包含 column_similarity 类型"""
+        """测试 explore() 输出包含 column_similarities"""
         explorer = RelationExplorer()
 
         df1 = pd.DataFrame(
@@ -142,17 +142,18 @@ class TestRelationExplorerCaseInsensitive:
             }
         )
 
-        relations = explorer.explore({"users": df1, "contacts": df2})
+        result = explorer.explore({"users": df1, "contacts": df2})
 
-        similarity_relations = [
-            r for r in relations if r.get("type") == "column_similarity"
-        ]
-        assert len(similarity_relations) > 0
+        assert "foreign_keys" in result
+        assert "column_similarities" in result
+
+        similarities = result["column_similarities"]
+        assert len(similarities) > 0
 
         email_sim = next(
             (
                 r
-                for r in similarity_relations
+                for r in similarities
                 if "email" in r["column1"].lower() and "email" in r["column2"].lower()
             ),
             None,
