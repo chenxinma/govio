@@ -25,13 +25,17 @@ class DatabaseManager:
         for name, config in self._datasources.items():
             try:
                 if config.url.startswith("duckdb://"):
-                    dir_path = config.url[9:]
-                    if not Path(dir_path).exists():
-                        raise ValueError(f"目录不存在: {dir_path}")
-                    conn = duckdb.connect(":memory:")
-                    conn.execute(f"SET file_search_path = '{dir_path}'")
-                    self._duckdb_conns[name] = conn
-                    self._duckdb_dirs[name] = dir_path
+                    db_path = config.url[9:]
+                    if not Path(db_path).exists():
+                        raise ValueError(f"目录不存在: {db_path}")
+                    if Path(db_path).is_dir():
+                        dir_path = db_path
+                        conn = duckdb.connect(":memory:")
+                        conn.execute(f"SET file_search_path = '{dir_path}'")
+                        self._duckdb_conns[name] = conn
+                        self._duckdb_dirs[name] = dir_path
+                    else:
+                        conn = duckdb.connect(database=db_path)
                 else:
                     self._engines[name] = create_engine(
                         config.url, connect_args=config.connect_args
