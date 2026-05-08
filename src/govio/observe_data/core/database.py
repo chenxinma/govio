@@ -35,7 +35,9 @@ class DatabaseManager:
                         self._duckdb_conns[name] = conn
                         self._duckdb_dirs[name] = dir_path
                     else:
-                        conn = duckdb.connect(database=db_path)
+                        conn = duckdb.connect(database=db_path, read_only=True)
+                        self._duckdb_conns[name] = conn
+                        self._duckdb_dirs[name] = str(Path(db_path).parent)
                 else:
                     self._engines[name] = create_engine(
                         config.url, connect_args=config.connect_args
