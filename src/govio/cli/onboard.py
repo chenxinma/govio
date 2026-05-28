@@ -84,10 +84,6 @@ def prompt_csv_config(config_manager: ConfigManager) -> dict[str, Any]:
     ).strip()
     workspace_uuid = workspace_uuid or default_workspace_uuid
 
-    default_output_dir = existing_config.get("output_dir", csv_dir)
-    output_dir = input(f"请输入推荐输出目录 [默认: {default_output_dir}]: ").strip()
-    output_dir = output_dir or default_output_dir
-
     return {
         "kundb": kundb,
         "app_list": app_list,
@@ -96,7 +92,6 @@ def prompt_csv_config(config_manager: ConfigManager) -> dict[str, Any]:
         "metric": metric if metric else None,
         "csv_dir": csv_dir,
         "workspace_uuid": workspace_uuid,
-        "output_dir": output_dir,
     }
 
 

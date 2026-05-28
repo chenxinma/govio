@@ -7,7 +7,7 @@ from .config import ConfigManager
 from ..metadata.utility import data_standard_recommend
 
 
-def std_recommend():
+def std_recommend(output_dir:Path):
     """数据标准推荐主函数"""
     config_manager = ConfigManager()
 
@@ -21,14 +21,13 @@ def std_recommend():
     workspace_uuid = config.get("workspace_uuid", "")
     app_map = config.get("app_map", "")
     csv_dir = config.get("csv_dir", "./")
-    output = config.get("output_dir", csv_dir)
 
     if not all([kundb, workspace_uuid, app_map, csv_dir]):
         print("❌ 配置缺少必要字段，请检查 kundb, workspace_uuid, app_map, csv_dir")
         sys.exit(1)
 
     csv_dir_path = Path(csv_dir)
-    output_path = Path(output)
+    output_path = output_dir
     app_map_path = Path(app_map)
 
     if not csv_dir_path.exists():
@@ -49,7 +48,7 @@ def std_recommend():
     print(f"工作区: {workspace_uuid}")
     print(f"应用映射: {app_map}")
     print(f"CSV 目录: {csv_dir}")
-    print(f"输出目录: {output}")
+    print(f"输出目录: {output_dir}")
 
     try:
         data_standard_recommend(
@@ -67,4 +66,4 @@ def std_recommend():
 
 
 if __name__ == "__main__":
-    std_recommend()
+    std_recommend(Path(sys.argv[1]))

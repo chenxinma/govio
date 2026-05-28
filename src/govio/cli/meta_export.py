@@ -3,6 +3,8 @@ from pathlib import Path
 import pandas as pd
 
 from govio.cli.config import ConfigManager
+from govio.core.graph_factory import GraphFactory
+from govio.core.assets_generator import AssetsGenerator
 from govio.metadata.database import TDSLoader
 from govio.metadata.application import AppInfoLoader
 from govio.metadata.standard import StandardLoader
@@ -10,6 +12,8 @@ from govio.metadata.duckdb_loader import DuckDBLoader
 from govio.metadata.utility import reorder_index
 from govio.metadata.relationship import load_relationships
 from govio.metadata.metric import MetricLoader
+
+SKILLS_ASSETS_DIR = Path("skills/govio/assets")
 
 
 def merge_metadata(
@@ -20,7 +24,7 @@ def merge_metadata(
     return combined.drop_duplicates(subset=[key], keep="last").reset_index(drop=True)
 
 
-def meta_export(db_path: str, schemas: list[str], start_id: int, output: Path):
+def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = True):
     output.mkdir(parents=True, exist_ok=True)
 
     # --- Load config for TDS ---
@@ -35,7 +39,7 @@ def meta_export(db_path: str, schemas: list[str], start_id: int, output: Path):
     df_app_db_map = pd.read_json(app_map_file, orient="records")
 
     # --- Load TDS metadata ---
-    tds_loader = TDSLoader(kundb, workspace_uuid, schemas)
+    tds_loader = TDSLoader(kundb, workspace_uuid, df_app_db_map["schema"].to_list())
     tds_tables = tds_loader.PhysicalTable
     tds_columns = tds_loader.Col
 
@@ -55,7 +59,7 @@ def meta_export(db_path: str, schemas: list[str], start_id: int, output: Path):
     df_stds = std_loader.Standard
 
     # --- Assign IDs ---
-    reorder_index([df_tables, df_columns, df_apps, df_stds], start=start_id)
+    reorder_index([df_tables, df_columns, df_apps, df_stds], start=1)
 
     files = []
 
@@ -107,9 +111,11 @@ def meta_export(db_path: str, schemas: list[str], start_id: int, output: Path):
     files.append("-r " + str(output / "USE.csv"))
 
     # --- Optional: RELATES_TO ---
+    relations_count = 0
     if relationship_file:
         try:
             df_relates_to = load_relationships(relationship_file, df_tables, df_columns)
+            relations_count = len(df_relates_to)
             df_relates_to.to_csv(
                 output / "RELATES_TO.csv",
                 index=False,
@@ -123,11 +129,12 @@ def meta_export(db_path: str, schemas: list[str], start_id: int, output: Path):
                 ],
             )
             files.append("-r " + str(output / "RELATES_TO.csv"))
-            print(f"成功生成 RELATES_TO.csv，包含 {len(df_relates_to)} 个关系")
+            print(f"成功生成 RELATES_TO.csv，包含 {len(df_relates_to)} 个关系 来自[{relationship_file}]")
         except Exception as e:
             print(f"警告: 无法加载关系文件: {e}")
 
     # --- Optional: metrics ---
+    metric_count = 0
     if metric_file:
         try:
             metric_loader = MetricLoader(metric_file, df_tables, df_columns)
@@ -136,7 +143,7 @@ def meta_export(db_path: str, schemas: list[str], start_id: int, output: Path):
 
             # 计算 Metric/Dimension 的 ID 起始偏移（接续已有节点）
             metric_offset = (
-                len(df_tables) + len(df_columns) + len(df_apps) + len(df_stds) + start_id
+                len(df_tables) + len(df_columns) + len(df_apps) + len(df_stds) + 1
             )
             dim_offset = metric_offset + len(df_metrics)
             reorder_index([df_metrics, df_dimensions], start=metric_offset)
@@ -189,11 +196,61 @@ def meta_export(db_path: str, schemas: list[str], start_id: int, output: Path):
                 f"成功生成指标数据：{len(df_metrics)} 个指标, "
                 f"{len(df_dimensions)} 个维度"
             )
+            metric_count = len(df_metrics)
         except Exception as e:
             print(f"警告: 无法加载指标定义文件: {e}")
 
     # --- Summary ---
     print(f"成功导出: {len(df_tables)} 张表, {len(df_columns)} 个字段, "
-          f"{len(df_apps)} 个应用, {len(df_stds)} 个标准")
-    print(f"ID 范围: {start_id} ~ {start_id + len(df_tables) + len(df_columns) + len(df_apps) + len(df_stds) - 1}")
+          f"{len(df_apps)} 个应用, {len(df_stds)} 个标准, {relations_count}个数据关系, {metric_count}个指标")
+    # print(f"ID 范围: 1 ~ {len(df_tables) + len(df_columns) + len(df_apps) + len(df_stds)}")
     print(f"\nfalkordb-bulk-insert {{GRAPH}} {'  '.join(files)}")
+
+    if dry_run:
+        return
+
+    # --- Update graph and generate assets ---
+    from govio.cli.onboard import import_csv_to_falkordb
+    from govio.metadata.gen_networkx import build_graph
+
+    backend = config.get("backend")
+    if not backend:
+        print("警告: 配置中未指定 backend，跳过图数据更新和 assets 生成")
+        return
+
+    # Update graph
+    if backend == "falkordb":
+        falkordb_cfg = config.get("falkordb", {})
+        host = falkordb_cfg.get("host", "localhost")
+        port = falkordb_cfg.get("port", 6379)
+        graph_name = falkordb_cfg.get("graph", "ontology")
+        print(f"\n正在导入 CSV 到 FalkorDB ({host}:{port}/{graph_name})...")
+        try:
+            import_csv_to_falkordb(output, host, port, graph_name)
+            print("✓ FalkorDB 数据已更新")
+        except Exception as e:
+            print(f"❌ 导入 FalkorDB 失败: {e}")
+            return
+    elif backend == "networkx":
+        networkx_cfg = config.get("networkx", {})
+        gml_path = networkx_cfg.get("gml_path", str(SKILLS_ASSETS_DIR / "ontology.gml"))
+        print(f"\n正在从 CSV 生成 GML 文件 ({gml_path})...")
+        try:
+            build_graph(str(output), gml_path)
+            print("✓ GML 文件已更新")
+        except Exception as e:
+            print(f"❌ 生成 GML 失败: {e}")
+            return
+
+    # Generate assets
+    print("\n正在生成 assets...")
+    try:
+        graph_obj = GraphFactory.create(config)
+        generator = AssetsGenerator(graph_obj, SKILLS_ASSETS_DIR)
+        generator.generate_all()
+        print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")
+    except Exception as e:
+        print(f"❌ 生成 assets 失败: {e}")
+        return
+
+    print("\n✅ meta-export 完成！")

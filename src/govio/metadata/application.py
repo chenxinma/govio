@@ -8,7 +8,7 @@ class AppInfoLoader:
         self.app_limits = app_limits
     
     def load_apps(self):
-        df_apps = pd.read_excel(self.app_list_file, sheet_name="应用清单", dtype={"APPID": str})[[
+        _df_apps_excel = pd.read_excel(self.app_list_file, sheet_name="应用清单", dtype={"APPID": str})[[
                                         "APPID", 
                                         "应用系统\n中文名称", 
                                         "应用系统\n英文简称", 
@@ -29,6 +29,17 @@ class AppInfoLoader:
                                         "系统分级": "maintenance_level",
                                         "外部供应商": "external_vendor"
                                     }) 
+        _df_app_fix = pd.DataFrame([{"app_id": "0000", 
+                                    "name": "分析数据集", 
+                                    "app_name_en": "analyze dataset", 
+                                    "app_type": "数据集",
+                                    "business_domain": "数据",
+                                    "manager": "",
+                                    "network_area": "本地", 
+                                    "maintenance_level": "C",
+                                    "external_vendor": "无"}])
+        df_apps = pd.concat([_df_apps_excel, _df_app_fix])
+        
         if self.app_limits:
             return df_apps[df_apps["name"].isin(self.app_limits)].copy()
         else:
