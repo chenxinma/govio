@@ -1,6 +1,33 @@
 import textwrap
+from abc import ABC, abstractmethod
+
 import pandas as pd
 from sqlalchemy import create_engine
+
+
+class MetadataLoader(ABC):
+    """Abstract base class for metadata loaders.
+
+    All metadata loaders must implement load_tables() and load_columns().
+    The PhysicalTable and Col properties delegate to these methods.
+    """
+
+    @abstractmethod
+    def load_tables(self) -> pd.DataFrame:
+        ...
+
+    @abstractmethod
+    def load_columns(self) -> pd.DataFrame:
+        ...
+
+    @property
+    def PhysicalTable(self) -> pd.DataFrame:
+        return self.load_tables()
+
+    @property
+    def Col(self) -> pd.DataFrame:
+        return self.load_columns()
+
 
 class DatabaseLoader:
     def __init__(self, db: str, workspace_uuid: str, 
@@ -125,7 +152,7 @@ class DatabaseLoader:
                 and d2.workspace_uuid ='{self.workspace_uuid}'
             """)
         df_tables = pd.read_sql(sql, self.engine)
-        df_tables
+        
         return df_tables
     
     @property
