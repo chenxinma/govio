@@ -290,10 +290,18 @@ from govio.metadata.metric import MetricLoader
 app_loader = AppInfoLoader(app_list_file="path/to/app_list.xlsx")
 apps = app_loader.Application
 
-# 加载数据库元数据
+# 加载数据库元数据(数据治理平台)
 db_loader = DatabaseLoader(
     db="mysql+pymysql://user:pass@host/db",
     workspace_uuid="your-uuid",
+    schema_limits=["schema1", "schema2"]
+)
+tables = db_loader.PhysicalTable
+columns = db_loader.Col
+
+# 加载数据库元数据(duckdb)
+db_loader = DuckDBLoader(
+    db_path="xxx.db",
     schema_limits=["schema1", "schema2"]
 )
 tables = db_loader.PhysicalTable
@@ -433,24 +441,6 @@ all_columns = db_loader.Col  # 所有列
 recommendations = recommender.batch_recommend(all_columns)
 ```
 
-## 环境配置
-
-创建 `.env` 文件以配置数据库连接：
-
-```env
-KUNDB_URL=mysql+pymysql://username:password@host:port/database_name
-APP_LIST_FILE=path/to/app_list.xlsx
-```
-
-## 开发
-
-```bash
-# 安装开发依赖
-uv sync --group dev
-
-# 运行测试
-uv run pytest tests/
-```
 
 ## 许可证
 
