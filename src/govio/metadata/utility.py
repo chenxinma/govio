@@ -78,11 +78,11 @@ def make_csv(
     df_use = pd.merge(
         df_apps[["name"]]
         .reset_index()
-        .rename(columns={"index": ":START_ID(Applicatin)"}),
+        .rename(columns={"index": ":START_ID(Application)"}),
         df_app_table,
         on="name",
         how="inner",
-    )[[":START_ID(Applicatin)", ":END_ID(PhysicalTable)"]]
+    )[[":START_ID(Application)", ":END_ID(PhysicalTable)"]]
 
     df_use.to_csv(output / "USE.csv", index=False)
     files.append("-r " + str(output / "USE.csv"))
