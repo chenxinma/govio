@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 
 from .application import AppInfoLoader
-from .database import DatabaseLoader
+from .database import TDSLoader
 from .standard import StandardLoader
 from .recommender import create_recommender
 from .relationship import load_relationships
@@ -29,7 +29,7 @@ def make_csv(
     relationship_file: str | None = None,
     metric_file: str | None = None,
 ):
-    db_loader = DatabaseLoader(db, workspace_uuid, df_app_db_map["schema"].to_list())
+    db_loader = TDSLoader(db, workspace_uuid, df_app_db_map["schema"].to_list())
     app_loader = AppInfoLoader(app_list_file, df_app_db_map["name"].to_list())
     std_loader = StandardLoader(db, workspace_uuid)
 
@@ -201,7 +201,7 @@ def data_standard_recommend(
     df = pd.DataFrame()
 
     for schema in df_app_db_map["schema"].to_list():
-        db_loader = DatabaseLoader(db, workspace_uuid, [schema])
+        db_loader = TDSLoader(db, workspace_uuid, [schema])
         all_columns = db_loader.Col  # 所有列
         print("Schema=", schema, " columns=", all_columns.shape[0])
 

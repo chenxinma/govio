@@ -46,3 +46,15 @@ def test_metadata_loader_properties_delegate():
     assert list(loader.Col.columns) == ["column"]
     assert len(loader.PhysicalTable) == 1
     assert len(loader.Col) == 1
+
+
+def test_tds_loader_is_metadata_loader():
+    """TDSLoader is a subclass of MetadataLoader."""
+    from govio.metadata.database import TDSLoader
+    assert issubclass(TDSLoader, MetadataLoader)
+
+
+def test_database_loader_alias():
+    """DatabaseLoader alias still works for backward compatibility."""
+    from govio.metadata.database import DatabaseLoader, TDSLoader
+    assert DatabaseLoader is TDSLoader

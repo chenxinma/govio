@@ -29,8 +29,8 @@ class MetadataLoader(ABC):
         return self.load_columns()
 
 
-class DatabaseLoader:
-    def __init__(self, db: str, workspace_uuid: str, 
+class TDSLoader(MetadataLoader):
+    def __init__(self, db: str, workspace_uuid: str,
                        schema_limits: list[str] | None = None,
                        app_names: list[str] | None = None) -> None:
         self.engine = create_engine(db)
@@ -154,11 +154,7 @@ class DatabaseLoader:
         df_tables = pd.read_sql(sql, self.engine)
         
         return df_tables
-    
-    @property
-    def PhysicalTable(self):
-        return self.load_tables()
 
-    @property
-    def Col(self):
-        return self.load_columns()
+
+# Backward compatibility alias
+DatabaseLoader = TDSLoader
