@@ -46,7 +46,7 @@ def output_result(data):
             output_dir = Path(".") / ".govio"
             output_dir.mkdir(parents=True, exist_ok=True)
             fname = (
-                output_dir / f"output-{datetime.now().strftime('%Y%m%d%H%M%s')}.json"
+                output_dir / f"output-{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
             )
             df = pd.DataFrame(data)
             df.to_json(
