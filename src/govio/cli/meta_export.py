@@ -2,46 +2,68 @@ from pathlib import Path
 
 import pandas as pd
 
-from .application import AppInfoLoader
-from .database import TDSLoader
-from .standard import StandardLoader
-from .recommender import create_recommender
-from .relationship import load_relationships
-from .metric import MetricLoader
+from govio.cli.config import ConfigManager
+from govio.core.graph_factory import GraphFactory
+from govio.core.assets_generator import AssetsGenerator
+from govio.metadata.database import TDSLoader
+from govio.metadata.application import AppInfoLoader
+from govio.metadata.standard import StandardLoader
+from govio.metadata.duckdb_loader import DuckDBLoader
+from govio.metadata.utility import reorder_index
+from govio.metadata.relationship import load_relationships
+from govio.metadata.metric import MetricLoader
+
+SKILLS_ASSETS_DIR = Path("skills/govio/assets")
 
 
-def reorder_index(dfs: list[pd.DataFrame], start: int = 1):
-    base_index: int = start
-
-    for df in dfs:
-        _end_index = base_index + df.shape[0]
-        df["index"] = [i for i in range(base_index, _end_index)]
-        df.set_index("index", drop=True, inplace=True)
-        base_index = _end_index
+def merge_metadata(
+    df_tds: pd.DataFrame, df_duck: pd.DataFrame, key: str
+) -> pd.DataFrame:
+    """TDS full + DuckDB incremental. DuckDB wins on conflict."""
+    combined = pd.concat([df_tds, df_duck], ignore_index=True)
+    return combined.drop_duplicates(subset=[key], keep="last").reset_index(drop=True)
 
 
-def make_csv(
-    output: Path,
-    db: str,
-    workspace_uuid: str,
-    app_list_file: str,
-    df_app_db_map: pd.DataFrame,
-    relationship_file: str | None = None,
-    metric_file: str | None = None,
-):
-    db_loader = TDSLoader(db, workspace_uuid, df_app_db_map["schema"].to_list())
+def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = True):
+    output.mkdir(parents=True, exist_ok=True)
+
+    # --- Load config for TDS ---
+    config = ConfigManager().load()
+    kundb = config["kundb"]
+    workspace_uuid = config.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
+    app_list_file = config["app_list"]
+    app_map_file = config["app_map"]
+    relationship_file = config.get("relationship")
+    metric_file = config.get("metric")
+
+    df_app_db_map = pd.read_json(app_map_file, orient="records")
+
+    # --- Load TDS metadata ---
+    tds_loader = TDSLoader(kundb, workspace_uuid, df_app_db_map["schema"].to_list())
+    tds_tables = tds_loader.PhysicalTable
+    tds_columns = tds_loader.Col
+
+    # --- Load DuckDB metadata ---
+    duck_loader = DuckDBLoader(db_path, schemas)
+    duck_tables = duck_loader.PhysicalTable
+    duck_columns = duck_loader.Col
+
+    # --- Merge ---
+    df_tables = merge_metadata(tds_tables, duck_tables, "full_table_name")
+    df_columns = merge_metadata(tds_columns, duck_columns, "column")
+
+    # --- Load apps and standards ---
     app_loader = AppInfoLoader(app_list_file, df_app_db_map["name"].to_list())
-    std_loader = StandardLoader(db, workspace_uuid)
-
-    df_tables = db_loader.PhysicalTable
-    df_columns = db_loader.Col
     df_apps = app_loader.Application
+    std_loader = StandardLoader(kundb, workspace_uuid)
     df_stds = std_loader.Standard
 
-    reorder_index([df_tables, df_columns, df_apps, df_stds])
+    # --- Assign IDs ---
+    reorder_index([df_tables, df_columns, df_apps, df_stds], start=1)
 
     files = []
 
+    # --- Node CSVs ---
     df_tables.to_csv(output / "PhysicalTable.csv", index_label=":ID(PhysicalTable)")
     files.append("-n " + str(output / "PhysicalTable.csv"))
 
@@ -54,6 +76,7 @@ def make_csv(
     df_stds.to_csv(output / "Standard.csv", index_label=":ID(Standard)")
     files.append("-n " + str(output / "Standard.csv"))
 
+    # --- HAS_COLUMN edge ---
     df_has_column = pd.merge(
         df_tables[["full_table_name"]]
         .reset_index()
@@ -67,6 +90,7 @@ def make_csv(
     df_has_column.to_csv(output / "HAS_COLUMN.csv", index=False)
     files.append("-r " + str(output / "HAS_COLUMN.csv"))
 
+    # --- USE edge ---
     df_app_table = pd.merge(
         df_app_db_map,
         df_tables[["schema"]]
@@ -83,13 +107,15 @@ def make_csv(
         on="name",
         how="inner",
     )[[":START_ID(Application)", ":END_ID(PhysicalTable)"]]
-
     df_use.to_csv(output / "USE.csv", index=False)
     files.append("-r " + str(output / "USE.csv"))
 
+    # --- Optional: RELATES_TO ---
+    relations_count = 0
     if relationship_file:
         try:
             df_relates_to = load_relationships(relationship_file, df_tables, df_columns)
+            relations_count = len(df_relates_to)
             df_relates_to.to_csv(
                 output / "RELATES_TO.csv",
                 index=False,
@@ -103,10 +129,12 @@ def make_csv(
                 ],
             )
             files.append("-r " + str(output / "RELATES_TO.csv"))
-            print(f"成功生成 RELATES_TO.csv，包含 {len(df_relates_to)} 个关系")
+            print(f"成功生成 RELATES_TO.csv，包含 {len(df_relates_to)} 个关系 来自[{relationship_file}]")
         except Exception as e:
             print(f"警告: 无法加载关系文件: {e}")
 
+    # --- Optional: metrics ---
+    metric_count = 0
     if metric_file:
         try:
             metric_loader = MetricLoader(metric_file, df_tables, df_columns)
@@ -168,68 +196,61 @@ def make_csv(
                 f"成功生成指标数据：{len(df_metrics)} 个指标, "
                 f"{len(df_dimensions)} 个维度"
             )
+            metric_count = len(df_metrics)
         except Exception as e:
             print(f"警告: 无法加载指标定义文件: {e}")
 
-    s = f"falkordb-bulk-insert {{GRAPH}} {'  '.join(files)}"
-    print("Bulk insert usage:")
-    print(s)
+    # --- Summary ---
+    print(f"成功导出: {len(df_tables)} 张表, {len(df_columns)} 个字段, "
+          f"{len(df_apps)} 个应用, {len(df_stds)} 个标准, {relations_count}个数据关系, {metric_count}个指标")
+    # print(f"ID 范围: 1 ~ {len(df_tables) + len(df_columns) + len(df_apps) + len(df_stds)}")
+    print(f"\nfalkordb-bulk-insert {{GRAPH}} {'  '.join(files)}")
 
+    if dry_run:
+        return
 
-def data_standard_recommend(
-    output: Path, db: str, workspace_uuid: str, df_app_db_map: pd.DataFrame
-):
-    std_loader = StandardLoader(db, workspace_uuid)
-    # 加载数据
-    std_compliance = std_loader.StdCompliance  # 已贯标列
+    # --- Update graph and generate assets ---
+    from govio.cli.onboard import import_csv_to_falkordb
+    from govio.metadata.gen_networkx import build_graph
 
-    # 创建推荐器
-    WEIGHTS = {
-        "table": 0.25,  # 表名权重（仅使用从 full_table_name 提取的 table_name）
-        "name": 0.35,  # 列名权重
-        "comment": 0.25,  # 列注释权重
-        "type": 0.05,  # 数据类型权重
-        "numeric": 0.10,  # 数值特征权重
-    }
-    recommender = create_recommender(
-        std_compliance=std_compliance,
-        weights=WEIGHTS,
-        k_neighbors=5,  # 使用5个最近邻
-        top_n=3,  # 返回Top 3推荐
-    )
+    backend = config.get("backend")
+    if not backend:
+        print("警告: 配置中未指定 backend，跳过图数据更新和 assets 生成")
+        return
 
-    df = pd.DataFrame()
+    # Update graph
+    if backend == "falkordb":
+        falkordb_cfg = config.get("falkordb", {})
+        host = falkordb_cfg.get("host", "localhost")
+        port = falkordb_cfg.get("port", 6379)
+        graph_name = falkordb_cfg.get("graph", "ontology")
+        print(f"\n正在导入 CSV 到 FalkorDB ({host}:{port}/{graph_name})...")
+        try:
+            import_csv_to_falkordb(output, host, port, graph_name)
+            print("✓ FalkorDB 数据已更新")
+        except Exception as e:
+            print(f"❌ 导入 FalkorDB 失败: {e}")
+            return
+    elif backend == "networkx":
+        networkx_cfg = config.get("networkx", {})
+        gml_path = networkx_cfg.get("gml_path", str(SKILLS_ASSETS_DIR / "ontology.gml"))
+        print(f"\n正在从 CSV 生成 GML 文件 ({gml_path})...")
+        try:
+            build_graph(str(output), gml_path)
+            print("✓ GML 文件已更新")
+        except Exception as e:
+            print(f"❌ 生成 GML 失败: {e}")
+            return
 
-    for schema in df_app_db_map["schema"].to_list():
-        db_loader = TDSLoader(db, workspace_uuid, [schema])
-        all_columns = db_loader.Col  # 所有列
-        print("Schema=", schema, " columns=", all_columns.shape[0])
+    # Generate assets
+    print("\n正在生成 assets...")
+    try:
+        graph_obj = GraphFactory.create(config)
+        generator = AssetsGenerator(graph_obj, SKILLS_ASSETS_DIR)
+        generator.generate_all()
+        print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")
+    except Exception as e:
+        print(f"❌ 生成 assets 失败: {e}")
+        return
 
-        # 批量推荐
-        recommendations = recommender.batch_recommend(all_columns)
-        _recommendations_confirm = recommendations[
-            recommendations["recommendation_score"] > 0
-        ]
-
-        df = pd.concat([df, _recommendations_confirm])
-
-        # 保存结果
-        # _recommendations_confirm.to_csv(output / f'_recommendations_{schema}.csv', index=False)
-
-    if (output / "Col.csv").exists() and (output / "Standard.csv").exists():
-        df = df[["column", "recommended_standard_id"]]
-        df_col = pd.read_csv(output / "Col.csv")[[":ID(Col)", "column"]]
-        df_std = pd.read_csv(output / "Standard.csv")[[":ID(Standard)", "standard_id"]]
-
-        df_colStdId = pd.merge(df, df_col, on="column", how="inner")
-        df_complies_with = pd.merge(
-            df_colStdId,
-            df_std,
-            left_on="recommended_standard_id",
-            right_on="standard_id",
-            how="inner",
-        )
-        # COMPLIES_WITH
-        df_complies_with[[":ID(Col)", ":ID(Standard)"]].rename(
-            columns={":ID(Col)": "START_ID(Col)", ":ID(Standard)": "END_ID(Standard)"}
-        ).to_csv(output / "COMPLIES_WITH.csv", index=False)
+    print("\n✅ meta-export 完成！")
