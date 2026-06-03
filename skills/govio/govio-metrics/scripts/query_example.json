@@ -1,0 +1,17 @@
+{
+  "metrics": [
+    {
+      "code": "bill_income_amt",
+      "name": "当月账单收入",
+      "type": "原子",
+      "source_table": "dws.income_bill_monthly",
+      "time_column": "report_ym"
+    }
+  ],
+  "dimensions": ["sales_unit", "sales_dept"],
+  "filters": {
+    "report_ym": "202605"
+  },
+  "order_by": null,
+  "limit": 100
+}

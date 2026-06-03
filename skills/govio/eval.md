@@ -4,7 +4,19 @@
 
 依据 [eval-skill.md](../../docs/eval-skill.md) 框架设计，将"感觉更好"转化为可量化分数。
 
-提示词数据源：[`data/eval-prompts.json`](../../data/eval-prompts.json)，共 24 条，覆盖 6 类场景。
+## 技能架构
+
+```
+govio (主控 - 需求路由)
+├── govio-metadata (元数据查询)
+│   └── 应用、表、字段、数据标准
+└── govio-metrics (指标问数)
+    └── 指标数据、维度分析、趋势统计
+```
+
+提示词数据源：[`data/eval-prompts.json`](../../data/eval-prompts.json)，覆盖 8 类场景。
+
+---
 
 ## 1. 成功标准定义
 
@@ -14,19 +26,22 @@
 |------|--------|----------|
 | O-1 | 查询返回正确结果 | 人工比对知识图谱原始数据，结果集完全匹配 = 1 分，部分匹配 = 0.5 分，错误/空 = 0 |
 | O-2 | SQL 生成可执行且语义正确 | SQL 语法合法 = 0.5 分，执行后返回预期数据 = 1 分 |
-| O-3 | 表字段比较结果完整 | 列出所有差异项 = 1 分，遗漏 > 20% = 0.5 分，遗漏 > 50% = 0 |
+| O-3 | 指标数据准确 | 指标值与预期一致 = 1 分，偏差 < 5% = 0.5 分，偏差 > 5% = 0 |
 | O-4 | 回答与问题直接相关 | 回答直接回应提问 = 1 分，偏题但相关 = 0.5 分，无关 = 0 |
-| O-5 | 技能正确触发/不触发 | should_trigger=true 时触发 = 1 分，should_trigger=false 时未触发 = 1 分，否则 = 0 |
+| O-5 | 技能正确路由 | 元数据问题→govio-metadata=1，指标问题→govio-metrics=1，错误路由=0 |
 
 ### 1.2 过程目标（Process）
 
-| 编号 | 检查项 | 量化方式 |
-|------|--------|----------|
-| P-1 | 首次行动是读取 `assets/schema.md` | 是 = 1 分，否 = 0 |
-| P-2 | 优先使用 `govio-cli query` 而非手动 Python 代码 | 使用 govio-cli query = 1 分，手动导入 = 0.5 分，两者都没用 = 0 |
-| P-3 | 使用 `Grep` 查询 `names/` 目录获取标准名称 | 需要名称解析时执行 = 1 分，未执行 = 0 |
-| P-4 | 查询结果行数 ≤ 300 | 是 = 1 分，否 = 0 |
-| P-5 | 正确使用 `column_name` 而非 `name` 引用 Col 节点列名 | 正确 = 1 分，错误 = 0 |
+| 编号 | 检查项 | 适用技能 | 量化方式 |
+|------|--------|----------|----------|
+| P-1 | 首次行动是读取 `assets/schema.md` | 全部 | 是 = 1 分，否 = 0 |
+| P-2 | 使用 `govio-cli query` 查询元数据 | metadata | 使用 = 1 分，手动导入 = 0.5 分，未使用 = 0 |
+| P-3 | 使用 `Grep` 查询 `names/` 目录获取标准名称 | metadata | 需要时执行 = 1 分，未执行 = 0 |
+| P-4 | 查询结果行数 ≤ 300 | 全部 | 是 = 1 分，否 = 0 |
+| P-5 | 正确使用 `column_name` 引用 Col 节点 | metadata | 正确 = 1 分，错误 = 0 |
+| P-6 | 读取 `assets/metrics_index.md` 获取指标概览 | metrics | 读取 = 1 分，未读取 = 0 |
+| P-7 | 使用 `scripts/sql_builder.py` 组装 SQL | metrics | 使用脚本 = 1 分，手写 SQL = 0.5 分，未生成 = 0 |
+| P-8 | 使用 `govio-cli observe load` 执行查询 | metrics | 使用 = 1 分，其他方式 = 0.5 分，未执行 = 0 |
 
 ### 1.3 风格目标（Style）
 
@@ -36,6 +51,7 @@
 | S-2 | Cypher 查询以 `MATCH` 开头 | 是 = 1 分，否 = 0 |
 | S-3 | 输出格式清晰（表格/列表），非原始 JSON 倾倒 | 结构化 = 1 分，半结构化 = 0.5 分，原始 = 0 |
 | S-4 | 中文回答，技术术语保留英文 | 符合 = 1 分，全英文 = 0.5 分，全中文含翻译术语 = 0.5 分 |
+| S-5 | 指标结果包含单位和时间范围 | 包含 = 1 分，部分包含 = 0.5 分，缺失 = 0 |
 
 ### 1.4 效率目标（Efficiency）
 
@@ -45,83 +61,135 @@
 | E-2 | 未执行无关命令 | 无冗余命令 = 1 分，有 1-2 条冗余 = 0.5 分，> 2 条 = 0 |
 | E-3 | 单次查询完成而非多次碎片查询 | 1 次查询 = 1 分，2 次 = 0.5 分，> 2 次 = 0（合理分步除外） |
 | E-4 | 未不必要地读取 SKILL.md / reference-*.md | 未读 = 1 分，读取 = 0（除非后端切换场景） |
+| E-5 | 路由决策快速，无犹豫 | 直接路由 = 1 分，询问后路由 = 0.5 分，错误路由 = 0 |
 
 ---
 
 ## 2. 测试提示词集
 
-> 完整数据见 [`data/eval-prompts.json`](../../data/eval-prompts.json)。以下为各分类摘要。
+### 2.1 路由测试（routing，6 条）
 
-### 2.1 显式调用（explicit_invocation，3 条）
+测试主控 `govio` 的路由能力。
 
-| ID | 提示词 | 测试重点 |
-|----|--------|----------|
-| explicit-01 | 使用 $govio 技能查询元数据，列出所有应用 | P-1/P-2/O-1/O-5，返回 15 个应用 |
-| explicit-02 | 用 $govio 查询会计引擎应用有哪些表 | P-1/P-2/O-1，AEP 应用下 50 张表 |
-| explicit-03 | 使用 $govio 查询 ITS_USER.T_INVOICE 表有哪些字段 | P-1/P-5/O-1，Col 节点 column_name 属性 |
+| ID | 提示词 | 期望路由 | 测试重点 |
+|----|--------|----------|----------|
+| route-01 | 查询所有应用列表 | govio-metadata | 元数据查询路由 |
+| route-02 | 本月账单收入是多少 | govio-metrics | 指标问数路由 |
+| route-03 | 按部门统计签约覆盖率 | govio-metrics | 维度分析路由 |
+| route-04 | AEP 有哪些表 | govio-metadata | 表结构查询路由 |
+| route-05 | 签署覆盖率怎么计算的 | govio-metrics | 指标语义查询路由 |
+| route-06 | 帮我比对两个表的数据差异 | 不触发 govio | 负向控制，应路由到 govio-observe |
 
-### 2.2 隐式调用（implicit_invocation，5 条）
-
-| ID | 提示词 | 测试重点 |
-|----|--------|----------|
-| implicit-01 | 查询元数据，列出所有应用 | O-5 触发判定，来源：真实对话样例 |
-| implicit-02 | 查询元数据，列出金额相关的字段 | O-5 触发 + 关键词匹配，来源：真实对话样例 |
-| implicit-03 | 我想知道报价单中心系统里有哪些数据表 | 中文应用名隐式匹配，SQC 下 29 张表 |
-| implicit-04 | 财务管理领域的应用有哪些？ | 按业务域筛选，返回 AEP/ITS/CDPS |
-| implicit-05 | 帮我看看外包雇员管理系统和外包项目管理系统各自用了多少张表 | 比较 IHRM(67) vs IHRO(403) |
-
-### 2.3 上下文调用（contextual_invocation，5 条）
+### 2.2 元数据查询 - 显式调用（metadata_explicit，3 条）
 
 | ID | 提示词 | 测试重点 |
 |----|--------|----------|
-| contextual-01 | 我们需要对接发票管理系统的开票接口，先帮我了解一下发票表 T_INVOICE 的字段结构 | 业务上下文（接口对接）+ 元数据查询 |
-| contextual-02 | 数据治理团队需要梳理外服内部机构管理系统的数据资产，请列出这个系统下的所有表和字段 | 数据治理场景，IOMS 仅 2 张表 |
-| contextual-03 | 薪税系统的数据库里有没有跟银行相关的表？列出表名 | 关键词筛选 + 应用范围限定 |
-| contextual-04 | 帮我比较一下收付费管理（CDPS）和发票管理（ITS）之间有没有名称相同的数据表 | 表字段比较核心能力 O-3 |
-| contextual-05 | 我们计划给客户账单管理系统做数据标准治理，先帮我查一下 BILL 应用中所有表名包含 FEE 或 SRV 的字段 | 数据标准治理 + 关键词筛选 |
+| meta-explicit-01 | 使用 $govio-metadata 查询所有应用 | P-1/P-2/O-1，返回 15 个应用 |
+| meta-explicit-02 | 用 $govio-metadata 查询会计引擎有哪些表 | P-1/P-2/O-1，AEP 下 50 张表 |
+| meta-explicit-03 | 使用 $govio-metadata 查询 T_INVOICE 表字段 | P-1/P-5/O-1，Col 节点 column_name |
 
-### 2.4 SQL 生成（sql_generation，3 条）
+### 2.3 元数据查询 - 隐式调用（metadata_implicit，5 条）
 
 | ID | 提示词 | 测试重点 |
 |----|--------|----------|
-| sql-01 | 帮我生成一条 SQL，查询所有业务领域为'财务管理'的应用名称和代码 | Cypher 生成，S-1/S-2/O-2 |
-| sql-02 | 写一个查询，找出哪些应用使用了超过 100 张表 | 聚合 Cypher，PDM(123)/IHRO(403)/SSOP(383) |
-| sql-03 | 生成查询语句：查找企业法定福利服务系统中字段最多的前 5 张表 | Cypher 排序+限制，SSOP 下按 HAS_COLUMN 计数 |
+| meta-implicit-01 | 查询元数据，列出所有应用 | O-5 路由判定 |
+| meta-implicit-02 | 查询金额相关的字段 | O-5 路由 + 关键词匹配 |
+| meta-implicit-03 | 报价单中心系统里有哪些数据表 | 中文应用名隐式匹配，SQC 下 29 张表 |
+| meta-implicit-04 | 财务管理领域的应用有哪些 | 按业务域筛选，返回 AEP/ITS/CDPS |
+| meta-implicit-05 | 外包雇员管理系统和外包项目管理系统各自用了多少张表 | 比较 IHRM(67) vs IHRO(403) |
 
-### 2.5 负向控制（negative_control，3 条）
+### 2.4 指标问数 - 显式调用（metrics_explicit，4 条）
+
+| ID | 提示词 | 测试重点 |
+|----|--------|----------|
+| metrics-explicit-01 | 使用 $govio-metrics 查询本月账单收入 | P-6/P-7/P-8/O-3，bill_income_amt |
+| metrics-explicit-02 | 用 $govio-metrics 按销售单元统计签约覆盖率 | P-6/P-7/P-8/O-3，book_to_bill + 维度 |
+| metrics-explicit-03 | 使用 $govio-metrics 查询 YTD 账单收入前 5 的部门 | P-6/P-7/P-8/O-3，排序 + limit |
+| metrics-explicit-04 | 用 $govio-metrics 查询签约额的月度趋势 | P-6/P-7/P-8/S-5，时间维度 |
+
+### 2.5 指标问数 - 隐式调用（metrics_implicit，5 条）
+
+| ID | 提示词 | 测试重点 |
+|----|--------|----------|
+| metrics-implicit-01 | 本月账单收入是多少 | O-5 路由 + O-3 数据准确 |
+| metrics-implicit-02 | 按部门统计当月签约额 | O-5 路由 + 维度分组 |
+| metrics-implicit-03 | 华东区的签约覆盖率是多少 | O-5 路由 + 维度过滤 |
+| metrics-implicit-04 | 最近 6 个月的账单收入趋势 | O-5 路由 + 时间范围 |
+| metrics-implicit-05 | 签约覆盖率这个指标怎么算的 | O-5 路由 + 指标语义查询 |
+
+### 2.6 指标问数 - 派生指标（metrics_derived，3 条）
+
+| ID | 提示词 | 测试重点 |
+|----|--------|----------|
+| metrics-derived-01 | 计算本月签约覆盖率 | P-7，派生指标 SQL 组装 |
+| metrics-derived-02 | 查询存量消耗额 | P-7，formula: forecast_income_amt - risk_amt |
+| metrics-derived-03 | 账单收入全年预测是多少 | P-7，复合派生指标 |
+
+### 2.7 负向控制（negative_control，4 条）
 
 | ID | 提示词 | 期望结果 |
 |----|--------|----------|
-| negative-01 | 帮我写一个 Python 脚本把 MySQL 数据迁移到 PostgreSQL | 不应触发 govio skill |
-| negative-02 | 帮我修复代码里的一个 bug，pandas DataFrame 合并后列名丢失 | 不应触发 govio skill |
-| negative-03 | 在我们的应用里新增一个用户管理模块 | 不应触发 govio skill（功能开发，非数据治理） |
+| negative-01 | 帮我写一个 Python 脚本把 MySQL 数据迁移到 PostgreSQL | 不触发任何 govio 技能 |
+| negative-02 | 帮我修复代码里的一个 bug | 不触发任何 govio 技能 |
+| negative-03 | 在应用里新增一个用户管理模块 | 不触发任何 govio 技能 |
+| negative-04 | 帮我比对两个表的数据差异 | 不触发 govio，应触发 govio-observe |
 
-### 2.6 边界情况（edge_case，4 条）
+### 2.8 边界情况（edge_case，4 条）
 
 | ID | 提示词 | 测试重点 |
 |----|--------|----------|
-| edge-01 | 外服内部机构管理系统有几个表？ | 最小应用（IOMS 2 张表），少量数据准确性 |
-| edge-02 | 查询应用表中所有由埃森哲维护的应用 | 非主流属性筛选，返回 7 个应用 |
-| edge-03 | 帮我查一下所有应用中，哪些表名是空的（没有中文名称） | 数据质量检查，空值/缺失值查询 |
-| edge-04 | 列出所有应用及其表数量，按表数量从多到少排序 | 聚合+排序，来源：对话样例 agent 输出模式 |
+| edge-01 | 外服内部机构管理系统有几个表 | 最小应用（IOMS 2 张表） |
+| edge-02 | 查询所有由埃森哲维护的应用 | 非主流属性筛选，返回 7 个应用 |
+| edge-03 | 哪些表名是空的（没有中文名称） | 数据质量检查 |
+| edge-04 | 列出所有应用及其表数量，按表数量从多到少排序 | 聚合 + 排序 |
 
 ---
 
 ## 3. 确定性评分检查（基于 trace/产物）
 
-运行 skill 后，从对话 trace 中提取以下信号进行自动评分：
+### 3.1 路由评分
 
 ```python
-# 评分脚本伪代码
-def score_run(trace: list[Event]) -> dict:
+def score_routing(trace: list[Event], expected_skill: str) -> dict:
+    """评分路由决策"""
+    scores = {}
+
+    # O-5: 技能正确路由
+    invoked_skills = [e for e in trace if e.type == "skill_invoked"]
+    if invoked_skills:
+        actual_skill = invoked_skills[0].skill_name
+        scores["O-5"] = 1 if actual_skill == expected_skill else 0
+    else:
+        scores["O-5"] = 0
+
+    # E-5: 路由决策快速
+    routing_events = [e for e in trace if e.type == "routing_decision"]
+    if len(routing_events) == 1:
+        scores["E-5"] = 1
+    elif len(routing_events) <= 2:
+        scores["E-5"] = 0.5
+    else:
+        scores["E-5"] = 0
+
+    return scores
+```
+
+### 3.2 元数据查询评分
+
+```python
+def score_metadata_query(trace: list[Event]) -> dict:
+    """评分元数据查询过程"""
     scores = {}
 
     # P-1: 首次行动读取 schema.md
-    first_read = next(e for e in trace if e.type == "tool_call" and e.tool in ("Read", "Grep", "Bash"))
-    scores["P-1"] = 1 if "schema.md" in first_read.target else 0
+    first_read = next(
+        (e for e in trace if e.type == "tool_call" and e.tool in ("Read", "Grep")),
+        None
+    )
+    scores["P-1"] = 1 if first_read and "schema.md" in first_read.target else 0
 
-    # P-2: 优先使用 govio-cli query
-    query_calls = [e for e in trace if "govio-cli query" in e.target or "govio-query" in e.target]
+    # P-2: 使用 govio-cli query
+    query_calls = [e for e in trace if "govio-cli query" in e.target]
     python_calls = [e for e in trace if "python -c" in e.target and "govio" in e.target]
     if query_calls:
         scores["P-2"] = 1
@@ -130,17 +198,13 @@ def score_run(trace: list[Event]) -> dict:
     else:
         scores["P-2"] = 0
 
-    # P-3: Grep names/ 获取标准名称
-    names_grep = [e for e in trace if e.tool == "Grep" and "names/" in getattr(e, "target", "")]
+    # P-3: Grep names/
+    names_grep = [e for e in trace if e.tool == "Grep" and "names/" in e.target]
     scores["P-3"] = 1 if names_grep else 0
-
-    # P-4: 查询结果 ≤ 300 行
-    outputs = [e for e in trace if e.type == "tool_result"]
-    scores["P-4"] = 1 if all(len(e.content.splitlines()) <= 300 for e in outputs) else 0
 
     # P-5: Col 节点使用 column_name
     cypher_or_code = " ".join(e.target for e in trace if e.type == "tool_call")
-    scores["P-5"] = 0 if "Col" in cypher_or_code and "c.name" in cypher_or_code and "column_name" not in cypher_or_code else 1
+    scores["P-5"] = 0 if "c.name" in cypher_or_code and "column_name" not in cypher_or_code else 1
 
     # S-1: Cypher 双引号
     if any("MATCH" in e.target for e in trace):
@@ -152,12 +216,53 @@ def score_run(trace: list[Event]) -> dict:
         for e in trace if "MATCH" in e.target and e.tool == "Bash"
     ) else 0
 
+    return scores
+```
+
+### 3.3 指标问数评分
+
+```python
+def score_metrics_query(trace: list[Event]) -> dict:
+    """评分指标问数过程"""
+    scores = {}
+
+    # P-6: 读取 metrics_index.md
+    metrics_index_reads = [e for e in trace if "metrics_index.md" in e.target]
+    scores["P-6"] = 1 if metrics_index_reads else 0
+
+    # P-7: 使用 sql_builder.py
+    sql_builder_calls = [e for e in trace if "sql_builder" in e.target]
+    scores["P-7"] = 1 if sql_builder_calls else 0
+
+    # P-8: 使用 govio-cli observe load
+    load_calls = [e for e in trace if "govio-cli observe load" in e.target]
+    scores["P-8"] = 1 if load_calls else 0
+
+    # S-5: 结果包含单位和时间范围
+    # 需要人工检查输出
+
+    return scores
+```
+
+### 3.4 通用评分
+
+```python
+def score_common(trace: list[Event]) -> dict:
+    """通用评分项"""
+    scores = {}
+
     # E-1: schema.md 读取次数
-    schema_reads = sum(1 for e in trace if "schema.md" in getattr(e, "target", ""))
+    schema_reads = sum(1 for e in trace if "schema.md" in e.target)
     scores["E-1"] = {1: 1, 2: 0.5}.get(schema_reads, 0)
 
+    # E-2: 无关命令
+    relevant_tools = {"Read", "Grep", "Glob", "Bash"}
+    all_commands = [e for e in trace if e.type == "tool_call"]
+    irrelevant = [e for e in all_commands if e.tool not in relevant_tools]
+    scores["E-2"] = 1 if len(irrelevant) == 0 else (0.5 if len(irrelevant) <= 2 else 0)
+
     # E-4: 未不必要读取 SKILL.md / reference-*.md
-    ref_reads = sum(1 for e in trace if any(x in getattr(e, "target", "") for x in ("SKILL.md", "reference-")))
+    ref_reads = sum(1 for e in trace if any(x in e.target for x in ("SKILL.md", "reference-")))
     scores["E-4"] = 0 if ref_reads > 0 else 1
 
     return scores
@@ -165,9 +270,16 @@ def score_run(trace: list[Event]) -> dict:
 
 ---
 
-## 4. 评分标准（Rubric）——确定性规则难以量化的质量维度
+## 4. 评分标准（Rubric）
 
-### 4.1 回答质量评分
+### 4.1 路由质量评分
+
+| 维度 | 5 分 | 3 分 | 1 分 |
+|------|------|------|------|
+| **路由准确性** | 直接路由到正确子技能 | 询问后路由到正确技能 | 路由到错误技能 |
+| **路由效率** | 无犹豫，直接决策 | 1 次确认后决策 | 多次犹豫或错误路由 |
+
+### 4.2 元数据查询质量评分
 
 | 维度 | 5 分 | 3 分 | 1 分 |
 |------|------|------|------|
@@ -175,30 +287,131 @@ def score_run(trace: list[Event]) -> dict:
 | **完整性** | 包含所有相关信息，无遗漏 | 覆盖主要信息，少量次要遗漏 | 遗漏关键信息 |
 | **可操作性** | 回答可直接用于下一步工作 | 需要少量补充查询 | 需要大量返工 |
 
-### 4.2 SQL 生成质量评分
+### 4.3 指标问数质量评分
 
 | 维度 | 5 分 | 3 分 | 1 分 |
 |------|------|------|------|
-| **语法正确性** | 可直接执行 | 小修可执行 | 语法错误 |
-| **语义匹配** | 完全匹配需求 | 基本匹配但字段/条件偏差 | 与需求不符 |
-| **表关联合理性** | 基于图谱中 RELATES_TO 关系 | 合理推断但未引用图谱关系 | 凭空猜测关联 |
-
-### 4.3 表字段比较质量评分
-
-| 维度 | 5 分 | 3 分 | 1 分 |
-|------|------|------|------|
-| **差异识别** | 列出所有字段级差异（名称、类型、长度） | 列出主要差异，遗漏次要属性 | 仅列出表名差异 |
-| **呈现方式** | 对比表格，清晰标注差异类型 | 文字描述，可理解 | 原始数据倾倒 |
-| **关联字段分析** | 指出关联字段及其类型匹配情况 | 提到关联字段但未分析 | 未分析关联字段 |
+| **数据准确性** | 指标值与预期完全一致 | 偏差 < 5% | 偏差 > 5% |
+| **维度正确性** | 分组/过滤维度完全正确 | 维度基本正确，有遗漏 | 维度错误 |
+| **SQL 质量** | 可直接执行，语义正确 | 小修可执行 | 语法错误或语义不符 |
+| **结果呈现** | 包含单位、时间范围、格式清晰 | 包含部分元信息 | 缺失元信息或格式混乱 |
 
 ---
 
 ## 5. 按提示词的期望结果与评分映射
 
-### explicit-01: 使用 $govio 技能查询元数据，列出所有应用
+### route-01: 查询所有应用列表
+
+**期望路由**：`govio-metadata`
 
 **期望过程**：
-1. 读取 `schema.md` → 2. 使用 `govio-cli query` 执行查询 → 3. 格式化输出
+1. 主控识别为元数据查询
+2. 路由到 `govio-metadata`
+3. 读取 `schema.md`
+4. 使用 `govio-cli query` 查询 Application 节点
+
+**期望输出**：15 个应用列表
+
+**自动评分项**：O-5=1, P-1=1, P-2=1, E-5=1
+
+**Rubric 项**：路由准确性 5, 路由效率 5
+
+---
+
+### route-02: 本月账单收入是多少
+
+**期望路由**：`govio-metrics`
+
+**期望过程**：
+1. 主控识别为指标问数
+2. 路由到 `govio-metrics`
+3. 读取 `metrics_index.md`
+4. 查询 `bill_income_amt` 指标元数据
+5. 使用 `sql_builder.py` 组装 SQL
+6. 使用 `govio-cli observe load` 执行查询
+
+**期望输出**：本月账单收入数值，单位：万元
+
+**自动评分项**：O-5=1, P-6=1, P-7=1, P-8=1
+
+**Rubric 项**：数据准确性 5, 结果呈现 5
+
+---
+
+### route-03: 按部门统计签约覆盖率
+
+**期望路由**：`govio-metrics`
+
+**期望过程**：
+1. 主控识别为指标问数 + 维度分析
+2. 路由到 `govio-metrics`
+3. 读取 `metrics_index.md`，确认 `book_to_bill` 是派生指标
+4. 查询指标元数据：`signed_amt / bill_income_amt`
+5. 使用 `sql_builder.py` 组装带维度的 SQL
+6. 执行查询
+
+**期望输出**：按 sales_dept 分组的签约覆盖率列表
+
+**自动评分项**：O-5=1, P-6=1, P-7=1, P-8=1, S-5=1
+
+**Rubric 项**：数据准确性 5, 维度正确性 5, 结果呈现 5
+
+---
+
+### route-04: AEP 有哪些表
+
+**期望路由**：`govio-metadata`
+
+**期望过程**：
+1. 主控识别为元数据查询（表结构）
+2. 路由到 `govio-metadata`
+3. 读取 `schema.md`
+4. 使用 `govio-cli query` 查询 AEP 下的 PhysicalTable
+
+**期望输出**：AEP 应用下 50 张表
+
+**自动评分项**：O-5=1, P-1=1, P-2=1
+
+**Rubric 项**：路由准确性 5, 准确性 5
+
+---
+
+### route-05: 签署覆盖率怎么计算的
+
+**期望路由**：`govio-metrics`
+
+**期望过程**：
+1. 主控识别为指标语义查询
+2. 路由到 `govio-metrics`
+3. 查询 `book_to_bill` 指标元数据
+4. 返回公式：`signed_amt / bill_income_amt`
+
+**期望输出**：签约覆盖率 = 当月销售签约额 / 当月账单收入
+
+**自动评分项**：O-5=1, P-6=1
+
+**Rubric 项**：路由准确性 5, 准确性 5
+
+---
+
+### route-06: 帮我比对两个表的数据差异
+
+**期望路由**：不触发 govio，应触发 `govio-observe`
+
+**期望结果**：不调用 `govio-cli query` 或 `govio-cli observe load`
+
+**自动评分项**：O-5=1（未触发 govio）
+
+**Rubric 项**：路由准确性 5
+
+---
+
+### meta-explicit-01: 使用 $govio-metadata 查询所有应用
+
+**期望过程**：
+1. 读取 `schema.md`
+2. 使用 `govio-cli query` 执行查询
+3. 格式化输出
 
 **期望输出**：15 个应用列表，含 PDM/IHRM/IHRO/HPM/PO/PAYPRO/SQC/AEP/SSOP/IOMS/SPRT/NHRS/CDPS/ITS/BILL
 
@@ -208,11 +421,11 @@ def score_run(trace: list[Event]) -> dict:
 
 ---
 
-### explicit-02: 用 $govio 查询会计引擎应用有哪些表
+### meta-explicit-02: 用 $govio-metadata 查询会计引擎有哪些表
 
 **期望过程**：读取 schema.md → govio-cli query 查询 AEP→PhysicalTable → 格式化输出
 
-**期望输出**：AEP 应用下 50 张表，包括 AEP_ASSACT_DIM(辅助核算维度), AEP_BUSINESS_UNIT_MAPPING(事业部映射) 等
+**期望输出**：AEP 应用下 50 张表
 
 **自动评分项**：P-1=1, P-2=1, P-4=1, S-3=1
 
@@ -220,13 +433,13 @@ def score_run(trace: list[Event]) -> dict:
 
 ---
 
-### explicit-03: 使用 $govio 查询 ITS_USER.T_INVOICE 表有哪些字段
+### meta-explicit-03: 使用 $govio-metadata 查询 T_INVOICE 表字段
 
 **期望过程**：读取 schema.md → Grep names/ 确认标准名称 → govio-cli query 查询 PhysicalTable→Col → 使用 column_name 属性
 
 **关键陷阱**：Col 节点必须使用 `column_name` 而非 `name`（P-5）
 
-**期望输出**：T_INVOICE 表字段列表，含 INV_NO, SELLER_TAX_NO, BUYER_NAME, TAX_AMOUNT, TAX_INCLUDE_AMOUNT 等
+**期望输出**：T_INVOICE 表字段列表
 
 **自动评分项**：P-1=1, P-3=1, P-5=1, S-1=1, S-2=1
 
@@ -234,21 +447,19 @@ def score_run(trace: list[Event]) -> dict:
 
 ---
 
-### implicit-01: 查询元数据，列出所有应用
+### meta-implicit-01: 查询元数据，列出所有应用
 
-**核心评估点**：不提技能名时 skill 是否被正确触发（O-5）。来源：真实对话样例。
+**核心评估点**：不提技能名时 skill 是否被正确路由（O-5）
 
-**触发后评分**：与 explicit-01 一致。
+**触发后评分**：与 meta-explicit-01 一致
 
 ---
 
-### implicit-02: 查询元数据，列出金额相关的字段
+### meta-implicit-02: 查询金额相关的字段
 
-**期望过程**：读取 schema.md → govio-cli query 查询 column_name 含 Pay/Amount/Tax/Rate/Price/Fee 等关键词的 Col 节点
+**期望过程**：读取 schema.md → govio-cli query 查询 column_name 含金额关键词的 Col 节点
 
-**核心评估点**：O-5 触发 + 关键词匹配能力。来源：真实对话样例。
-
-**期望输出**：金额相关字段，涉及 14 个应用（SPRT 无金额字段），IHRO(784)/SSOP(768) 居多
+**核心评估点**：O-5 路由 + 关键词匹配能力
 
 **自动评分项**：P-1=1, P-2=1, P-4=1, O-5=1
 
@@ -256,13 +467,13 @@ def score_run(trace: list[Event]) -> dict:
 
 ---
 
-### implicit-03: 我想知道报价单中心系统里有哪些数据表
+### meta-implicit-03: 报价单中心系统里有哪些数据表
 
 **期望过程**：Grep names/ 匹配"报价单中心"→ 确认对应 SQC → 查询 USE 边
 
-**核心评估点**：中文应用名隐式匹配（P-3），skill 触发（O-5）
+**核心评估点**：中文应用名隐式匹配（P-3），skill 路由（O-5）
 
-**期望输出**：SQC 下 29 张表，含 ofr_comb_quotation(组合报价单表), ofr_comb_quotation_dtl(组合报价单明细表) 等
+**期望输出**：SQC 下 29 张表
 
 **自动评分项**：P-3=1, P-2=1, O-5=1
 
@@ -270,9 +481,9 @@ def score_run(trace: list[Event]) -> dict:
 
 ---
 
-### implicit-04: 财务管理领域的应用有哪些？
+### meta-implicit-04: 财务管理领域的应用有哪些
 
-**期望过程**：读取 schema.md → govio-cli query 按 business_domain 筛选 Application 节点
+**期望过程**：读取 schema.md → govio-cli query 按 business_domain 筛选
 
 **期望输出**：3 个应用：AEP(会计引擎), ITS(发票管理), CDPS(收付费管理)
 
@@ -282,13 +493,11 @@ def score_run(trace: list[Event]) -> dict:
 
 ---
 
-### implicit-05: 外包雇员管理系统和外包项目管理系统各自用了多少张表
+### meta-implicit-05: 外包雇员管理系统和外包项目管理系统各自用了多少张表
 
-**期望过程**：Grep names/ 确认中文名对应 IHRM/IHRO → 分别查询表数量
+**期望过程**：Grep names/ 确认 IHRM/IHRO → 分别查询表数量
 
 **期望输出**：IHRM 有 67 张表，IHRO 有 403 张表
-
-**关键陷阱**：是否合并为一次查询（E-3）
 
 **自动评分项**：P-3=1, P-2=1, E-3=1, O-5=1
 
@@ -296,113 +505,178 @@ def score_run(trace: list[Event]) -> dict:
 
 ---
 
-### contextual-01: 对接发票管理系统的开票接口，先了解 T_INVOICE 字段结构
+### metrics-explicit-01: 使用 $govio-metrics 查询本月账单收入
 
-**期望过程**：读取 schema.md → Grep names/ 确认"发票管理"= ITS → 查询 T_INVOICE 字段
+**期望过程**：
+1. 读取 `metrics_index.md`，确认 `bill_income_amt` 是原子指标
+2. 使用 `govio-cli query` 查询指标元数据：来源表 = `dws.income_bill_monthly`
+3. 使用 `sql_builder.py` 组装 SQL
+4. 使用 `govio-cli observe load` 执行查询
 
-**核心评估点**：从业务上下文提取元数据查询需求，O-5 触发
+**期望输出**：本月账单收入数值，单位：万元，时间范围：2026-05
 
-**期望输出**：T_INVOICE 表字段，含 INV_NO(发票号码), STATUS(开票状态), TAX_AMOUNT(税额) 等
+**自动评分项**：P-6=1, P-7=1, P-8=1, O-3=1, S-5=1
 
-**自动评分项**：P-1=1, P-3=1, P-5=1, O-5=1
-
-**Rubric 项**：准确性 5, 可操作性 5
-
----
-
-### contextual-02: 梳理外服内部机构管理系统的数据资产
-
-**期望过程**：Grep names/ 确认 IOMS → 查询 USE + HAS_COLUMN → 列出表及字段
-
-**期望输出**：IOMS 仅 2 张表：fsg_company_info(公司基本信息表), fsg_company_shareholder(公司股东信息表) 及其字段
-
-**自动评分项**：P-3=1, P-2=1, P-4=1, O-5=1
-
-**Rubric 项**：准确性 5, 完整性 5
+**Rubric 项**：数据准确性 5, 结果呈现 5
 
 ---
 
-### contextual-03: 薪税系统里有没有跟银行相关的表
+### metrics-explicit-02: 用 $govio-metrics 按销售单元统计签约覆盖率
 
-**期望过程**：Grep names/ 确认 PAYPRO → 查询 PAYPRO 下表名/字段含 BANK 的 PhysicalTable
+**期望过程**：
+1. 读取 `metrics_index.md`，确认 `book_to_bill` 是派生指标
+2. 查询指标元数据：公式 = `signed_amt / bill_income_amt`
+3. 使用 `sql_builder.py` 组装带维度的 SQL
+4. 执行查询
 
-**核心评估点**：关键词筛选 + 应用范围限定
+**期望输出**：按 sales_unit 分组的签约覆盖率列表
 
-**自动评分项**：P-3=1, P-2=1, O-5=1
+**自动评分项**：P-6=1, P-7=1, P-8=1, O-3=1, S-5=1
 
-**Rubric 项**：准确性 5, 完整性 3+
-
----
-
-### contextual-04: 比较 CDPS 和 ITS 有没有名称相同的数据表
-
-**期望过程**：读取 schema.md → 查询两个应用下的 PhysicalTable → 对比 table_name 集合
-
-**关键陷阱**：表字段比较核心能力 O-3，是否一次查询完成（E-3）
-
-**期望输出**：共有的表如 FSG_DICT(字典表)
-
-**自动评分项**：P-5=1, S-3=1, E-3=1, O-3=1
-
-**Rubric 项**：差异识别 5, 呈现方式 5, 关联字段分析 3+
+**Rubric 项**：数据准确性 5, 维度正确性 5, 结果呈现 5
 
 ---
 
-### contextual-05: BILL 应用中表名包含 FEE 或 SRV 的字段
+### metrics-explicit-03: 使用 $govio-metrics 查询 YTD 账单收入前 5 的部门
 
-**期望过程**：Grep names/ 确认 BILL → 查询 HAS_COLUMN 下 column_name 含 FEE/SRV 的 Col 节点
+**期望过程**：
+1. 读取 `metrics_index.md`，确认 `bill_income_amt_ytd` 是原子指标
+2. 使用 `sql_builder.py` 组装 SQL，带 `order_by` 和 `limit=5`
+3. 执行查询
 
-**核心评估点**：数据标准治理场景 + 关键词筛选，P-5 验证 column_name
+**期望输出**：按 bill_income_amt_ytd 降序排列的前 5 个部门
 
-**期望输出**：如 BIL_SRV_FEE_RCV_DTL 表中的服务费相关字段
+**自动评分项**：P-6=1, P-7=1, P-8=1, O-3=1
 
-**自动评分项**：P-3=1, P-5=1, P-2=1
-
-**Rubric 项**：准确性 5, 完整性 3+
-
----
-
-### sql-01: 生成查询财务管理应用的 SQL
-
-**期望过程**：读取 schema.md → 确认 Application 节点属性 → 生成 Cypher
-
-**期望输出**：`MATCH (app:Application {business_domain: "财务管理"}) RETURN app.name, app.app_name_en`
-
-**关键陷阱**：S-1 双引号包裹，S-2 MATCH 开头
-
-**自动评分项**：O-2=1, S-1=1, S-2=1, S-3=1
-
-**Rubric 项**：语法正确性 5, 语义匹配 5, 表关联合理性 3+
+**Rubric 项**：数据准确性 5, 维度正确性 5
 
 ---
 
-### sql-02: 找出哪些应用使用了超过 100 张表
+### metrics-explicit-04: 用 $govio-metrics 查询签约额的月度趋势
 
-**期望过程**：读取 schema.md → 生成含 count + HAVING 的聚合 Cypher
+**期望过程**：
+1. 读取 `metrics_index.md`，确认 `signed_amt` 是原子指标
+2. 使用 `sql_builder.py` 组装 SQL，维度 = `report_ym`
+3. 执行查询
 
-**期望输出**：PDM(123), IHRO(403), SSOP(383)
+**期望输出**：按 report_ym 分组的签约额列表
 
-**自动评分项**：O-2=1, S-1=1, S-2=1, E-3=1
+**自动评分项**：P-6=1, P-7=1, P-8=1, O-3=1, S-5=1
 
-**Rubric 项**：语法正确性 5, 语义匹配 5
-
----
-
-### sql-03: 查找 SSOP 中字段最多的前 5 张表
-
-**期望过程**：读取 schema.md → 生成按 HAS_COLUMN 边计数排序的 Cypher，LIMIT 5
-
-**期望输出**：T_SI_EMPLOYEE_EXT_LOG(94), T_SI_EMPLOYEE_EXT(92), T_FILE_EXCEL_DATA_DETAIL(91) 等
-
-**自动评分项**：O-2=1, S-1=1, S-2=1, S-3=1
-
-**Rubric 项**：语法正确性 5, 语义匹配 5
+**Rubric 项**：数据准确性 5, 维度正确性 5, 结果呈现 5
 
 ---
 
-### negative-01 ~ negative-03: 负向控制
+### metrics-implicit-01: 本月账单收入是多少
 
-**期望结果**：不应触发 govio skill。
+**核心评估点**：不提技能名时是否正确路由到 `govio-metrics`（O-5）
+
+**触发后评分**：与 metrics-explicit-01 一致
+
+---
+
+### metrics-implicit-02: 按部门统计当月签约额
+
+**核心评估点**：O-5 路由 + 维度分组
+
+**期望输出**：按 sales_dept 分组的 signed_amt 列表
+
+**自动评分项**：O-5=1, P-6=1, P-7=1, P-8=1
+
+**Rubric 项**：数据准确性 5, 维度正确性 5
+
+---
+
+### metrics-implicit-03: 华东区的签约覆盖率是多少
+
+**核心评估点**：O-5 路由 + 维度过滤
+
+**期望输出**：华东区的 book_to_bill 数值
+
+**自动评分项**：O-5=1, P-6=1, P-7=1, P-8=1
+
+**Rubric 项**：数据准确性 5, 维度正确性 5
+
+---
+
+### metrics-implicit-04: 最近 6 个月的账单收入趋势
+
+**核心评估点**：O-5 路由 + 时间范围处理
+
+**期望输出**：最近 6 个月的 bill_income_amt 趋势
+
+**自动评分项**：O-5=1, P-6=1, P-7=1, P-8=1, S-5=1
+
+**Rubric 项**：数据准确性 5, 维度正确性 5, 结果呈现 5
+
+---
+
+### metrics-implicit-05: 签约覆盖率这个指标怎么算的
+
+**核心评估点**：O-5 路由 + 指标语义查询
+
+**期望输出**：签约覆盖率 = 当月销售签约额 / 当月账单收入
+
+**自动评分项**：O-5=1, P-6=1
+
+**Rubric 项**：准确性 5
+
+---
+
+### metrics-derived-01: 计算本月签约覆盖率
+
+**期望过程**：
+1. 读取 `metrics_index.md`，确认 `book_to_bill` 是派生指标，公式 = `signed_amt / bill_income_amt`
+2. 查询两个原子指标的元数据
+3. 使用 `sql_builder.py` 组装派生指标 SQL
+4. 执行查询
+
+**关键陷阱**：派生指标 SQL 组装（P-7），需要正确处理 CTE
+
+**期望输出**：本月签约覆盖率数值
+
+**自动评分项**：P-6=1, P-7=1, P-8=1, O-3=1
+
+**Rubric 项**：数据准确性 5, SQL 质量 5
+
+---
+
+### metrics-derived-02: 查询存量消耗额
+
+**期望过程**：
+1. 读取 `metrics_index.md`，确认 `burndown_amt` 是派生指标，公式 = `forecast_income_amt - risk_amt`
+2. 使用 `sql_builder.py` 组装 SQL
+3. 执行查询
+
+**期望输出**：存量消耗额数值
+
+**自动评分项**：P-6=1, P-7=1, P-8=1, O-3=1
+
+**Rubric 项**：数据准确性 5, SQL 质量 5
+
+---
+
+### metrics-derived-03: 账单收入全年预测是多少
+
+**期望过程**：
+1. 读取 `metrics_index.md`，确认 `income_forecast_annual` 是派生指标
+2. 公式 = `bill_income_amt_ytd + burndown_amt + leads_forecast_amt + opp_forecast_amt`
+3. 使用 `sql_builder.py` 组装复合派生指标 SQL
+4. 执行查询
+
+**关键陷阱**：复合派生指标可能需要多层 CTE
+
+**期望输出**：账单收入全年预测数值
+
+**自动评分项**：P-6=1, P-7=1, P-8=1, O-3=1
+
+**Rubric 项**：数据准确性 5, SQL 质量 5
+
+---
+
+### negative-01 ~ negative-04: 负向控制
+
+**期望结果**：不应触发任何 govio 技能。
 
 | 编号 | 检查项 | 量化 |
 |------|--------|------|
@@ -414,7 +688,7 @@ def score_run(trace: list[Event]) -> dict:
 
 ### edge-01: IOMS 有几个表
 
-**期望输出**：2 张表（最小应用），边界情况验证少量数据返回的准确性
+**期望输出**：2 张表（最小应用）
 
 **自动评分项**：P-1=1, P-2=1, O-1=1
 
@@ -423,8 +697,6 @@ def score_run(trace: list[Event]) -> dict:
 ---
 
 ### edge-02: 由埃森哲维护的应用
-
-**期望过程**：读取 schema.md → govio-cli query 按 external_vendor 筛选
 
 **期望输出**：7 个应用：PDM, NHRS, AEP, HPM, SQC, SPRT, BILL
 
@@ -438,8 +710,6 @@ def score_run(trace: list[Event]) -> dict:
 
 **期望过程**：读取 schema.md → 查询 PhysicalTable 中 name 为空或缺失的节点
 
-**核心评估点**：数据质量检查场景，空值/缺失值查询
-
 **自动评分项**：P-1=1, P-2=1, O-1=1
 
 **Rubric 项**：准确性 5, 完整性 3+
@@ -450,9 +720,7 @@ def score_run(trace: list[Event]) -> dict:
 
 **期望过程**：读取 schema.md → govio-cli query 聚合查询 → 降序输出
 
-**期望输出**：IHRO(403) > SSOP(383) > PDM(123) > IHRM(67) > AEP(50) > PAYPRO(49) > CDPS(46) > PO(44) > HPM(62) > NHRS(58) > SQC(29) > SPRT(28) > BILL(35) > ITS(9) > IOMS(2)
-
-**来源**：对话样例中 agent 的实际输出模式
+**期望输出**：IHRO(403) > SSOP(383) > PDM(123) > IHRM(67) > HPM(62) > NHRS(58) > AEP(50) > PAYPRO(49) > CDPS(46) > PO(44) > BILL(35) > SQC(29) > SPRT(28) > ITS(9) > IOMS(2)
 
 **自动评分项**：P-2=1, S-2=1, S-3=1, E-3=1
 
@@ -467,16 +735,16 @@ def score_run(trace: list[Event]) -> dict:
 
 自动评分项权重：
   结果目标 (O-1~O-5): 每项 1 分，共 5 分
-  过程目标 (P-1~P-5): 每项 1 分，共 5 分
-  风格目标 (S-1~S-4): 每项 1 分，共 4 分
-  效率目标 (E-1~E-4): 每项 1 分，共 4 分
+  过程目标 (P-1~P-8): 每项 1 分，共 8 分
+  风格目标 (S-1~S-5): 每项 1 分，共 5 分
+  效率目标 (E-1~E-5): 每项 1 分，共 5 分
   负向控制 (N-1~N-3): 每项 1 分，共 3 分
-  → 自动评分满分 = 21 分
+  → 自动评分满分 = 26 分
 
 Rubric 评分（每个提示词单独评）：
-  回答质量 3 维度 × 5 分 = 15 分（元数据查询类）
-  SQL 质量 3 维度 × 5 分 = 15 分（sql-01/02/03）
-  比较质量 3 维度 × 5 分 = 15 分（contextual-04/05）
+  路由质量 2 维度 × 5 分 = 10 分（route-*）
+  元数据查询 3 维度 × 5 分 = 15 分（meta-*）
+  指标问数 4 维度 × 5 分 = 20 分（metrics-*）
   → 按 5 分制归一化
 ```
 
@@ -486,7 +754,9 @@ Rubric 评分（每个提示词单独评）：
 
 - [ ] 命令计数预算：单次交互工具调用 ≤ 8 次
 - [ ] Token 预算监控：单次交互总 token ≤ 4000
-- [ ] 构建检查：`govio-cli query` 命令是否能成功执行
+- [ ] 构建检查：`govio-cli query` 和 `govio-cli observe load` 命令是否能成功执行
 - [ ] 运行时冒烟：`govio-cli query --code "print(g.schema)"` 退出码 = 0
 - [ ] 权限回归：skill 仅使用 `allowed-tools: Read, Grep, Glob`，未尝试写入或执行其他命令
 - [ ] 后端切换测试：修改 `~/.govio/config.yaml` 中的 `backend` 字段，验证查询逻辑自动适配
+- [ ] CTE 组合测试：多次 `govio-cli observe load` 后通过 CTE 引用组合查询
+- [ ] 派生指标覆盖率：所有派生指标（book_to_bill, burndown_amt, income_forecast_annual, total_income_forecast_amt, total_sales_forecast_ytd）均有测试用例
