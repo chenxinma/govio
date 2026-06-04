@@ -36,41 +36,58 @@ description: 基于指标的问数能力。当用户询问指标数据（如"本
 | 原子指标 | 直接从来源表获取 | `SELECT metric_col FROM source_table` |
 | 派生指标 | 由原子指标计算得出 | 通过 CTE 组合多个原子指标后计算 |
 
+## 通用数据定义
+
+### 时间字段
+
+- `report_ym`（报告年月）：数据生成的年月，格式 `YYYYMM`（如 `202605`）
+- **默认行为**：用户未指定时间时，使用**最新可用月份**的数据。通过 Step 3.5 探查确认最新周期
+- 部分表的时间列可能命名为 `ym`，以 Step 2 查到的 `time_column` 或实际表结构为准
+
+### 维度字段
+
+| 字段 | 含义 | 示例 |
+|------|------|------|
+| `sales_unit` | 事业部 | 华东区、华北区 |
+| `sales_dept` | 业务中心 | 外滩业务中心、南京路业务中心 |
+| `biz_mode` | 业务模式 | — |
+| `product_catalog` | 产品目录 | — |
+| `customr_group` | 客户组合 | — |
+
 ## Step 2: 查询指标元数据
+
+使用 `govio-cli query -c` 查询图数据库（**必须带 `-c` 标志**）。
+
+> **歧义处理**：当用户表述与指标名称不完全对应时（如"销售额"对应"账单收入"还是"签约额"），**必须停下来向用户列出候选指标及其定义，让用户确认后再继续**。不要自行猜测语义。
 
 ### 查询指标基本信息
 
-```cypher
-MATCH (m:Metric {code: "bill_income_amt"})
-RETURN m.code, m.name, m.type, m.formula, m.source_layer, m.unit
+```bash
+govio-cli query -c 'MATCH (m:Metric {code: "bill_income_amt"}) RETURN m.code, m.name, m.type, m.formula, m.source_layer, m.unit'
 ```
 
 ### 查询指标来源表
 
-```cypher
-MATCH (m:Metric {code: "bill_income_amt"})-[:USES_TABLE]->(t:PhysicalTable)
-RETURN t.full_table_name, t.name
+```bash
+govio-cli query -c 'MATCH (m:Metric {code: "bill_income_amt"})-[:USES_TABLE]->(t:PhysicalTable) RETURN t.full_table_name, t.name'
 ```
 
 ### 查询指标维度
 
-```cypher
-MATCH (m:Metric {code: "bill_income_amt"})-[d:DIMENSION_USED]->(dim:Dimension)
-RETURN dim.code, dim.name, d.usage_type
+```bash
+govio-cli query -c 'MATCH (m:Metric {code: "bill_income_amt"})-[d:DIMENSION_USED]->(dim:Dimension) RETURN dim.code, dim.name, d.usage_type'
 ```
 
 ### 查询指标引用列
 
-```cypher
-MATCH (m:Metric {code: "bill_income_amt"})-[:REFERS_COLUMN]->(c:Col)
-RETURN c.column_name, c.data_type
+```bash
+govio-cli query -c 'MATCH (m:Metric {code: "bill_income_amt"})-[:REFERS_COLUMN]->(c:Col) RETURN c.column_name, c.data_type'
 ```
 
 ### 查询派生指标血缘
 
-```cypher
-MATCH (m:Metric {code: "book_to_bill"})-[:DERIVED_FROM]->(up:Metric)
-RETURN up.code, up.name, up.type
+```bash
+govio-cli query -c 'MATCH (m:Metric {code: "book_to_bill"})-[:DERIVED_FROM]->(up:Metric) RETURN up.code, up.name, up.type'
 ```
 
 ## Step 3: 组装 SQL
@@ -137,8 +154,23 @@ uv run python scripts/sql_builder.py query.json -o output.sql
 | `name` | str | 是 | 指标名称 |
 | `type` | str | 是 | `"原子"` 或 `"派生"` |
 | `source_table` | str | 原子必填 | 来源表，如 `"dws.income_bill_monthly"` |
+| `actual_column` | str | 否 | 表中实际列名（来自 Step 2 的 `REFERS_COLUMN`），与 `code` 不同时**必须填写** |
 | `formula` | str | 派生必填 | 计算公式，如 `"signed_amt / bill_income_amt"` |
 | `time_column` | str | 否 | 时间字段名，默认 `"report_ym"` |
+
+## Step 3.5: 确认数据范围
+
+当 filters 包含时间条件（`report_ym`、`ym` 等）且无法从 `metrics_index.md` 确认最新周期时，先探查数据范围：
+
+```bash
+govio-cli observe load --name range_check --datasource <ds> --sql "SELECT DISTINCT {time_column} FROM {source_table} ORDER BY {time_column} DESC LIMIT 10" -o /tmp/range.json
+```
+
+**必须带 `-o` 输出到文件**，否则只能拿到行数/列数，看不到实际数据值。
+
+确认最新可用周期后再组装最终 SQL。**不要假设当前月份有数据。**
+
+> **未来月份注意**：如果最新周期超过当前月份（如当前 6 月但数据到 12 月），应向用户说明该数据为预测/计划值，并确认是否使用。
 
 ## Step 4: 执行查询
 
@@ -152,9 +184,14 @@ govio-cli observe load --name <df_name> --datasource <ds_name> --sql "<sql>" -o 
 
 # 前置辅助数据集加载（仅持久化，不输出文件）
 govio-cli observe load --name <df_name> --datasource <ds_name> --sql "<sql>"
+
+# 汇总统计数据，复用之前加载的dataframe进行加工，生成新的datafame
+govio-cli observe load --name <df_name> --memory --sql "<sql>"
 ```
 
 最终结果的加载使用 `-o` 参数输出数据内容到 JSON 文件；前置的辅助数据集（如 CTE 场景中的中间数据）仅加载持久化，不使用 `-o`。
+
+> **DataFrame 机制说明**：`observe load` 将查询结果保存在本地缓存，**不会注册为 DuckDB 表**。可以通过`govio-cli observe load --name <df_name> --memory `对已加载的 DataFrame进行二次加工。如需查看数据，必须使用 `-o` 输出到 JSON 文件后读取。
 
 ### 命名规范
 
@@ -309,3 +346,9 @@ scripts/
 ├── sql_builder.py       # SQL 组装脚本（CLI）
 └── query_example.json   # 查询请求示例
 ```
+
+## 输出纪律
+
+- 中间步骤**不要输出思考过程**，直接执行工具调用
+- 只在最终结果时输出格式化的表格
+- 出错时简要说明原因和修正动作，不要展开分析推理

@@ -13,7 +13,7 @@ from .config import ConfigManager
 from ..observe_data.core.observe_store import ObserveStore
 from ..observe_data.core.database import DatabaseManager
 from ..observe_data.tools.list_dataframes import list_dataframes
-from ..observe_data.tools.load_dataframe import load_dataframe
+from ..observe_data.tools.load_dataframe import load_dataframe, load_from_memory
 from ..observe_data.tools.release_dataframe import release_dataframe, release_all_dataframes
 from ..observe_data.tools.visualize_relations import visualize_relations
 from ..observe_data.tools.list_datasources import list_datasources
@@ -31,24 +31,40 @@ def get_db_manager(config: dict) -> DatabaseManager:
     return DatabaseManager(ds_configs)
 
 
-def cmd_show_datasource(config: dict) -> None:
+def cmd_show_datasource(config: dict, detail: bool = False) -> None:
     """显示数据源"""
     db_manager = get_db_manager(config)
     result = list_datasources(db_manager)
+    if not detail:
+        result = [ds["name"] for ds in result]
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
-def cmd_load(config: dict, name: str, datasource: str, sql: str, output: str | None = None) -> None:
+def cmd_load(
+    config: dict,
+    name: str,
+    sql: str,
+    datasource: str | None = None,
+    memory: bool = False,
+    output: str | None = None,
+) -> None:
     """加载 DataFrame"""
-    db_manager = get_db_manager(config)
     store = ObserveStore()
-    result = load_dataframe(
-        store=store,
-        db_manager=db_manager,
-        datasource=datasource,
-        name=name,
-        sql=sql,
-    )
+
+    if memory:
+        result = load_from_memory(store=store, name=name, sql=sql)
+    else:
+        if datasource is None:
+            raise Exception("datasource not setted.")
+        
+        db_manager = get_db_manager(config)
+        result = load_dataframe(
+            store=store,
+            db_manager=db_manager,
+            datasource=datasource,
+            name=name,
+            sql=sql,
+        )
 
     if output and result.get("success"):
         df = store.get(name)
@@ -72,7 +88,7 @@ def cmd_release(config: dict, name: str | None, release_all: bool) -> None:
     if release_all:
         result = release_all_dataframes(store=store)
     else:
-        result = release_dataframe(store=store, name=name)
+        result = release_dataframe(store=store, name=name) # pyright:ignore
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -142,12 +158,15 @@ def observe():
     sub = parser.add_subparsers(dest="action", required=True)
 
     # show-datasource
-    sub.add_parser("show-datasource", help="显示已配置的数据源")
+    p = sub.add_parser("show-datasource", help="显示已配置的数据源")
+    p.add_argument("--detail", action="store_true", help="显示数据源的完整信息（默认仅列出名称）")
 
-    # load --name --datasource --sql [-o output]
+    # load --name (--datasource | --memory) --sql [-o output]
     p = sub.add_parser("load", help="加载 DataFrame")
     p.add_argument("--name", required=True, help="DataFrame 名称")
-    p.add_argument("--datasource", required=True, help="数据源名称")
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--datasource", help="数据源名称")
+    src.add_argument("--memory", action="store_true", help="从已加载的 DataFrame 中查询")
     p.add_argument("--sql", required=True, help="查询 SQL")
     p.add_argument("-o", "--output", help="将数据内容输出到 JSON 文件")
 
@@ -183,7 +202,7 @@ def observe():
 
     config = config_manager.load()
 
-    if not config.get("datasources"):
+    if not config.get("datasources") and not getattr(args, "memory", False):
         print(
             "警告: 配置中无 datasources，请先用 onboard 配置数据源",
             file=sys.stderr,
@@ -192,9 +211,16 @@ def observe():
     # 分发子命令
     match args.action:
         case "show-datasource":
-            cmd_show_datasource(config)
+            cmd_show_datasource(config, args.detail)
         case "load":
-            cmd_load(config, args.name, args.datasource, args.sql, getattr(args, "output", None))
+            cmd_load(
+                config,
+                args.name,
+                args.sql,
+                datasource=args.datasource,
+                memory=args.memory,
+                output=getattr(args, "output", None),
+            )
         case "list":
             cmd_list(config)
         case "release":

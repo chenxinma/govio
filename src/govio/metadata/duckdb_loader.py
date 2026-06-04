@@ -25,7 +25,7 @@ class DuckDBLoader(MetadataLoader):
                 SELECT schema_name || '.' || table_name AS full_table_name,
                        schema_name AS "schema",
                        table_name AS table_name,
-                       COALESCE(comment, '') AS "name",
+                       COALESCE(comment, table_name) AS "name",
                        'DUCKDB_TABLE' AS data_entity_type,
                        '' AS database_name
                 FROM duckdb_tables()
@@ -45,7 +45,7 @@ class DuckDBLoader(MetadataLoader):
                 """
                 SELECT c.table_schema || '.' || c.table_name || '.' || c.column_name AS "column",
                        c.column_name AS column_name,
-                       COALESCE(dc.comment, '') AS "name",
+                       COALESCE(dc.comment, c.column_name) AS "name",
                        c.table_schema || '.' || c.table_name AS full_table_name,
                        'DUCKDB_COLUMN' AS data_entity_type,
                        c.data_type AS dtype,

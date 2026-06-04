@@ -20,7 +20,7 @@ class StandardLoader:
                     d2.name  database_name,
                     concat(d.name, ".", t.name) as "full_table_name",
                     c.name "column_name",
-                    c.comment as "name",
+                    IFNULL(c.comment, c.name) as "name",
                     c.data_entity_type,
                     c.type as "dtype",
                     IFNULL(c.length,0) as "size",

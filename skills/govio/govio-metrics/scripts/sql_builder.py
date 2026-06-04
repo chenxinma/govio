@@ -51,7 +51,7 @@ def build_metric_sql(
     """组装指标查询 SQL
 
     Args:
-        metrics: 指标列表，每个指标包含 code, name, type, source_table, formula, time_column
+        metrics: 指标列表，每个指标包含 code, name, type, source_table, formula, time_column, actual_column
         dimensions: 分组维度字段列表，如 ["sales_unit", "sales_dept"]
         filters: 过滤条件，如 {"report_ym": "202605", "sales_unit": "华东区"}
         order_by: 排序字段，如 "metric_value DESC"
@@ -103,8 +103,11 @@ def build_metric_sql(
             # 添加指标字段
             for m in table_metrics:
                 time_col = m.get("time_column", "report_ym")
-                metric_col = m["code"]
-                select_parts.append(f"    {metric_col}")
+                metric_col = m.get("actual_column", m["code"])
+                if dimensions:
+                    select_parts.append(f"    SUM({metric_col}) AS {m['code']}")
+                else:
+                    select_parts.append(f"    {metric_col} AS {m['code']}")
 
             # 构建 WHERE 条件
             where_parts = _build_where_conditions(filters, table_metrics)

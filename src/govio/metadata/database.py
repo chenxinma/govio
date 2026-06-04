@@ -88,7 +88,7 @@ class TDSLoader(MetadataLoader):
             select
                 concat(d.name, ".", t.name, ".", c.name) as "column",
                 c.name as "column_name",
-                c.comment as "name",
+                IFNULL(c.comment, c.name) as "name",
                 concat(d.name, ".", t.name) as "full_table_name",
                 c.data_entity_type,
                 c.type as "dtype",
@@ -133,7 +133,7 @@ class TDSLoader(MetadataLoader):
                     concat(d.name, ".", t.name) full_table_name,
                     d.name "schema",
                     t.name table_name,
-                    t.comment name,
+                    IFNULL(t.comment, t.name) name,
                     t.data_entity_type,
                     d2.name database_name
                 from connector_foundation1.database_table t
