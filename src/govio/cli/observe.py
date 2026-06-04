@@ -38,7 +38,7 @@ def cmd_show_datasource(config: dict) -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
-def cmd_load(config: dict, name: str, datasource: str, sql: str) -> None:
+def cmd_load(config: dict, name: str, datasource: str, sql: str, output: str | None = None) -> None:
     """加载 DataFrame"""
     db_manager = get_db_manager(config)
     store = ObserveStore()
@@ -49,6 +49,13 @@ def cmd_load(config: dict, name: str, datasource: str, sql: str) -> None:
         name=name,
         sql=sql,
     )
+
+    if output and result.get("success"):
+        df = store.get(name)
+        if df is not None:
+            df.to_json(output, orient="records", force_ascii=False, indent=2)
+            result["output_file"] = output
+
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -137,11 +144,12 @@ def observe():
     # show-datasource
     sub.add_parser("show-datasource", help="显示已配置的数据源")
 
-    # load --name --datasource --sql
+    # load --name --datasource --sql [-o output]
     p = sub.add_parser("load", help="加载 DataFrame")
     p.add_argument("--name", required=True, help="DataFrame 名称")
     p.add_argument("--datasource", required=True, help="数据源名称")
     p.add_argument("--sql", required=True, help="查询 SQL")
+    p.add_argument("-o", "--output", help="将数据内容输出到 JSON 文件")
 
     # list
     sub.add_parser("list", help="列出已加载的 DataFrame")
@@ -186,7 +194,7 @@ def observe():
         case "show-datasource":
             cmd_show_datasource(config)
         case "load":
-            cmd_load(config, args.name, args.datasource, args.sql)
+            cmd_load(config, args.name, args.datasource, args.sql, getattr(args, "output", None))
         case "list":
             cmd_list(config)
         case "release":

@@ -142,11 +142,19 @@ uv run python scripts/sql_builder.py query.json -o output.sql
 
 ## Step 4: 执行查询
 
+> **重要**: 执行查询前必须获得用户许可。如果用户未明确表示可以执行，应先将组装好的 SQL 展示给用户，问询确认后再执行。
+
 使用 `govio-cli observe load` 执行 SQL 并加载为 DataFrame：
 
 ```bash
+# 最终结果加载（输出到 JSON 文件）
+govio-cli observe load --name <df_name> --datasource <ds_name> --sql "<sql>" -o <output.json>
+
+# 前置辅助数据集加载（仅持久化，不输出文件）
 govio-cli observe load --name <df_name> --datasource <ds_name> --sql "<sql>"
 ```
+
+最终结果的加载使用 `-o` 参数输出数据内容到 JSON 文件；前置的辅助数据集（如 CTE 场景中的中间数据）仅加载持久化，不使用 `-o`。
 
 ### 命名规范
 

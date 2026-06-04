@@ -151,11 +151,17 @@ govio-cli observe list
 | --name | keyword | 是 | DataFrame 名称（小写字母+下划线） |
 | --datasource | keyword | 是 | 数据源名称（从 show-datasource 获取） |
 | --sql | keyword | 是 | 查询 SQL 语句 |
+| -o, --output | keyword | 否 | 将数据内容输出到指定 JSON 文件 |
+
+> **重要**: 使用 `-o` 输出数据集内容前，必须先征得用户确认。如果用户未明确表示可以查看数据内容，应先问询用户是否允许输出。确认后再执行带 `-o` 参数的命令。
 
 ### 调用方式
 
 ```bash
 govio-cli observe load --name customers --datasource prod_db --sql "SELECT customer_id, name, email FROM customers WHERE created_at > '2024-01-01'"
+
+# 输出数据内容到 JSON 文件
+govio-cli observe load --name customers --datasource prod_db --sql "SELECT * FROM customers" -o customers.json
 ```
 
 ### 返回结果
@@ -172,6 +178,18 @@ govio-cli observe load --name customers --datasource prod_db --sql "SELECT custo
     {"name": "name", "dtype": "object"},
     {"name": "email", "dtype": "object"}
   ]
+}
+```
+
+使用 `-o` 时，返回结果会额外包含 `output_file` 字段：
+```json
+{
+  "success": true,
+  "name": "customers",
+  "rows": 1000,
+  "columns": 3,
+  "column_info": [...],
+  "output_file": "customers.json"
 }
 ```
 
