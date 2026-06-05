@@ -31,6 +31,8 @@ def main():
         metavar="CSV_DIR",
         help="跳过 CSV 生成，直接从指定目录的 CSV 生成 GML 文件",
     )
+    sub.add_parser("backend", help="显示当前后端类型")
+
     p_std = sub.add_parser("std-recommend", help="数据标准推荐")
     p_std.add_argument("--output-dir", type=Path, help="推荐数据标准的输出目录")
 
@@ -78,6 +80,17 @@ def main():
 
     if args.action == "onboard":
         onboard(new_falkordb=args.new_falkordb, new_networkx=args.new_networkx)
+    elif args.action == "backend":
+        config_manager = ConfigManager()
+        if not config_manager.exists():
+            print("错误: 未找到配置文件，请先运行 govio-cli onboard", file=sys.stderr)
+            sys.exit(1)
+        config = config_manager.load()
+        backend = config.get("backend")
+        if not backend:
+            print("错误: 配置文件中未设置后端类型", file=sys.stderr)
+            sys.exit(1)
+        print(backend)
     elif args.action == "std-recommend":
         std_recommend(args.output_dir)
     elif args.action == "query":

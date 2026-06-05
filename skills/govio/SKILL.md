@@ -66,7 +66,7 @@ assets/
 
 ## 后端
 
-后端类型由 `~/.govio/config.yaml` 决定（通过 `govio-cli onboard` 设置）。
+后端类型通过 `govio-cli backend` 获取（由 `govio-cli onboard` 设置）。
 
 | 后端 | 查询语言 | 使用场景 |
 |------|---------|---------|

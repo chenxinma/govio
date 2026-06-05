@@ -216,7 +216,7 @@ DataFrame 名称格式：`metric_{指标编码}_{时间}`
 
 ### 数据源
 
-从 `~/.govio/config.yaml` 中获取可用数据源，或询问用户指定。
+通过 `govio-cli observe show-datasource` 获取可用数据源，或询问用户指定。
 
 ## CTE 组合查询
 
