@@ -44,39 +44,42 @@ def prompt_csv_config(config_manager: ConfigManager) -> dict[str, Any]:
         except Exception:
             pass
 
-    default_kundb = existing_config.get("kundb", "")
+    # Support both nested (new) and flat (legacy) config format
+    metadata_section = existing_config.get("metadata", existing_config)
+
+    default_kundb = metadata_section.get("kundb", "")
     kundb = input(f"请输入元数据库 URL [默认: {default_kundb}]: ").strip()
     kundb = kundb or default_kundb
 
-    default_app_list = existing_config.get("app_list", "")
+    default_app_list = metadata_section.get("app_list", "")
     app_list = input(
         f"请输入应用清单 Excel 文件路径 [默认: {default_app_list}]: "
     ).strip()
     app_list = app_list or default_app_list
 
-    default_app_map = existing_config.get("app_map", "")
+    default_app_map = metadata_section.get("app_map", "")
     app_map = input(
         f"请输入应用数据库映射 JSON 文件路径 [默认: {default_app_map}]: "
     ).strip()
     app_map = app_map or default_app_map
 
-    default_relationship = existing_config.get("relationship", "")
+    default_relationship = metadata_section.get("relationship", "")
     relationship = input(
         f"请输入表关系 JSON 文件路径（可选，直接回车跳过） [默认: {default_relationship}]: "
     ).strip()
     relationship = relationship or default_relationship
 
-    default_metric = existing_config.get("metric", "")
+    default_metric = metadata_section.get("metric", "")
     metric = input(
         f"请输入指标定义 JSON 文件路径（可选，直接回车跳过） [默认: {default_metric}]: "
     ).strip()
     metric = metric or default_metric
 
-    default_csv_dir = existing_config.get("csv_dir", "")
+    default_csv_dir = metadata_section.get("csv_dir", "")
     csv_dir = input(f"请输入 CSV 输出目录 [默认: {default_csv_dir}]: ").strip()
     csv_dir = csv_dir or default_csv_dir
 
-    default_workspace_uuid = existing_config.get(
+    default_workspace_uuid = metadata_section.get(
         "workspace_uuid", "82ee37374b314a938bf28170ab4db7cf"
     )
     workspace_uuid = input(
@@ -462,11 +465,11 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
         build_graph(str(csv_dir), str(gml_path))
         print(f"✓ GML 文件已生成: {gml_path}")
 
-        config = {"backend": "networkx", "networkx": {"gml_path": str(gml_path)}}
+        graph_config = {"backend": "networkx", "networkx": {"gml_path": str(gml_path)}}
         full_config = {
             **existing_config,
-            "csv_dir": str(csv_dir),
-            **config,
+            "metadata": {**existing_config.get("metadata", {}), "csv_dir": str(csv_dir)},
+            "graph": graph_config,
         }
 
         config_manager.save(full_config)
@@ -474,7 +477,7 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
 
         print("\n正在生成 assets...")
         try:
-            graph_obj = GraphFactory.create(config)
+            graph_obj = GraphFactory.create(graph_config)
             generator = AssetsGenerator(graph_obj, SKILLS_ASSETS_DIR)
             generator.generate_all()
             print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")
@@ -502,11 +505,11 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
         print("\n=== 跳过 CSV 生成，直接导入 FalkorDB ===")
         print(f"CSV 目录: {csv_dir}\n")
 
-        config = prompt_falkordb_config(csv_dir)
+        graph_config = prompt_falkordb_config(csv_dir)
         full_config = {
             **existing_config,
-            "csv_dir": str(csv_dir),
-            **config,
+            "metadata": {**existing_config.get("metadata", {}), "csv_dir": str(csv_dir)},
+            "graph": graph_config,
         }
 
         config_manager.save(full_config)
@@ -514,7 +517,7 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
 
         print("\n正在生成 assets...")
         try:
-            graph_obj = GraphFactory.create(config)
+            graph_obj = GraphFactory.create(graph_config)
             generator = AssetsGenerator(graph_obj, SKILLS_ASSETS_DIR)
             generator.generate_all()
             print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")
@@ -528,10 +531,10 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
 
     if config_manager.exists():
         existing_config = config_manager.load()
-        has_backend = "backend" in existing_config
+        has_backend = "graph" in existing_config and "backend" in existing_config.get("graph", {})
 
         if has_backend:
-            print(f"\n⚠️  检测到已有配置 (backend: {existing_config['backend']})")
+            print(f"\n⚠️  检测到已有配置 (backend: {existing_config['graph']['backend']})")
             skip = (
                 input("是否跳过 CSV/Graph 配置，仅配置数据源？ (yes/no) [默认: no]: ")
                 .strip()
@@ -563,7 +566,7 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
         print(f"❌ CSV 生成失败: {e}")
         sys.exit(1)
 
-    full_config = {
+    metadata = {
         **csv_config,
         "csv_dir": str(Path(csv_config["csv_dir"]).resolve()),
     }
@@ -572,11 +575,11 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
     csv_dir = Path(csv_config["csv_dir"])
 
     if backend == "networkx":
-        config = prompt_networkx_config()
-        full_config.update(config)
+        graph_config = prompt_networkx_config()
     else:
-        config = prompt_falkordb_config(csv_dir)
-        full_config.update(config)
+        graph_config = prompt_falkordb_config(csv_dir)
+
+    full_config: dict[str, Any] = {"metadata": metadata, "graph": graph_config}
 
     print("\n正在保存配置...")
     config_manager.save(full_config)
@@ -589,7 +592,7 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
 
     print("\n正在生成 assets...")
     try:
-        graph_obj = GraphFactory.create(config)
+        graph_obj = GraphFactory.create(graph_config)
         generator = AssetsGenerator(graph_obj, SKILLS_ASSETS_DIR)
         generator.generate_all()
         print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")

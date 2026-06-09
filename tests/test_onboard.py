@@ -283,7 +283,11 @@ app1,table1
 
     # Verify outputs
     assert config_path.exists()
-    assert (tmp_path / "assets" / "backend.txt").exists()
+
+    # Verify config has nested structure
+    saved_config = ConfigManager(config_path).load()
+    assert saved_config["graph"]["backend"] == "networkx"
+    assert saved_config["metadata"]["csv_dir"] is not None
 
 
 def test_onboard_new_falkordb(monkeypatch, tmp_path):
@@ -336,13 +340,10 @@ def test_onboard_new_falkordb(monkeypatch, tmp_path):
 
     # Verify config saved with falkordb backend
     saved_config = ConfigManager(config_path).load()
-    assert saved_config["backend"] == "falkordb"
-    assert saved_config["csv_dir"] == str(csv_dir)
-    assert saved_config["falkordb"]["host"] == "localhost"
-    assert saved_config["falkordb"]["graph"] == "test_graph"
-
-    # Verify backend.txt
-    assert (tmp_path / "assets" / "backend.txt").read_text().strip() == "falkordb"
+    assert saved_config["graph"]["backend"] == "falkordb"
+    assert saved_config["metadata"]["csv_dir"] == str(csv_dir)
+    assert saved_config["graph"]["falkordb"]["host"] == "localhost"
+    assert saved_config["graph"]["falkordb"]["graph"] == "test_graph"
 
 
 def test_onboard_new_networkx(monkeypatch, tmp_path):
@@ -389,12 +390,9 @@ def test_onboard_new_networkx(monkeypatch, tmp_path):
 
     # Verify config saved with networkx backend
     saved_config = ConfigManager(config_path).load()
-    assert saved_config["backend"] == "networkx"
-    assert saved_config["csv_dir"] == str(csv_dir)
-    assert "gml_path" in saved_config["networkx"]
-
-    # Verify backend.txt
-    assert (tmp_path / "assets" / "backend.txt").read_text().strip() == "networkx"
+    assert saved_config["graph"]["backend"] == "networkx"
+    assert saved_config["metadata"]["csv_dir"] == str(csv_dir)
+    assert "gml_path" in saved_config["graph"]["networkx"]
 
 
 def test_onboard_new_falkordb_and_new_networkx_exclusive(monkeypatch, tmp_path, capsys):
