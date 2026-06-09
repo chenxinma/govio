@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import questionary
+
 from .config import ConfigManager
 from ..core.graph_factory import GraphFactory
 from ..core.assets_generator import AssetsGenerator
@@ -48,44 +50,48 @@ def prompt_csv_config(config_manager: ConfigManager) -> dict[str, Any]:
     metadata_section = existing_config.get("metadata", existing_config)
 
     default_kundb = metadata_section.get("kundb", "")
-    kundb = input(f"请输入元数据库 URL [默认: {default_kundb}]: ").strip()
-    kundb = kundb or default_kundb
+    kundb = questionary.text(
+        "请输入元数据库 URL:",
+        default=default_kundb,
+    ).ask() or default_kundb
 
     default_app_list = metadata_section.get("app_list", "")
-    app_list = input(
-        f"请输入应用清单 Excel 文件路径 [默认: {default_app_list}]: "
-    ).strip()
-    app_list = app_list or default_app_list
+    app_list = questionary.text(
+        "请输入应用清单 Excel 文件路径:",
+        default=default_app_list,
+    ).ask() or default_app_list
 
     default_app_map = metadata_section.get("app_map", "")
-    app_map = input(
-        f"请输入应用数据库映射 JSON 文件路径 [默认: {default_app_map}]: "
-    ).strip()
-    app_map = app_map or default_app_map
+    app_map = questionary.text(
+        "请输入应用数据库映射 JSON 文件路径:",
+        default=default_app_map,
+    ).ask() or default_app_map
 
     default_relationship = metadata_section.get("relationship", "")
-    relationship = input(
-        f"请输入表关系 JSON 文件路径（可选，直接回车跳过） [默认: {default_relationship}]: "
-    ).strip()
-    relationship = relationship or default_relationship
+    relationship = questionary.text(
+        "请输入表关系 JSON 文件路径（可选，留空跳过）:",
+        default=default_relationship,
+    ).ask() or default_relationship
 
     default_metric = metadata_section.get("metric", "")
-    metric = input(
-        f"请输入指标定义 JSON 文件路径（可选，直接回车跳过） [默认: {default_metric}]: "
-    ).strip()
-    metric = metric or default_metric
+    metric = questionary.text(
+        "请输入指标定义 JSON 文件路径（可选，留空跳过）:",
+        default=default_metric,
+    ).ask() or default_metric
 
     default_csv_dir = metadata_section.get("csv_dir", "")
-    csv_dir = input(f"请输入 CSV 输出目录 [默认: {default_csv_dir}]: ").strip()
-    csv_dir = csv_dir or default_csv_dir
+    csv_dir = questionary.text(
+        "请输入 CSV 输出目录:",
+        default=default_csv_dir,
+    ).ask() or default_csv_dir
 
     default_workspace_uuid = metadata_section.get(
         "workspace_uuid", "82ee37374b314a938bf28170ab4db7cf"
     )
-    workspace_uuid = input(
-        f"请输入工作区 UUID [默认: {default_workspace_uuid}]: "
-    ).strip()
-    workspace_uuid = workspace_uuid or default_workspace_uuid
+    workspace_uuid = questionary.text(
+        "请输入工作区 UUID:",
+        default=default_workspace_uuid,
+    ).ask() or default_workspace_uuid
 
     return {
         "kundb": kundb,
@@ -130,41 +136,32 @@ def generate_csv(config: dict[str, Any]) -> None:
 def prompt_backend_choice() -> str:
     """提示用户选择 backend"""
     print("\n=== Govio Onboard 向导 ===\n")
-    print("请选择图数据库后端：")
-    print("  1. networkx - 本地 GML 文件")
-    print("  2. falkordb - FalkorDB 图数据库")
 
-    while True:
-        choice = input("\n请输入选项 (1/2) [默认: 1]: ").strip() or "1"
-
-        if choice == "1":
-            return "networkx"
-        elif choice == "2":
-            return "falkordb"
-        else:
-            print("❌ 无效选项，请输入 1 或 2")
+    return questionary.select(
+        "请选择图数据库后端：",
+        choices=[
+            questionary.Choice("networkx - 本地 GML 文件", value="networkx"),
+            questionary.Choice("falkordb - FalkorDB 图数据库", value="falkordb"),
+        ],
+        default="networkx",
+    ).ask()
 
 
 def prompt_networkx_config() -> dict[str, Any]:
     """提示用户输入 NetworkX 配置"""
     print("\n--- NetworkX 配置 ---\n")
 
-    generate_gml = (
-        input("是否需要从 CSV 文件生成新的 GML 文件？ (yes/no) [默认: yes]: ")
-        .strip()
-        .lower()
-    )
-    generate_gml = generate_gml in ("yes", "y", "")
+    generate_gml = questionary.confirm(
+        "是否需要从 CSV 文件生成新的 GML 文件？",
+        default=True,
+    ).ask()
 
     if generate_gml:
-        while True:
-            csv_dir = input("请输入 CSV 目录路径: ").strip()
-            csv_path = Path(csv_dir)
-
-            if validate_csv_directory(csv_path):
-                break
-            else:
-                print(f"❌ CSV 目录无效或缺少必需文件，请检查路径: {csv_dir}")
+        csv_dir = questionary.text(
+            "请输入 CSV 目录路径:",
+            validate=lambda v: True if validate_csv_directory(Path(v)) else "CSV 目录无效或缺少必需文件",
+        ).ask()
+        csv_path = Path(csv_dir)
 
         gml_path = SKILLS_ASSETS_DIR / "ontology.gml"
 
@@ -172,14 +169,11 @@ def prompt_networkx_config() -> dict[str, Any]:
         build_graph(str(csv_path), str(gml_path))
         print(f"✓ GML 文件已生成: {gml_path}")
     else:
-        while True:
-            gml_path_input = input("请输入 GML 文件路径: ").strip()
-            gml_path = Path(gml_path_input)
-
-            if gml_path.exists():
-                break
-            else:
-                print(f"❌ GML 文件不存在: {gml_path}")
+        gml_path_input = questionary.text(
+            "请输入 GML 文件路径:",
+            validate=lambda v: True if Path(v).exists() else "GML 文件不存在",
+        ).ask()
+        gml_path = Path(gml_path_input)
 
     return {"backend": "networkx", "networkx": {"gml_path": str(gml_path)}}
 
@@ -277,14 +271,22 @@ def prompt_falkordb_config(csv_dir: Path) -> dict[str, Any]:
     """提示用户输入 FalkorDB 配置"""
     print("\n--- FalkorDB 配置 ---\n")
 
-    host = input("请输入 FalkorDB 主机地址 [默认: localhost]: ").strip() or "localhost"
-    port_str = input("请输入 FalkorDB 端口 [默认: 6379]: ").strip() or "6379"
-    try:
-        port = int(port_str)
-    except ValueError:
-        print(f"❌ 端口必须是数字: {port_str}")
-        port = 6379
-    graph_name = input("请输入图数据库名称 [默认: ontology]: ").strip() or "ontology"
+    host = questionary.text(
+        "请输入 FalkorDB 主机地址:",
+        default="localhost",
+    ).ask() or "localhost"
+
+    port_str = questionary.text(
+        "请输入 FalkorDB 端口:",
+        default="6379",
+        validate=lambda v: True if v.isdigit() else "端口必须是数字",
+    ).ask() or "6379"
+    port = int(port_str)
+
+    graph_name = questionary.text(
+        "请输入图数据库名称:",
+        default="ontology",
+    ).ask() or "ontology"
 
     print("\n正在导入 CSV 数据到 FalkorDB...")
     try:
@@ -312,15 +314,18 @@ def prompt_connect_args(existing: dict[str, Any] | None = None) -> dict[str, Any
 
     if existing:
         print(f"  当前连接参数: {existing}")
-        keep = input("  是否保留现有参数？ (yes/no) [默认: yes]: ").strip().lower()
-        if keep not in ("no", "n"):
+        keep = questionary.confirm(
+            "  是否保留现有参数？",
+            default=True,
+        ).ask()
+        if keep:
             return existing
 
-    print("  输入连接参数 (key=value 格式，空行结束):")
+    print("  输入连接参数 (key=value 格式，留空结束):")
     print("  示例: ssl=true, timeout=30")
 
     while True:
-        line = input("  > ").strip()
+        line = questionary.text("  >").ask()
         if not line:
             break
         if "=" not in line:
@@ -373,29 +378,33 @@ def prompt_datasource_config(
                 print(f"  - {name}: {ds['url']}")
             print()
 
-        print("操作选项:")
-        print("  1. 添加数据源")
-        print("  2. 删除数据源")
-        print("  3. 完成配置")
+        action = questionary.select(
+            "操作选项：",
+            choices=[
+                questionary.Choice("添加数据源", value="add"),
+                questionary.Choice("删除数据源", value="del"),
+                questionary.Choice("完成配置", value="done"),
+            ],
+            default="done",
+        ).ask()
 
-        choice = input("\n请选择操作 (1/2/3) [默认: 3]: ").strip() or "3"
-
-        if choice == "1":
-            name = input("  数据源名称: ").strip()
+        if action == "add":
+            name = questionary.text("  数据源名称:").ask()
             if not name:
                 print("  名称不能为空")
                 continue
-            url = input("  URL (如 mysql+pymysql://user:pass@host/db): ").strip()
+            url = questionary.text(
+                "  URL (如 mysql+pymysql://user:pass@host/db):"
+            ).ask()
             if not url:
                 print("  URL 不能为空")
                 continue
             if name in datasources:
-                overwrite = (
-                    input(f"  数据源 '{name}' 已存在，是否覆盖？ (yes/no) [默认: no]: ")
-                    .strip()
-                    .lower()
-                )
-                if overwrite not in ("yes", "y"):
+                overwrite = questionary.confirm(
+                    f"  数据源 '{name}' 已存在，是否覆盖？",
+                    default=False,
+                ).ask()
+                if not overwrite:
                     print("  已取消添加")
                     continue
             existing_args = datasources.get(name, {}).get("connect_args") or None
@@ -403,29 +412,20 @@ def prompt_datasource_config(
             datasources[name] = {"url": url, "connect_args": connect_args}
             print(f"  已添加数据源: {name}")
 
-        elif choice == "2":
+        elif action == "del":
             if not datasources:
                 print("  没有可删除的数据源")
                 continue
-            print("  选择要删除的数据源:")
             names = list(datasources.keys())
-            for i, n in enumerate(names, 1):
-                print(f"    {i}. {n}")
-            del_choice = input("  输入编号 (或直接回车取消): ").strip()
-            if not del_choice:
-                continue
-            try:
-                idx = int(del_choice) - 1
-                if 0 <= idx < len(names):
-                    removed = names[idx]
-                    del datasources[removed]
-                    print(f"  已删除: {removed}")
-                else:
-                    print("  无效编号")
-            except ValueError:
-                print("  请输入数字编号")
+            removed = questionary.select(
+                "  选择要删除的数据源：",
+                choices=names,
+            ).ask()
+            if removed:
+                del datasources[removed]
+                print(f"  已删除: {removed}")
 
-        elif choice == "3":
+        elif action == "done":
             break
 
     return datasources if datasources else None
@@ -535,12 +535,11 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
 
         if has_backend:
             print(f"\n⚠️  检测到已有配置 (backend: {existing_config['graph']['backend']})")
-            skip = (
-                input("是否跳过 CSV/Graph 配置，仅配置数据源？ (yes/no) [默认: no]: ")
-                .strip()
-                .lower()
-            )
-            if skip in ("yes", "y"):
+            skip = questionary.confirm(
+                "是否跳过 CSV/Graph 配置，仅配置数据源？",
+                default=False,
+            ).ask()
+            if skip:
                 full_config = dict(existing_config)
                 datasources = prompt_datasource_config(full_config.get("datasources"))
                 if datasources is not None:
@@ -552,8 +551,11 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
                 return
 
         print("\n⚠️  配置文件已存在")
-        overwrite = input("是否覆盖现有配置？ (yes/no): ").strip().lower()
-        if overwrite not in ["yes", "y"]:
+        overwrite = questionary.confirm(
+            "是否覆盖现有配置？",
+            default=False,
+        ).ask()
+        if not overwrite:
             print("已取消配置")
             return
 
