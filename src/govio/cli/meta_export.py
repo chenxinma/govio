@@ -29,12 +29,13 @@ def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = 
 
     # --- Load config for TDS ---
     config = ConfigManager().load()
-    kundb = config["kundb"]
-    workspace_uuid = config.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
-    app_list_file = config["app_list"]
-    app_map_file = config["app_map"]
-    relationship_file = config.get("relationship")
-    metric_file = config.get("metric")
+    metadata = config.get("metadata", {})
+    kundb = metadata["kundb"]
+    workspace_uuid = metadata.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
+    app_list_file = metadata["app_list"]
+    app_map_file = metadata["app_map"]
+    relationship_file = metadata.get("relationship")
+    metric_file = metadata.get("metric")
 
     df_app_db_map = pd.read_json(app_map_file, orient="records")
 
@@ -213,14 +214,15 @@ def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = 
     from govio.cli.onboard import import_csv_to_falkordb
     from govio.metadata.gen_networkx import build_graph
 
-    backend = config.get("backend")
+    graph = config.get("graph", {})
+    backend = graph.get("backend")
     if not backend:
         print("警告: 配置中未指定 backend，跳过图数据更新和 assets 生成")
         return
 
     # Update graph
     if backend == "falkordb":
-        falkordb_cfg = config.get("falkordb", {})
+        falkordb_cfg = graph.get("falkordb", {})
         host = falkordb_cfg.get("host", "localhost")
         port = falkordb_cfg.get("port", 6379)
         graph_name = falkordb_cfg.get("graph", "ontology")
@@ -232,7 +234,7 @@ def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = 
             print(f"❌ 导入 FalkorDB 失败: {e}")
             return
     elif backend == "networkx":
-        networkx_cfg = config.get("networkx", {})
+        networkx_cfg = graph.get("networkx", {})
         gml_path = networkx_cfg.get("gml_path", str(SKILLS_ASSETS_DIR / "ontology.gml"))
         print(f"\n正在从 CSV 生成 GML 文件 ({gml_path})...")
         try:
@@ -245,7 +247,7 @@ def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = 
     # Generate assets
     print("\n正在生成 assets...")
     try:
-        graph_obj = GraphFactory.create(config)
+        graph_obj = GraphFactory.create(graph)
         generator = AssetsGenerator(graph_obj, SKILLS_ASSETS_DIR)
         generator.generate_all()
         print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")

@@ -17,10 +17,11 @@ def std_recommend(output_dir:Path):
 
     config = config_manager.load()
 
-    kundb = config.get("kundb", "")
-    workspace_uuid = config.get("workspace_uuid", "")
-    app_map = config.get("app_map", "")
-    csv_dir = config.get("csv_dir", "./")
+    metadata = config.get("metadata", {})
+    kundb = metadata.get("kundb", "")
+    workspace_uuid = metadata.get("workspace_uuid", "")
+    app_map = metadata.get("app_map", "")
+    csv_dir = metadata.get("csv_dir", "./")
 
     if not all([kundb, workspace_uuid, app_map, csv_dir]):
         print("❌ 配置缺少必要字段，请检查 kundb, workspace_uuid, app_map, csv_dir")
