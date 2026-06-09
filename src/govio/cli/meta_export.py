@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -29,13 +30,17 @@ def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = 
 
     # --- Load config for TDS ---
     config = ConfigManager().load()
-    metadata = config.get("metadata", {})
-    kundb = metadata["kundb"]
+    metadata = config.get("metadata") or {}
+    kundb = metadata.get("kundb", "")
     workspace_uuid = metadata.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
-    app_list_file = metadata["app_list"]
-    app_map_file = metadata["app_map"]
+    app_list_file = metadata.get("app_list", "")
+    app_map_file = metadata.get("app_map", "")
     relationship_file = metadata.get("relationship")
     metric_file = metadata.get("metric")
+
+    if not all([kundb, app_list_file, app_map_file]):
+        print("❌ 配置缺少必要字段，请检查 metadata 中的 kundb, app_list, app_map")
+        sys.exit(1)
 
     df_app_db_map = pd.read_json(app_map_file, orient="records")
 
@@ -214,7 +219,7 @@ def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = 
     from govio.cli.onboard import import_csv_to_falkordb
     from govio.metadata.gen_networkx import build_graph
 
-    graph = config.get("graph", {})
+    graph = config.get("graph") or {}
     backend = graph.get("backend")
     if not backend:
         print("警告: 配置中未指定 backend，跳过图数据更新和 assets 生成")

@@ -102,7 +102,7 @@ def query(query_text):
         sys.exit(1)
 
     config = config_manager.load()
-    graph = config.get("graph", {})
+    graph = config.get("graph") or {}
     backend = graph.get("backend")
     if not backend:
         print("配置文件缺少 'graph.backend' 字段，请重新运行 govio-cli onboard")

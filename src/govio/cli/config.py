@@ -52,6 +52,7 @@ class ConfigManager:
         shutil.copy2(self.config_path, backup_path)
 
         new_config: dict[str, Any] = {}
+        known_keys = _METADATA_KEYS | _GRAPH_KEYS | {"datasources"}
 
         metadata = {}
         for key in _METADATA_KEYS:
@@ -70,9 +71,34 @@ class ConfigManager:
         if "datasources" in config:
             new_config["datasources"] = config["datasources"]
 
+        # 保留未知字段
+        for key, value in config.items():
+            if key not in known_keys and key not in new_config:
+                new_config[key] = value
+
         self.save(new_config)
 
         return new_config
+
+    @staticmethod
+    def _validate_backend(scope: dict[str, Any]) -> None:
+        """验证 backend 相关配置（networkx/falkordb）"""
+        if "backend" not in scope:
+            raise ValueError("配置缺少 'backend' 字段")
+        backend = scope["backend"]
+        if backend not in ["networkx", "falkordb"]:
+            raise ValueError(f"不支持的 backend: {backend}")
+        if backend == "networkx":
+            if "networkx" not in scope:
+                raise ValueError("NetworkX backend 需要 'networkx' 配置")
+            if "gml_path" not in scope["networkx"]:
+                raise ValueError("NetworkX 配置缺少 'gml_path' 字段")
+        elif backend == "falkordb":
+            if "falkordb" not in scope:
+                raise ValueError("FalkorDB backend 需要 'falkordb' 配置")
+            for field in ["host", "port", "graph"]:
+                if field not in scope["falkordb"]:
+                    raise ValueError(f"FalkorDB 配置缺少 '{field}' 字段")
 
     def validate(self, config: dict[str, Any]) -> bool:
         """验证配置的有效性
@@ -80,38 +106,9 @@ class ConfigManager:
         支持新格式（嵌套）和旧格式（扁平）的验证。
         """
         if "graph" in config:
-            graph = config["graph"]
-            if "backend" not in graph:
-                raise ValueError("配置缺少 'graph.backend' 字段")
-            backend = graph["backend"]
-            if backend not in ["networkx", "falkordb"]:
-                raise ValueError(f"不支持的 backend: {backend}")
-            if backend == "networkx":
-                if "networkx" not in graph:
-                    raise ValueError("NetworkX backend 需要 'networkx' 配置")
-                if "gml_path" not in graph["networkx"]:
-                    raise ValueError("NetworkX 配置缺少 'gml_path' 字段")
-            elif backend == "falkordb":
-                if "falkordb" not in graph:
-                    raise ValueError("FalkorDB backend 需要 'falkordb' 配置")
-                for field in ["host", "port", "graph"]:
-                    if field not in graph["falkordb"]:
-                        raise ValueError(f"FalkorDB 配置缺少 '{field}' 字段")
+            self._validate_backend(config["graph"])
         elif "backend" in config:
-            backend = config["backend"]
-            if backend not in ["networkx", "falkordb"]:
-                raise ValueError(f"不支持的 backend: {backend}")
-            if backend == "networkx":
-                if "networkx" not in config:
-                    raise ValueError("NetworkX backend 需要 'networkx' 配置")
-                if "gml_path" not in config["networkx"]:
-                    raise ValueError("NetworkX 配置缺少 'gml_path' 字段")
-            elif backend == "falkordb":
-                if "falkordb" not in config:
-                    raise ValueError("FalkorDB backend 需要 'falkordb' 配置")
-                for field in ["host", "port", "graph"]:
-                    if field not in config["falkordb"]:
-                        raise ValueError(f"FalkorDB 配置缺少 '{field}' 字段")
+            self._validate_backend(config)
         else:
             raise ValueError("配置缺少 'backend' 字段")
 
