@@ -36,8 +36,8 @@ def validate_csv_directory(csv_dir: Path) -> bool:
 
 
 def prompt_csv_config(config_manager: ConfigManager) -> dict[str, Any]:
-    """提示用户输入 CSV 生成配置"""
-    print("\n=== 步骤 1: CSV 元数据生成 ===\n")
+    """提示用户输入 元数据CSV 生成配置"""
+    print("\n=== 步骤 1: 元数据CSV  元数据生成 ===\n")
 
     existing_config = {}
     if config_manager.exists():
@@ -536,7 +536,7 @@ def onboard(new_falkordb: Path | None = None, new_networkx: Path | None = None):
         if has_backend:
             print(f"\n⚠️  检测到已有配置 (backend: {existing_config['graph']['backend']})")
             skip = questionary.confirm(
-                "是否跳过 CSV/Graph 配置，仅配置数据源？",
+                "是否跳过 元数据CSV/Graph 配置，仅配置数据源？",
                 default=False,
             ).ask()
             if skip:
