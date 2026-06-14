@@ -102,19 +102,20 @@ def query(query_text):
         sys.exit(1)
 
     config = config_manager.load()
-    backend = config.get("backend")
+    graph = config.get("graph") or {}
+    backend = graph.get("backend")
     if not backend:
-        print("配置文件缺少 'backend' 字段，请重新运行 govio-cli onboard")
+        print("配置文件缺少 'graph.backend' 字段，请重新运行 govio-cli onboard")
         sys.exit(1)
 
     if backend == "networkx":
-        gml_path = config.get("networkx", {}).get("gml_path")
+        gml_path = graph.get("networkx", {}).get("gml_path")
         if not gml_path:
-            print("配置文件缺少 networkx.gml_path 字段")
+            print("配置文件缺少 graph.networkx.gml_path 字段")
             sys.exit(1)
         cmd_networkx(query_text, gml_path)
     elif backend == "falkordb":
-        falkordb_config = config.get("falkordb", {})
+        falkordb_config = graph.get("falkordb", {})
         cmd_falkordb(
             query_text,
             host=falkordb_config.get("host", "localhost"),

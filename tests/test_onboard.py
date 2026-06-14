@@ -1,6 +1,6 @@
 from pathlib import Path
 import tempfile
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -71,23 +71,18 @@ def test_validate_csv_directory():
         assert validate_csv_directory(empty_dir) is False
 
 
-def test_prompt_backend_choice(monkeypatch):
+def test_prompt_backend_choice():
     from govio.cli.onboard import prompt_backend_choice
 
-    # Test choice 1 (networkx)
-    monkeypatch.setattr("builtins.input", lambda _: "1")
-    result = prompt_backend_choice()
-    assert result == "networkx"
+    with patch("govio.cli.onboard.questionary") as mock_q:
+        mock_q.select.return_value.ask.return_value = "networkx"
+        mock_q.Choice = MagicMock(side_effect=lambda label, value: (label, value))
+        result = prompt_backend_choice()
+        assert result == "networkx"
 
-    # Test choice 2 (falkordb)
-    monkeypatch.setattr("builtins.input", lambda _: "2")
-    result = prompt_backend_choice()
-    assert result == "falkordb"
-
-    # Test default (empty input)
-    monkeypatch.setattr("builtins.input", lambda _: "")
-    result = prompt_backend_choice()
-    assert result == "networkx"
+        mock_q.select.return_value.ask.return_value = "falkordb"
+        result = prompt_backend_choice()
+        assert result == "falkordb"
 
 
 def test_prompt_networkx_config(monkeypatch, tmp_path):
@@ -95,22 +90,24 @@ def test_prompt_networkx_config(monkeypatch, tmp_path):
 
     onboard_module = importlib.import_module("govio.cli.onboard")
 
-    # Create test CSV directory
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
     (csv_dir / "PhysicalTable.csv").write_text(
         ":ID(PhysicalTable),name\n", encoding="utf-8"
     )
 
-    # Patch SKILLS_ASSETS_DIR to use temp directory
     onboard_module.SKILLS_ASSETS_DIR = tmp_path / "assets"
     onboard_module.SKILLS_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Test generating GML from CSV
-    inputs = iter(["yes", str(csv_dir)])
-    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    with patch.object(onboard_module, "questionary") as mock_q:
+        mock_q.confirm.return_value.ask.return_value = True
+        mock_q.text.return_value.ask.return_value = str(csv_dir)
 
-    config = onboard_module.prompt_networkx_config()
+        monkeypatch.setattr(
+            "govio.cli.onboard.build_graph", lambda *a, **kw: None
+        )
+
+        config = onboard_module.prompt_networkx_config()
 
     assert config["backend"] == "networkx"
     assert "gml_path" in config["networkx"]
@@ -122,51 +119,18 @@ def test_prompt_falkordb_config(monkeypatch, tmp_path):
     csv_dir = tmp_path / "csv"
     csv_dir.mkdir()
 
-    inputs = iter(["localhost", "6379", "test_graph"])
-    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
-    monkeypatch.setattr(
-        "govio.cli.onboard.import_csv_to_falkordb", lambda *a, **kw: None
-    )
+    with patch("govio.cli.onboard.questionary") as mock_q:
+        mock_q.text.return_value.ask.side_effect = ["localhost", "6379", "test_graph"]
+        monkeypatch.setattr(
+            "govio.cli.onboard.import_csv_to_falkordb", lambda *a, **kw: None
+        )
 
-    config = prompt_falkordb_config(csv_dir)
+        config = prompt_falkordb_config(csv_dir)
 
     assert config["backend"] == "falkordb"
     assert config["falkordb"]["host"] == "localhost"
     assert config["falkordb"]["port"] == 6379
     assert config["falkordb"]["graph"] == "test_graph"
-
-
-def test_prompt_backend_choice_invalid_input(monkeypatch, capsys):
-    from govio.cli.onboard import prompt_backend_choice
-
-    inputs = iter(["3", "invalid", "1"])
-    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
-
-    result = prompt_backend_choice()
-    assert result == "networkx"
-
-    captured = capsys.readouterr()
-    assert "无效选项" in captured.out
-
-
-def test_prompt_falkordb_config_invalid_port(monkeypatch, capsys, tmp_path):
-    from govio.cli.onboard import prompt_falkordb_config
-
-    csv_dir = tmp_path / "csv"
-    csv_dir.mkdir()
-
-    inputs = iter(["localhost", "invalid", "6379", "test_graph"])
-    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
-    monkeypatch.setattr(
-        "govio.cli.onboard.import_csv_to_falkordb", lambda *a, **kw: None
-    )
-
-    config = prompt_falkordb_config(csv_dir)
-
-    assert config["falkordb"]["port"] == 6379
-
-    captured = capsys.readouterr()
-    assert "端口必须是数字" in captured.out
 
 
 def test_onboard_networkx_workflow(monkeypatch, tmp_path):
@@ -175,60 +139,19 @@ def test_onboard_networkx_workflow(monkeypatch, tmp_path):
 
     onboard_module = importlib.import_module("govio.cli.onboard")
 
-    # Create test CSV files
     csv_dir = tmp_path / "csv"
-    csv_dir.mkdir()
-    (csv_dir / "PhysicalTable.csv").write_text(
-        """:ID(PhysicalTable),name,full_table_name
-table1,表1,SCHEMA.TABLE1
-""",
-        encoding="utf-8",
-    )
-    (csv_dir / "Col.csv").write_text(
-        """:ID(Col),name,column_name,full_table_name
-col1,字段1,COL1,SCHEMA.TABLE1
-""",
-        encoding="utf-8",
-    )
-    (csv_dir / "Application.csv").write_text(
-        """:ID(Application),name,app_name_en
-app1,应用1,APP1
-""",
-        encoding="utf-8",
-    )
-    (csv_dir / "Standard.csv").write_text(
-        """:ID(Standard),name
-std1,标准1
-""",
-        encoding="utf-8",
-    )
-    (csv_dir / "HAS_COLUMN.csv").write_text(
-        """:START_ID(PhysicalTable),:END_ID(Col)
-table1,col1
-""",
-        encoding="utf-8",
-    )
-    (csv_dir / "USE.csv").write_text(
-        """:START_ID(Application),:END_ID(PhysicalTable)
-app1,table1
-""",
-        encoding="utf-8",
-    )
+    create_test_csv_files(csv_dir)
 
-    # Mock config path to use temp directory
     config_path = tmp_path / ".govio" / "config.yaml"
 
-    # Patch SKILLS_ASSETS_DIR
     onboard_module.SKILLS_ASSETS_DIR = tmp_path / "assets"
     onboard_module.SKILLS_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Patch ConfigManager to return instance with temp config path
     def mock_config_manager():
         return ConfigManager(config_path)
 
     monkeypatch.setattr(onboard_module, "ConfigManager", mock_config_manager)
 
-    # Mock prompt_csv_config to return valid config without user input
     monkeypatch.setattr(
         onboard_module,
         "prompt_csv_config",
@@ -244,13 +167,8 @@ app1,table1
         },
     )
 
-    # Mock generate_csv to do nothing (CSV files already exist)
     monkeypatch.setattr(onboard_module, "generate_csv", lambda _cfg: None)
-
-    # Mock prompt_backend_choice to return networkx
     monkeypatch.setattr(onboard_module, "prompt_backend_choice", lambda: "networkx")
-
-    # Mock prompt_networkx_config
     monkeypatch.setattr(
         onboard_module,
         "prompt_networkx_config",
@@ -260,12 +178,7 @@ app1,table1
             "csv_dir": str(csv_dir),
         },
     )
-
-    # Mock prompt_datasource_config to return None
     monkeypatch.setattr(onboard_module, "prompt_datasource_config", lambda *a, **kw: None)
-
-    # Mock GraphFactory and AssetsGenerator
-    from unittest.mock import MagicMock
 
     mock_graph = MagicMock()
     monkeypatch.setattr(
@@ -278,12 +191,13 @@ app1,table1
         MagicMock(return_value=mock_generator),
     )
 
-    # Run onboard
     onboard_module.onboard()
 
-    # Verify outputs
     assert config_path.exists()
-    assert (tmp_path / "assets" / "backend.txt").exists()
+
+    saved_config = ConfigManager(config_path).load()
+    assert saved_config["graph"]["backend"] == "networkx"
+    assert saved_config["metadata"]["csv_dir"] is not None
 
 
 def test_onboard_new_falkordb(monkeypatch, tmp_path):
@@ -293,15 +207,12 @@ def test_onboard_new_falkordb(monkeypatch, tmp_path):
 
     onboard_module = importlib.import_module("govio.cli.onboard")
 
-    # Create test CSV files
     csv_dir = tmp_path / "csv"
     create_test_csv_files(csv_dir)
 
-    # Patch SKILLS_ASSETS_DIR
     onboard_module.SKILLS_ASSETS_DIR = tmp_path / "assets"
     onboard_module.SKILLS_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Mock config path
     config_path = tmp_path / ".govio" / "config.yaml"
 
     def mock_config_manager():
@@ -309,40 +220,31 @@ def test_onboard_new_falkordb(monkeypatch, tmp_path):
 
     monkeypatch.setattr(onboard_module, "ConfigManager", mock_config_manager)
 
-    # Mock FalkorDB import and graph factory
     monkeypatch.setattr(
         "govio.cli.onboard.import_csv_to_falkordb", lambda *a, **kw: None
     )
 
-    # Mock inputs: host, port, graph_name
-    inputs = iter(["localhost", "6379", "test_graph"])
-    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+    with patch.object(onboard_module, "questionary") as mock_q:
+        mock_q.text.return_value.ask.side_effect = ["localhost", "6379", "test_graph"]
 
-    # Mock GraphFactory and AssetsGenerator
-    from unittest.mock import MagicMock
+        mock_graph = MagicMock()
+        monkeypatch.setattr(
+            "govio.cli.onboard.GraphFactory",
+            MagicMock(create=MagicMock(return_value=mock_graph)),
+        )
+        mock_generator = MagicMock()
+        monkeypatch.setattr(
+            "govio.cli.onboard.AssetsGenerator",
+            MagicMock(return_value=mock_generator),
+        )
 
-    mock_graph = MagicMock()
-    monkeypatch.setattr(
-        "govio.cli.onboard.GraphFactory",
-        MagicMock(create=MagicMock(return_value=mock_graph)),
-    )
-    mock_generator = MagicMock()
-    monkeypatch.setattr(
-        "govio.cli.onboard.AssetsGenerator",
-        MagicMock(return_value=mock_generator),
-    )
+        onboard_module.onboard(new_falkordb=csv_dir)
 
-    onboard_module.onboard(new_falkordb=csv_dir)
-
-    # Verify config saved with falkordb backend
     saved_config = ConfigManager(config_path).load()
-    assert saved_config["backend"] == "falkordb"
-    assert saved_config["csv_dir"] == str(csv_dir)
-    assert saved_config["falkordb"]["host"] == "localhost"
-    assert saved_config["falkordb"]["graph"] == "test_graph"
-
-    # Verify backend.txt
-    assert (tmp_path / "assets" / "backend.txt").read_text().strip() == "falkordb"
+    assert saved_config["graph"]["backend"] == "falkordb"
+    assert saved_config["metadata"]["csv_dir"] == str(csv_dir)
+    assert saved_config["graph"]["falkordb"]["host"] == "localhost"
+    assert saved_config["graph"]["falkordb"]["graph"] == "test_graph"
 
 
 def test_onboard_new_networkx(monkeypatch, tmp_path):
@@ -352,15 +254,12 @@ def test_onboard_new_networkx(monkeypatch, tmp_path):
 
     onboard_module = importlib.import_module("govio.cli.onboard")
 
-    # Create test CSV files
     csv_dir = tmp_path / "csv"
     create_test_csv_files(csv_dir)
 
-    # Patch SKILLS_ASSETS_DIR
     onboard_module.SKILLS_ASSETS_DIR = tmp_path / "assets"
     onboard_module.SKILLS_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Mock config path
     config_path = tmp_path / ".govio" / "config.yaml"
 
     def mock_config_manager():
@@ -368,12 +267,10 @@ def test_onboard_new_networkx(monkeypatch, tmp_path):
 
     monkeypatch.setattr(onboard_module, "ConfigManager", mock_config_manager)
 
-    # Mock build_graph and graph factory
-    from unittest.mock import MagicMock
-
     monkeypatch.setattr(
         "govio.cli.onboard.build_graph", lambda *a, **kw: None
     )
+
     mock_graph = MagicMock()
     monkeypatch.setattr(
         "govio.cli.onboard.GraphFactory",
@@ -387,14 +284,10 @@ def test_onboard_new_networkx(monkeypatch, tmp_path):
 
     onboard_module.onboard(new_networkx=csv_dir)
 
-    # Verify config saved with networkx backend
     saved_config = ConfigManager(config_path).load()
-    assert saved_config["backend"] == "networkx"
-    assert saved_config["csv_dir"] == str(csv_dir)
-    assert "gml_path" in saved_config["networkx"]
-
-    # Verify backend.txt
-    assert (tmp_path / "assets" / "backend.txt").read_text().strip() == "networkx"
+    assert saved_config["graph"]["backend"] == "networkx"
+    assert saved_config["metadata"]["csv_dir"] == str(csv_dir)
+    assert "gml_path" in saved_config["graph"]["networkx"]
 
 
 def test_onboard_new_falkordb_and_new_networkx_exclusive(monkeypatch, tmp_path, capsys):
@@ -417,7 +310,8 @@ class TestPromptConnectArgs:
         """测试空输入返回空字典"""
         from govio.cli.onboard import prompt_connect_args
 
-        with patch("builtins.input", return_value=""):
+        with patch("govio.cli.onboard.questionary") as mock_q:
+            mock_q.text.return_value.ask.return_value = ""
             result = prompt_connect_args()
             assert result == {}
 
@@ -425,8 +319,8 @@ class TestPromptConnectArgs:
         """测试单个 key-value 输入"""
         from govio.cli.onboard import prompt_connect_args
 
-        responses = ["ssl=true", ""]
-        with patch("builtins.input", side_effect=responses):
+        with patch("govio.cli.onboard.questionary") as mock_q:
+            mock_q.text.return_value.ask.side_effect = ["ssl=true", ""]
             result = prompt_connect_args()
             assert result == {"ssl": True}
 
@@ -434,8 +328,8 @@ class TestPromptConnectArgs:
         """测试多个 key-value 输入"""
         from govio.cli.onboard import prompt_connect_args
 
-        responses = ["ssl=true", "timeout=30", "name=test", ""]
-        with patch("builtins.input", side_effect=responses):
+        with patch("govio.cli.onboard.questionary") as mock_q:
+            mock_q.text.return_value.ask.side_effect = ["ssl=true", "timeout=30", "name=test", ""]
             result = prompt_connect_args()
             assert result == {"ssl": True, "timeout": 30, "name": "test"}
 
@@ -443,8 +337,8 @@ class TestPromptConnectArgs:
         """测试格式错误后继续输入"""
         from govio.cli.onboard import prompt_connect_args
 
-        responses = ["invalid", "key=value", ""]
-        with patch("builtins.input", side_effect=responses):
+        with patch("govio.cli.onboard.questionary") as mock_q:
+            mock_q.text.return_value.ask.side_effect = ["invalid", "key=value", ""]
             result = prompt_connect_args()
             assert result == {"key": "value"}
 
@@ -453,7 +347,8 @@ class TestPromptConnectArgs:
         from govio.cli.onboard import prompt_connect_args
 
         existing = {"ssl": True, "timeout": 30}
-        with patch("builtins.input", return_value=""):
+        with patch("govio.cli.onboard.questionary") as mock_q:
+            mock_q.confirm.return_value.ask.return_value = True
             result = prompt_connect_args(existing)
             assert result == existing
 
@@ -462,8 +357,9 @@ class TestPromptConnectArgs:
         from govio.cli.onboard import prompt_connect_args
 
         existing = {"ssl": True}
-        responses = ["no", "timeout=60", ""]
-        with patch("builtins.input", side_effect=responses):
+        with patch("govio.cli.onboard.questionary") as mock_q:
+            mock_q.confirm.return_value.ask.return_value = False
+            mock_q.text.return_value.ask.side_effect = ["timeout=60", ""]
             result = prompt_connect_args(existing)
             assert result == {"timeout": 60}
 
@@ -471,7 +367,7 @@ class TestPromptConnectArgs:
         """测试浮点数值"""
         from govio.cli.onboard import prompt_connect_args
 
-        responses = ["ratio=0.5", ""]
-        with patch("builtins.input", side_effect=responses):
+        with patch("govio.cli.onboard.questionary") as mock_q:
+            mock_q.text.return_value.ask.side_effect = ["ratio=0.5", ""]
             result = prompt_connect_args()
             assert result == {"ratio": 0.5}

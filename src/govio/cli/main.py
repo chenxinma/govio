@@ -42,7 +42,7 @@ def main():
     config_manager = ConfigManager()
     if config_manager.exists():
         config = config_manager.load()
-        backend = config.get("backend")
+        backend = (config.get("graph") or {}).get("backend")
         if backend == "falkordb":
             code_type = "Cypher"
         elif backend == "networkx":
@@ -86,7 +86,7 @@ def main():
             print("错误: 未找到配置文件，请先运行 govio-cli onboard", file=sys.stderr)
             sys.exit(1)
         config = config_manager.load()
-        backend = config.get("backend")
+        backend = (config.get("graph") or {}).get("backend")
         if not backend:
             print("错误: 配置文件中未设置后端类型", file=sys.stderr)
             sys.exit(1)
