@@ -205,6 +205,7 @@ def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = 
             metric_count = len(df_metrics)
         except Exception as e:
             print(f"警告: 无法加载指标定义文件: {e}")
+            exit(1)
 
     # --- Summary ---
     print(f"成功导出: {len(df_tables)} 张表, {len(df_columns)} 个字段, "

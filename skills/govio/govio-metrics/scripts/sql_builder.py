@@ -68,6 +68,10 @@ def build_metric_sql(
     filters = filters or {}
     cte_refs = cte_refs or {}
 
+    # 校验：表字段包含 report_ym 时必须提供该过滤条件
+    # report_ym 是拉链字段，缺失会导致不同时期数据被合并，产生无意义结果
+    _check_report_ym_required(metrics, dimensions, filters)
+
     # 分离原子指标和派生指标
     atomic_metrics = [m for m in metrics if m.get("type") == "原子"]
     derived_metrics = [m for m in metrics if m.get("type") == "派生"]
@@ -204,6 +208,30 @@ def build_metric_sql(
     sql += f"\nLIMIT {limit}"
 
     return sql
+
+
+def _check_report_ym_required(
+    metrics: list[dict],
+    dimensions: list[str],
+    filters: dict[str, str],
+) -> None:
+    """校验 report_ym 必须条件
+
+    当指标维度或来源表字段包含 report_ym 时，filters 中必须提供 report_ym 值。
+    report_ym 是数据拉链字段，缺失会导致不同时期数据被 GROUP BY 合并，产生无意义结果。
+    """
+    for m in metrics:
+        time_col = m.get("time_column", "report_ym")
+        # report_ym 是拉链字段，始终必须过滤；其他时间字段仅在用于分组时必须过滤
+        need_check = time_col == "report_ym" or time_col in dimensions
+        if need_check:
+            value = filters.get(time_col, "").strip()
+            if not value:
+                raise ValueError(
+                    f"指标 {m['code']} 的来源表包含 {time_col} 字段，"
+                    f"该字段为必须过滤条件（拉链表不同时期数据不可合并）。"
+                    f"请在 filters 中指定 {time_col}，如 {{\"{time_col}\": \"最新年月\"}}"
+                )
 
 
 def _build_where_conditions(

@@ -69,8 +69,9 @@ govio-cli query -c 'MATCH (m:Metric {code: "FORECAST_CODE"})-[d:DIMENSION_USED]-
 ```
 
 **记录要点**:
+- `report_ym` 拉链字段：维度包含 `report_ym` 时该字段为**必须过滤条件**。`report_ym` 表示数据生成时间而非业务时间，每月生成快照形成拉链；不指定会导致不同时期数据被合并，产生无意义结果。一般查询直接取最新年月，仅追溯历史时才用范围条件
 - `actual_column`: 引用列名（如 `bill_income_amt_lastyear`），与 metric code 不同时后续 SQL 必须用此列名
-- `time_column`: 时间字段名（`report_ym` 或 `ym`，以实际表为准）
+- `time_column`: 时间字段名（`ym`），来自 Step 2d 的维度列表或 REFERS_COLUMN
 - 可用维度列表：确认用户指定的维度在其中
 
 ### Step 3: 探查数据范围 + 维度值
@@ -94,6 +95,7 @@ govio-cli observe load --name dim_check --datasource <ds> \
 **注意事项**:
 - 若最新周期超过当前月份，向用户说明为预测/计划值并确认
 - 用户未指定时间时，默认使用最新可用月份
+- `report_ym` 为必须过滤条件，即使用户未指定时间也必须在 filters 中填写最新值
 
 ### Step 4: 组装 SQL
 
@@ -128,7 +130,7 @@ uv run python scripts/sql_builder.py /tmp/query.json
 **关键字段**:
 - `actual_column`: 来自 Step 2c，当实际列名与 metric code 不同时必须填写
 - `time_column`: 来自 Step 2c，与实际表的时间列名一致
-- `filters`: 包含时间条件 + 用户指定的维度筛选
+- `filters`: 必须包含时间条件 + 用户指定的维度筛选。若表含 `report_ym`，该字段为必须项（拉链表不同时期数据不可合并）
 
 ### Step 5: 执行查询
 
@@ -182,7 +184,7 @@ cat /tmp/result.json
 
 ### 用户未指定时间
 
-Step 3a 探查到最新周期后直接使用，无需询问。
+Step 3a 探查到最新周期后直接填入 filters，无需询问。注意：`report_ym` 是必须条件，即使用户未指定也必须填写。
 
 ### 派生指标
 
