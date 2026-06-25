@@ -16,6 +16,7 @@ from ..observe_data.tools.list_dataframes import list_dataframes
 from ..observe_data.tools.load_dataframe import load_dataframe, load_from_memory
 from ..observe_data.tools.release_dataframe import release_dataframe, release_all_dataframes
 from ..observe_data.tools.visualize_relations import visualize_relations
+from ..observe_data.core.chart import render_chart
 from ..observe_data.tools.list_datasources import list_datasources
 
 
@@ -150,6 +151,31 @@ def cmd_visualize(config: dict, relations_json: str) -> None:
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+def cmd_chart(
+    config: dict,
+    name: str,
+    chart_type: str,
+    x: str,
+    y: str,
+    output: str,
+) -> None:
+    """生成图表 PNG"""
+    store = ObserveStore()
+    df = store.get(name)
+    if df is None:
+        print(json.dumps({"success": False, "error": f"DataFrame '{name}' 不存在"}))
+        return
+
+    result = render_chart(
+        df=df,
+        chart_type=chart_type,
+        x_col=x,
+        y_col=y,
+        output_path=output,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 def observe():
     """observe 命令入口"""
     parser = argparse.ArgumentParser(
@@ -191,6 +217,14 @@ def observe():
     # visualize-relations --relations <json>
     p = sub.add_parser("visualize-relations", help="生成关系图谱")
     p.add_argument("--relations", required=True, help="关系 JSON")
+
+    # chart --name --type --x --y -o
+    p = sub.add_parser("chart", help="从 DataFrame 生成图表 PNG")
+    p.add_argument("--name", required=True, help="DataFrame 名称")
+    p.add_argument("--type", required=True, choices=["bar", "line"], help="图表类型")
+    p.add_argument("--x", required=True, help="X 轴列名")
+    p.add_argument("--y", required=True, help="Y 轴列名")
+    p.add_argument("-o", "--output", required=True, help="输出 PNG 路径")
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -235,6 +269,8 @@ def observe():
             cmd_explore(config, args.dataframes if args.dataframes else None)
         case "visualize-relations":
             cmd_visualize(config, args.relations)
+        case "chart":
+            cmd_chart(config, args.name, args.type, args.x, args.y, args.output)
 
 
 if __name__ == "__main__":
