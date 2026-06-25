@@ -69,3 +69,4 @@ CSV files use FalkorDB bulk-import header conventions (`:ID(Type)`, `:START_ID(T
 - `workspace_uuid` is hardcoded in utility.py but parameterized in loader classes
 - Tests use pytest (despite README mentioning unittest) — run with `uv run pytest`
 - Chinese language is used in comments, print statements, and documentation
+- **Skill 同步约定**: 当 `govio-cli` 命令组(`observe`、`onboard`、`query` 等)做了调整或新增功能时,必须同步更新 `skills/` 目录下对应的 skill 文档(如 `skills/govio-observe/SKILL.md`),保持 CLI 与 skill 描述一致。提交时与代码改动放在同一个 commit 或紧随其后。
