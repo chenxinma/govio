@@ -188,13 +188,41 @@ def observe():
     p.add_argument("--detail", action="store_true", help="显示数据源的完整信息（默认仅列出名称）")
 
     # load --name (--datasource | --memory) --sql [-o output]
-    p = sub.add_parser("load", help="加载 DataFrame")
-    p.add_argument("--name", required=True, help="DataFrame 名称")
+    p = sub.add_parser(
+        "load",
+        help="加载 DataFrame",
+        description=(
+            "加载 DataFrame 到 ObserveStore。\n\n"
+            "两种数据来源（互斥）：\n"
+            "  --datasource  从数据库抽取（需先用 onboard 配置数据源）\n"
+            "  --memory      不连数据库，把 store 中所有已加载的 DataFrame 注入\n"
+            "                内存 DuckDB（按 DataFrame 名注册为同名表），再执行 SQL。\n\n"
+            "-o/--output 可在加载/查询成功后把结果 DataFrame 以 JSON（records 方式、\n"
+            "UTF-8、缩进 2）写出到磁盘，返回结果会额外带 output_file 字段。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument("--name", required=True, help="DataFrame 名称（小写字母+下划线）")
     src = p.add_mutually_exclusive_group(required=True)
-    src.add_argument("--datasource", help="数据源名称")
-    src.add_argument("--memory", action="store_true", help="从已加载的 DataFrame 中查询")
-    p.add_argument("--sql", required=True, help="查询 SQL")
-    p.add_argument("-o", "--output", help="将数据内容输出到 JSON 文件")
+    src.add_argument(
+        "--datasource",
+        help="数据源名称（从 show-datasource 获取），从数据库抽取数据",
+    )
+    src.add_argument(
+        "--memory",
+        action="store_true",
+        help=(
+            "不连数据库，改为在已加载的 DataFrame 上跑 SQL：把 store 中所有 "
+            "DataFrame 注入内存 DuckDB，按 DataFrame 名注册为同名表后执行查询；"
+            "SQL 中的表名须与已加载的 DataFrame 名一致"
+        ),
+    )
+    p.add_argument("--sql", required=True, help="查询 SQL 语句")
+    p.add_argument(
+        "-o",
+        "--output",
+        help="将结果 DataFrame 内容输出为 JSON 文件（records 方式、UTF-8、缩进 2）",
+    )
 
     # list
     sub.add_parser("list", help="列出已加载的 DataFrame")
