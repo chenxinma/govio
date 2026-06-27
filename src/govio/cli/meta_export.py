@@ -62,23 +62,41 @@ def meta_export(
         )
         sys.exit(1)
 
-    # --- Load TDS metadata ---
-    tds_loader = TDSLoader(kundb, workspace_uuid, df_app_db_map["schema"].to_list())
-    tds_tables = tds_loader.PhysicalTable
-    tds_columns = tds_loader.Col
+    # --- 决定要抽取的 schema 集合 ---
+    if db_name:
+        # 单库模式：app_map 里该 app 对应的 schema
+        app_schemas = df_app_db_map.loc[
+            df_app_db_map["name"] == db_name, "schema"
+        ].tolist()
+        effective_schemas = (
+            [s for s in app_schemas if s in schemas] if schemas else app_schemas
+        )
+    else:
+        effective_schemas = schemas or []
 
     # --- Load DuckDB metadata ---
-    duck_loader = DuckDBLoader(db_path, schemas)
+    duck_loader = DuckDBLoader(db_path, effective_schemas)
     duck_tables = duck_loader.PhysicalTable
     duck_columns = duck_loader.Col
 
-    # --- Merge ---
-    df_tables = merge_metadata(tds_tables, duck_tables, "full_table_name")
-    df_columns = merge_metadata(tds_columns, duck_columns, "column")
+    if db_name:
+        # 单库模式：不查 TDS，DuckDB 直接作为最终元数据
+        df_tables = duck_tables.reset_index(drop=True)
+        df_columns = duck_columns.reset_index(drop=True)
+    else:
+        # 全量模式：TDS + DuckDB 合并
+        tds_loader = TDSLoader(kundb, workspace_uuid, df_app_db_map["schema"].to_list())
+        tds_tables = tds_loader.PhysicalTable
+        tds_columns = tds_loader.Col
+        df_tables = merge_metadata(tds_tables, duck_tables, "full_table_name")
+        df_columns = merge_metadata(tds_columns, duck_columns, "column")
 
     # --- Load apps and standards ---
     app_loader = AppInfoLoader(app_list_file, df_app_db_map["name"].to_list())
     df_apps = app_loader.Application
+    if db_name:
+        # 单库模式：只保留该 app
+        df_apps = df_apps[df_apps["name"] == db_name].reset_index(drop=True)
     std_loader = StandardLoader(kundb, workspace_uuid)
     df_stds = std_loader.Standard
 

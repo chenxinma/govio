@@ -307,3 +307,112 @@ def test_main_db_name_unknown_exits(tmp_path, monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "nope" in err
     assert "billing" in err
+
+
+def test_single_db_mode_skips_tds(tmp_path):
+    """--db-name 模式不查 TDS，只抽 DuckDB 该 schema。"""
+    config = {
+        "metadata": {
+            "kundb": "mysql://x", "workspace_uuid": "ws",
+            "app_list": "app.json", "app_map": "app_map.json",
+            "relationship": None, "metric": None,
+        },
+        "graph": {},
+    }
+    with patch("govio.cli.meta_export.ConfigManager") as cfg_m, \
+         patch("govio.cli.meta_export.TDSLoader") as tds_m, \
+         patch("govio.cli.meta_export.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta_export.AppInfoLoader") as app_m, \
+         patch("govio.cli.meta_export.StandardLoader") as std_m, \
+         patch("govio.cli.meta_export.pd.read_json") as read_json_m:
+        cfg_m.return_value.load.return_value = config
+        # TDS 若被调用会返回这些——测试断言它不应被调用
+        tds_m.return_value.PhysicalTable = _mock_tds_tables()
+        tds_m.return_value.Col = _mock_tds_columns()
+        # DuckDB 只返回 dm.orders（单库子集）
+        duck_m.return_value.PhysicalTable = pd.DataFrame({
+            "full_table_name": ["dm.orders"],
+            "schema": ["dm"], "table_name": ["orders"],
+            "name": ["Orders"], "data_entity_type": ["DUCKDB_TABLE"],
+            "database_name": ["db"],
+        })
+        duck_m.return_value.Col = pd.DataFrame({
+            "column": ["dm.orders.id", "dm.orders.amount"],
+            "column_name": ["id", "amount"], "name": ["ID", "Amount"],
+            "full_table_name": ["dm.orders", "dm.orders"],
+            "data_entity_type": ["DUCKDB_COLUMN", "DUCKDB_COLUMN"],
+            "dtype": ["int", "decimal"], "size": [0, 10],
+            "precision": [0, 10], "scale": [0, 2], "order_no": [1, 2],
+            "data_type": ["int", "decimal(10,2)"],
+        })
+        app_m.return_value.Application = _mock_apps()
+        std_m.return_value.Standard = _mock_stds()
+        read_json_m.return_value = _mock_app_db_map()
+
+        from govio.cli.meta_export import meta_export
+        out = tmp_path / "out"
+        meta_export(db_path="ignored", schemas=None, db_name="billing",
+                    output=out, dry_run=True)
+
+    # TDSLoader 不应被实例化
+    tds_m.assert_not_called()
+
+    # 只导出 dm.orders 这张表
+    tables = pd.read_csv(out / "PhysicalTable.csv")
+    assert set(tables["full_table_name"]) == {"dm.orders"}
+    cols = pd.read_csv(out / "Col.csv")
+    assert set(cols["full_table_name"]) == {"dm.orders"}
+
+    # Application 只剩 billing 一个
+    apps = pd.read_csv(out / "Application.csv")
+    assert len(apps) == 1
+    assert apps["app_id"].iloc[0] == "app_billing"
+
+    # USE 边只连 billing -> dm.orders
+    use = pd.read_csv(out / "USE.csv")
+    assert len(use) == 1
+
+
+def test_single_db_with_schemas_intersection(tmp_path):
+    """--db-name + --schemas 取交集：db-name 锁 dm，schemas 收窄到不存在的 schema 应空。"""
+    config = {
+        "metadata": {
+            "kundb": "mysql://x", "workspace_uuid": "ws",
+            "app_list": "app.json", "app_map": "app_map.json",
+            "relationship": None, "metric": None,
+        },
+        "graph": {},
+    }
+
+    def _mock_duck(*args, **kwargs):
+        schemas = kwargs.get("schemas") or (args[1] if len(args) > 1 else [])
+        if not schemas:
+            return MagicMock(
+                PhysicalTable=pd.DataFrame(columns=_mock_tds_tables().columns),
+                Col=pd.DataFrame(columns=_mock_tds_columns().columns),
+            )
+        return MagicMock(
+            PhysicalTable=_mock_tds_tables(),
+            Col=_mock_tds_columns(),
+        )
+
+    with patch("govio.cli.meta_export.ConfigManager") as cfg_m, \
+         patch("govio.cli.meta_export.TDSLoader") as tds_m, \
+         patch("govio.cli.meta_export.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta_export.AppInfoLoader") as app_m, \
+         patch("govio.cli.meta_export.StandardLoader") as std_m, \
+         patch("govio.cli.meta_export.pd.read_json") as read_json_m:
+        cfg_m.return_value.load.return_value = config
+        duck_m.side_effect = _mock_duck
+        app_m.return_value.Application = _mock_apps()
+        std_m.return_value.Standard = _mock_stds()
+        read_json_m.return_value = _mock_app_db_map()
+
+        from govio.cli.meta_export import meta_export
+        out = tmp_path / "out"
+        # billing 对应 schema=dm，但 --schemas=dwd 与之无交集
+        meta_export(db_path="ignored", schemas=["dwd"], db_name="billing",
+                    output=out, dry_run=True)
+
+    tables = pd.read_csv(out / "PhysicalTable.csv")
+    assert len(tables) == 0  # 交集为空
