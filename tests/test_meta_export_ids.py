@@ -236,3 +236,33 @@ def test_metric_edges_use_string_ids(tmp_path):
     du = pd.read_csv(out / "DIMENSION_USED.csv")
     assert str(du[":START_ID(Metric)"].iloc[0]) in node_ids
     assert str(du[":END_ID(Dimension)"].iloc[0]) in node_ids
+
+
+def test_make_csv_utility_path_uses_string_ids(tmp_path, monkeypatch):
+    """老路径 utility.make_csv 也应产出 string ID 节点 CSV。"""
+    from unittest.mock import MagicMock
+    from govio.metadata import utility
+
+    monkeypatch.setattr(utility, "TDSLoader", lambda *a, **k: MagicMock(
+        PhysicalTable=_mock_tds_tables(), Col=_mock_tds_columns()))
+    monkeypatch.setattr(utility, "AppInfoLoader", lambda *a, **k: MagicMock(
+        Application=_mock_apps()))
+    monkeypatch.setattr(utility, "StandardLoader", lambda *a, **k: MagicMock(
+        Standard=_mock_stds()))
+
+    app_map = _mock_app_db_map()
+    utility.make_csv(
+        output=tmp_path, db="mysql://x", workspace_uuid="ws",
+        app_list_file="app.json", df_app_db_map=app_map,
+    )
+
+    df = pd.read_csv(tmp_path / "PhysicalTable.csv")
+    assert ":ID(PhysicalTable)" == df.columns[0]
+    assert df[":ID(PhysicalTable)"].iloc[0].startswith("PT")
+    assert len(df[":ID(PhysicalTable)"].iloc[0]) == 10
+
+    has_col = pd.read_csv(tmp_path / "HAS_COLUMN.csv")
+    assert ":START_ID(PhysicalTable)" in has_col.columns
+    node_ids = set(df[":ID(PhysicalTable)"].astype(str))
+    for v in has_col[":START_ID(PhysicalTable)"]:
+        assert str(v) in node_ids
