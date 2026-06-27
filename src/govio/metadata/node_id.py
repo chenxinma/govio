@@ -1,4 +1,4 @@
-"""节点 string ID 生成与节点 CSV 写出。
+"""节点 string ID 生成。
 
 ID 格式: <2 字符类型前缀><SHA256(业务键) 前 8 hex>，共 10 位。
 业务键来自各节点的天然唯一列（full_table_name / column / app_id / standard_id / code）。

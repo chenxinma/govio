@@ -4,10 +4,11 @@ from govio.metadata.node_id import make_id, NODE_PREFIXES
 
 def test_make_id_format():
     """ID = 2 字符前缀 + 8 hex，共 10 位。"""
+    import re
     node_id = make_id("PhysicalTable", "dm.orders")
     assert len(node_id) == 10
     assert node_id.startswith("PT")
-    assert node_id[2:].isalnum()  # 8 个 hex 字符
+    assert re.fullmatch(r"[0-9A-F]{8}", node_id[2:])  # 8 个大写 hex
 
 
 def test_make_id_deterministic():
