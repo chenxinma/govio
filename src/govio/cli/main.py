@@ -55,13 +55,19 @@ def main():
     )
 
     # meta-export 子命令：从 DuckDB 导出元数据 CSV
-    p_meta = sub.add_parser("meta-export", help="从 DuckDB + TDS 合并导出全量元数据 CSV")
+    p_meta = sub.add_parser(
+        "meta-export", help="从 DuckDB + TDS 合并导出元数据 CSV（支持单库模式）"
+    )
     p_meta.add_argument("--db", type=str, required=True, help="DuckDB 数据库文件路径")
     p_meta.add_argument(
         "--schemas",
         type=str,
-        required=True,
-        help="要导出的 schema 列表，逗号分隔（如 dm,dwd,dws）",
+        help="要导出的 schema 列表，逗号分隔（如 dm,dwd,dws）；全量模式",
+    )
+    p_meta.add_argument(
+        "--db-name",
+        type=str,
+        help="单库模式：按 app 名导出单个数据库的相关子图（不查 TDS）",
     )
     p_meta.add_argument("--output", type=Path, required=True, help="CSV 输出目录")
     p_meta.add_argument(
@@ -96,7 +102,14 @@ def main():
     elif args.action == "query":
         query(args.code)
     elif args.action == "meta-export":
-        meta_export(args.db, args.schemas.split(","), args.output, dry_run=args.dry_run)
+        schemas = args.schemas.split(",") if args.schemas else None
+        meta_export(
+            db_path=args.db,
+            schemas=schemas,
+            db_name=args.db_name,
+            output=args.output,
+            dry_run=args.dry_run,
+        )
     elif args.action == "observe":
         # 将 observe 子命令参数设为 sys.argv 供 observe() 解析
         sys.argv = ["govio-cli"] + args.observe_args

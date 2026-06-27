@@ -8,9 +8,14 @@ from .standard import StandardLoader
 from .recommender import create_recommender
 from .relationship import load_relationships
 from .metric import MetricLoader
+from .node_id import assign_node_ids, write_node_csv
 
 
 def reorder_index(dfs: list[pd.DataFrame], start: int = 1):
+    """[Deprecated] 全局连续整数 ID。新代码应使用 node_id.assign_node_ids。
+
+    保留仅为向后兼容，make_csv 已不再调用。
+    """
     base_index: int = start
 
     for df in dfs:
@@ -38,29 +43,36 @@ def make_csv(
     df_apps = app_loader.Application
     df_stds = std_loader.Standard
 
-    reorder_index([df_tables, df_columns, df_apps, df_stds])
+    df_tables = df_tables.reset_index(drop=True)
+    df_columns = df_columns.reset_index(drop=True)
+    df_apps = df_apps.reset_index(drop=True)
+    df_stds = df_stds.reset_index(drop=True)
+    assign_node_ids(df_tables, "PhysicalTable", "full_table_name")
+    assign_node_ids(df_columns, "Col", "column")
+    assign_node_ids(df_apps, "Application", "app_id")
+    assign_node_ids(df_stds, "Standard", "standard_id")
 
     files = []
 
-    df_tables.to_csv(output / "PhysicalTable.csv", index_label=":ID(PhysicalTable)")
+    write_node_csv(df_tables, output / "PhysicalTable.csv", "PhysicalTable")
     files.append("-n " + str(output / "PhysicalTable.csv"))
 
-    df_columns.to_csv(output / "Col.csv", index_label=":ID(Col)")
+    write_node_csv(df_columns, output / "Col.csv", "Col")
     files.append("-n " + str(output / "Col.csv"))
 
-    df_apps.to_csv(output / "Application.csv", index_label=":ID(Application)")
+    write_node_csv(df_apps, output / "Application.csv", "Application")
     files.append("-n " + str(output / "Application.csv"))
 
-    df_stds.to_csv(output / "Standard.csv", index_label=":ID(Standard)")
+    write_node_csv(df_stds, output / "Standard.csv", "Standard")
     files.append("-n " + str(output / "Standard.csv"))
 
     df_has_column = pd.merge(
-        df_tables[["full_table_name"]]
-        .reset_index()
-        .rename(columns={"index": ":START_ID(PhysicalTable)"}),
-        df_columns[["full_table_name"]]
-        .reset_index()
-        .rename(columns={"index": ":END_ID(Col)"}),
+        df_tables[["full_table_name", "node_id"]].rename(
+            columns={"node_id": ":START_ID(PhysicalTable)"}
+        ),
+        df_columns[["full_table_name", "node_id"]].rename(
+            columns={"node_id": ":END_ID(Col)"}
+        ),
         on="full_table_name",
         how="inner",
     )[[":START_ID(PhysicalTable)", ":END_ID(Col)"]]
@@ -69,16 +81,16 @@ def make_csv(
 
     df_app_table = pd.merge(
         df_app_db_map,
-        df_tables[["schema"]]
-        .reset_index()
-        .rename(columns={"index": ":END_ID(PhysicalTable)"}),
+        df_tables[["schema", "node_id"]].rename(
+            columns={"node_id": ":END_ID(PhysicalTable)"}
+        ),
         on="schema",
         how="inner",
     )
     df_use = pd.merge(
-        df_apps[["name"]]
-        .reset_index()
-        .rename(columns={"index": ":START_ID(Application)"}),
+        df_apps[["name", "node_id"]].rename(
+            columns={"node_id": ":START_ID(Application)"}
+        ),
         df_app_table,
         on="name",
         how="inner",
@@ -90,6 +102,14 @@ def make_csv(
     if relationship_file:
         try:
             df_relates_to = load_relationships(relationship_file, df_tables, df_columns)
+            table_idx_to_id = df_tables["node_id"].tolist()
+            if not df_relates_to.empty:
+                df_relates_to["source"] = [
+                    table_idx_to_id[i] for i in df_relates_to["source"]
+                ]
+                df_relates_to["target"] = [
+                    table_idx_to_id[i] for i in df_relates_to["target"]
+                ]
             df_relates_to.to_csv(
                 output / "RELATES_TO.csv",
                 index=False,
@@ -110,57 +130,75 @@ def make_csv(
     if metric_file:
         try:
             metric_loader = MetricLoader(metric_file, df_tables, df_columns)
-            df_metrics = metric_loader.Metric
-            df_dimensions = metric_loader.Dimension
+            df_metrics = metric_loader.Metric.reset_index(drop=True)
+            df_dimensions = metric_loader.Dimension.reset_index(drop=True)
 
-            # 计算 Metric/Dimension 的 ID 起始偏移（接续已有节点）
-            metric_offset = (
-                len(df_tables) + len(df_columns) + len(df_apps) + len(df_stds) + 1
-            )
-            dim_offset = metric_offset + len(df_metrics)
-            reorder_index([df_metrics, df_dimensions], start=metric_offset)
+            assign_node_ids(df_metrics, "Metric", "code")
+            assign_node_ids(df_dimensions, "Dimension", "code")
 
-            df_metrics.to_csv(output / "Metric.csv", index_label=":ID(Metric)")
+            write_node_csv(df_metrics, output / "Metric.csv", "Metric")
             files.append("-n " + str(output / "Metric.csv"))
 
-            df_dimensions.to_csv(
-                output / "Dimension.csv", index_label=":ID(Dimension)"
-            )
+            write_node_csv(df_dimensions, output / "Dimension.csv", "Dimension")
             files.append("-n " + str(output / "Dimension.csv"))
 
-            # USES_TABLE 边
+            metric_idx_to_id = df_metrics["node_id"].tolist()
+            dim_idx_to_id = df_dimensions["node_id"].tolist()
+            table_idx_to_id = df_tables["node_id"].tolist()
+            col_idx_to_id = df_columns["node_id"].tolist()
+
             uses_table = metric_loader.uses_table_edges.copy()
             if not uses_table.empty:
-                uses_table[":START_ID(Metric)"] += metric_offset
+                uses_table[":START_ID(Metric)"] = [
+                    metric_idx_to_id[i] for i in uses_table[":START_ID(Metric)"]
+                ]
+                uses_table[":END_ID(PhysicalTable)"] = [
+                    table_idx_to_id[i] for i in uses_table[":END_ID(PhysicalTable)"]
+                ]
                 uses_table.to_csv(output / "USES_TABLE.csv", index=False)
                 files.append("-r " + str(output / "USES_TABLE.csv"))
 
-            # REFERS_COLUMN 边
             refers_col = metric_loader.refers_column_edges.copy()
             if not refers_col.empty:
-                refers_col[":START_ID(Metric)"] += metric_offset
+                refers_col[":START_ID(Metric)"] = [
+                    metric_idx_to_id[i] for i in refers_col[":START_ID(Metric)"]
+                ]
+                refers_col[":END_ID(Col)"] = [
+                    col_idx_to_id[i] for i in refers_col[":END_ID(Col)"]
+                ]
                 refers_col.to_csv(output / "REFERS_COLUMN.csv", index=False)
                 files.append("-r " + str(output / "REFERS_COLUMN.csv"))
 
-            # DERIVED_FROM 边
             derived_from = metric_loader.derived_from_edges.copy()
             if not derived_from.empty:
-                derived_from[":START_ID(Metric)"] += metric_offset
-                derived_from[":END_ID(Metric)"] += metric_offset
+                derived_from[":START_ID(Metric)"] = [
+                    metric_idx_to_id[i] for i in derived_from[":START_ID(Metric)"]
+                ]
+                derived_from[":END_ID(Metric)"] = [
+                    metric_idx_to_id[i] for i in derived_from[":END_ID(Metric)"]
+                ]
                 derived_from.to_csv(output / "DERIVED_FROM.csv", index=False)
                 files.append("-r " + str(output / "DERIVED_FROM.csv"))
 
-            # DIMENSION_USED 边
             dim_used = metric_loader.dimension_used_edges.copy()
             if not dim_used.empty:
-                dim_used[":START_ID(Metric)"] += metric_offset
-                dim_used[":END_ID(Dimension)"] += dim_offset
+                dim_used[":START_ID(Metric)"] = [
+                    metric_idx_to_id[i] for i in dim_used[":START_ID(Metric)"]
+                ]
+                dim_used[":END_ID(Dimension)"] = [
+                    dim_idx_to_id[i] for i in dim_used[":END_ID(Dimension)"]
+                ]
                 dim_used.to_csv(output / "DIMENSION_USED.csv", index=False)
                 files.append("-r " + str(output / "DIMENSION_USED.csv"))
 
-            # SUPERSEDES 边
-            supersedes = metric_loader.supersedes_edges
+            supersedes = metric_loader.supersedes_edges.copy()
             if not supersedes.empty:
+                supersedes[":START_ID(Metric)"] = [
+                    metric_idx_to_id[i] for i in supersedes[":START_ID(Metric)"]
+                ]
+                supersedes[":END_ID(Metric)"] = [
+                    metric_idx_to_id[i] for i in supersedes[":END_ID(Metric)"]
+                ]
                 supersedes.to_csv(output / "SUPERSEDES.csv", index=False)
                 files.append("-r " + str(output / "SUPERSEDES.csv"))
 
@@ -231,5 +269,5 @@ def data_standard_recommend(
         )
         # COMPLIES_WITH
         df_complies_with[[":ID(Col)", ":ID(Standard)"]].rename(
-            columns={":ID(Col)": "START_ID(Col)", ":ID(Standard)": "END_ID(Standard)"}
+            columns={":ID(Col)": ":START_ID(Col)", ":ID(Standard)": ":END_ID(Standard)"}
         ).to_csv(output / "COMPLIES_WITH.csv", index=False)
