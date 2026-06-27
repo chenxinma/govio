@@ -60,12 +60,16 @@ def test_assign_node_ids_adds_column(tmp_path):
     assert df["node_id"].iloc[0] != df["node_id"].iloc[1]
 
 
-def test_assign_node_ids_uniqueness_exit_on_dup(tmp_path, capsys):
+def test_assign_node_ids_raises_on_duplicate_key():
     df = pd.DataFrame({"full_table_name": ["dm.t1", "dm.t1"]})
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError, match="业务键重复"):
         assign_node_ids(df, "PhysicalTable", "full_table_name")
-    captured = capsys.readouterr()
-    assert "ID 冲突" in captured.err
+
+
+def test_assign_node_ids_raises_on_nan_key():
+    df = pd.DataFrame({"full_table_name": ["dm.t1", None]})
+    with pytest.raises(ValueError, match="缺失值"):
+        assign_node_ids(df, "PhysicalTable", "full_table_name")
 
 
 def test_write_node_csv_header_and_id_column(tmp_path):

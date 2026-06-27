@@ -11,20 +11,6 @@ from .metric import MetricLoader
 from .node_id import assign_node_ids, write_node_csv
 
 
-def reorder_index(dfs: list[pd.DataFrame], start: int = 1):
-    """[Deprecated] 全局连续整数 ID。新代码应使用 node_id.assign_node_ids。
-
-    保留仅为向后兼容，make_csv 已不再调用。
-    """
-    base_index: int = start
-
-    for df in dfs:
-        _end_index = base_index + df.shape[0]
-        df["index"] = [i for i in range(base_index, _end_index)]
-        df.set_index("index", drop=True, inplace=True)
-        base_index = _end_index
-
-
 def make_csv(
     output: Path,
     db: str,
