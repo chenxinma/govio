@@ -1,7 +1,6 @@
 import pandas as pd
 import pytest
 from govio.metadata.node_id import (
-    NODE_PREFIXES,
     assign_node_ids,
     make_id,
     write_node_csv,

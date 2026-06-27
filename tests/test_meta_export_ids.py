@@ -397,7 +397,7 @@ def test_single_db_with_schemas_intersection(tmp_path):
         )
 
     with patch("govio.cli.meta_export.ConfigManager") as cfg_m, \
-         patch("govio.cli.meta_export.TDSLoader") as tds_m, \
+         patch("govio.cli.meta_export.TDSLoader") as _, \
          patch("govio.cli.meta_export.DuckDBLoader") as duck_m, \
          patch("govio.cli.meta_export.AppInfoLoader") as app_m, \
          patch("govio.cli.meta_export.StandardLoader") as std_m, \

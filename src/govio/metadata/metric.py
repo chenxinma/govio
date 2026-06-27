@@ -174,8 +174,9 @@ class MetricLoader:
             )
         self._metric_df = pd.DataFrame(metric_rows)
 
-        # 使用 metric code -> 行索引的映射（在 reorder_index 后会被替换）
-        # 先用 code 作为临时键，后续在 make_csv 中会替换为实际 ID
+        # 使用 metric code -> 行索引的映射（后续在 make_csv 中会通过 assign_node_ids
+        # 替换为 string node ID）
+        # 先用 code 作为临时键，assign_node_ids 会基于该索引生成实际 string ID
         code_to_idx: dict[str, int] = {}
         for i, m in enumerate(metrics):
             code_to_idx[m["code"]] = i
