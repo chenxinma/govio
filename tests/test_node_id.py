@@ -1,5 +1,11 @@
+import pandas as pd
 import pytest
-from govio.metadata.node_id import make_id, NODE_PREFIXES
+from govio.metadata.node_id import (
+    NODE_PREFIXES,
+    assign_node_ids,
+    make_id,
+    write_node_csv,
+)
 
 
 def test_make_id_format():
@@ -44,3 +50,39 @@ def test_make_id_unknown_type_raises():
 def test_make_id_empty_key_raises():
     with pytest.raises(ValueError, match="business_key"):
         make_id("PhysicalTable", "")
+
+
+def test_assign_node_ids_adds_column(tmp_path):
+    df = pd.DataFrame({"full_table_name": ["dm.t1", "dm.t2"], "name": ["a", "b"]})
+    assign_node_ids(df, "PhysicalTable", "full_table_name")
+    assert "node_id" in df.columns
+    assert df["node_id"].iloc[0].startswith("PT")
+    assert len(df["node_id"].iloc[0]) == 10
+    assert df["node_id"].iloc[0] != df["node_id"].iloc[1]
+
+
+def test_assign_node_ids_uniqueness_exit_on_dup(tmp_path, capsys):
+    df = pd.DataFrame({"full_table_name": ["dm.t1", "dm.t1"]})
+    with pytest.raises(SystemExit):
+        assign_node_ids(df, "PhysicalTable", "full_table_name")
+    captured = capsys.readouterr()
+    assert "ID 冲突" in captured.err
+
+
+def test_write_node_csv_header_and_id_column(tmp_path):
+    df = pd.DataFrame({"full_table_name": ["dm.t1"], "name": ["a"]})
+    assign_node_ids(df, "PhysicalTable", "full_table_name")
+    path = tmp_path / "PhysicalTable.csv"
+    write_node_csv(df, path, "PhysicalTable")
+    read_back = pd.read_csv(path)
+    assert ":ID(PhysicalTable)" == read_back.columns[0]
+    assert read_back[":ID(PhysicalTable)"].iloc[0].startswith("PT")
+    assert "full_table_name" in read_back.columns
+    assert "name" in read_back.columns
+    assert "node_id" not in read_back.columns
+
+
+def test_write_node_csv_without_node_id_raises(tmp_path):
+    df = pd.DataFrame({"full_table_name": ["dm.t1"]})
+    with pytest.raises(ValueError, match="node_id"):
+        write_node_csv(df, tmp_path / "x.csv", "PhysicalTable")
