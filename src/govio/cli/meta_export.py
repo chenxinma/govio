@@ -13,6 +13,7 @@ from govio.metadata.duckdb_loader import DuckDBLoader
 from govio.metadata.utility import reorder_index
 from govio.metadata.relationship import load_relationships
 from govio.metadata.metric import MetricLoader
+from govio.metadata.node_id import assign_node_ids, write_node_csv
 
 SKILLS_ASSETS_DIR = Path("skills/govio/assets")
 
@@ -25,7 +26,13 @@ def merge_metadata(
     return combined.drop_duplicates(subset=[key], keep="last").reset_index(drop=True)
 
 
-def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = True):
+def meta_export(
+    db_path: str,
+    schemas: list[str] | None,
+    db_name: str | None,
+    output: Path,
+    dry_run: bool = True,
+):
     output.mkdir(parents=True, exist_ok=True)
 
     # --- Load config for TDS ---
@@ -64,22 +71,29 @@ def meta_export(db_path: str, schemas: list[str], output: Path, dry_run: bool = 
     std_loader = StandardLoader(kundb, workspace_uuid)
     df_stds = std_loader.Standard
 
-    # --- Assign IDs ---
-    reorder_index([df_tables, df_columns, df_apps, df_stds], start=1)
+    # --- Assign string IDs ---
+    df_tables = df_tables.reset_index(drop=True)
+    df_columns = df_columns.reset_index(drop=True)
+    df_apps = df_apps.reset_index(drop=True)
+    df_stds = df_stds.reset_index(drop=True)
+    assign_node_ids(df_tables, "PhysicalTable", "full_table_name")
+    assign_node_ids(df_columns, "Col", "column")
+    assign_node_ids(df_apps, "Application", "app_id")
+    assign_node_ids(df_stds, "Standard", "standard_id")
 
     files = []
 
     # --- Node CSVs ---
-    df_tables.to_csv(output / "PhysicalTable.csv", index_label=":ID(PhysicalTable)")
+    write_node_csv(df_tables, output / "PhysicalTable.csv", "PhysicalTable")
     files.append("-n " + str(output / "PhysicalTable.csv"))
 
-    df_columns.to_csv(output / "Col.csv", index_label=":ID(Col)")
+    write_node_csv(df_columns, output / "Col.csv", "Col")
     files.append("-n " + str(output / "Col.csv"))
 
-    df_apps.to_csv(output / "Application.csv", index_label=":ID(Application)")
+    write_node_csv(df_apps, output / "Application.csv", "Application")
     files.append("-n " + str(output / "Application.csv"))
 
-    df_stds.to_csv(output / "Standard.csv", index_label=":ID(Standard)")
+    write_node_csv(df_stds, output / "Standard.csv", "Standard")
     files.append("-n " + str(output / "Standard.csv"))
 
     # --- HAS_COLUMN edge ---
