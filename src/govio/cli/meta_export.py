@@ -34,6 +34,10 @@ def meta_export(
 ):
     output.mkdir(parents=True, exist_ok=True)
 
+    if not schemas and not db_name:
+        print("错误: 必须指定 --schemas 或 --db-name 之一", file=sys.stderr)
+        sys.exit(1)
+
     # --- Load config for TDS ---
     config = ConfigManager().load()
     metadata = config.get("metadata") or {}
@@ -49,6 +53,14 @@ def meta_export(
         sys.exit(1)
 
     df_app_db_map = pd.read_json(app_map_file, orient="records")
+
+    if db_name and db_name not in df_app_db_map["name"].values:
+        print(
+            f"错误: --db-name '{db_name}' 不在 app_map 中，可用: "
+            f"{df_app_db_map['name'].tolist()}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # --- Load TDS metadata ---
     tds_loader = TDSLoader(kundb, workspace_uuid, df_app_db_map["schema"].to_list())

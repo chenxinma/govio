@@ -1,5 +1,6 @@
 """meta_export string ID 集成测试。mock 全部 Loader，跑 dry-run 检查 CSV。"""
 import json
+import sys
 from unittest.mock import patch, MagicMock
 
 import pandas as pd
@@ -266,3 +267,43 @@ def test_make_csv_utility_path_uses_string_ids(tmp_path, monkeypatch):
     node_ids = set(df[":ID(PhysicalTable)"].astype(str))
     for v in has_col[":START_ID(PhysicalTable)"]:
         assert str(v) in node_ids
+
+
+def test_main_requires_schemas_or_db_name(tmp_path, monkeypatch, capsys):
+    """两者都不给应报错退出。"""
+    from govio.cli import main
+    monkeypatch.setattr(sys, "argv", [
+        "govio-cli", "meta-export", "--db", "x.duckdb",
+        "--output", str(tmp_path),
+    ])
+    with pytest.raises(SystemExit):
+        main()
+    err = capsys.readouterr().err
+    assert "必须指定 --schemas 或 --db-name" in err
+
+
+def test_main_db_name_unknown_exits(tmp_path, monkeypatch, capsys):
+    """--db-name 不在 app_map 里应退出并列出可用 name。"""
+    from govio.cli import main
+
+    config = {
+        "metadata": {
+            "kundb": "mysql://x", "workspace_uuid": "ws",
+            "app_list": "app.json", "app_map": "app_map.json",
+            "relationship": None, "metric": None,
+        },
+        "graph": {},
+    }
+    with patch("govio.cli.meta_export.ConfigManager") as cfg_m, \
+         patch("govio.cli.meta_export.pd.read_json") as read_json_m:
+        cfg_m.return_value.load.return_value = config
+        read_json_m.return_value = _mock_app_db_map()
+        monkeypatch.setattr(sys, "argv", [
+            "govio-cli", "meta-export", "--db", "x.duckdb",
+            "--db-name", "nope", "--output", str(tmp_path),
+        ])
+        with pytest.raises(SystemExit):
+            main()
+    err = capsys.readouterr().err
+    assert "nope" in err
+    assert "billing" in err
