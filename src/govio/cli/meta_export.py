@@ -68,9 +68,16 @@ def meta_export(
         app_schemas = df_app_db_map.loc[
             df_app_db_map["name"] == db_name, "schema"
         ].tolist()
-        effective_schemas = (
-            [s for s in app_schemas if s in schemas] if schemas else app_schemas
-        )
+        if schemas:
+            effective_schemas = [s for s in app_schemas if s in schemas]
+            if not effective_schemas:
+                print(
+                    f"警告: --db-name '{db_name}' 的 schema {app_schemas} "
+                    f"与 --schemas {schemas} 无交集，将导出空结果",
+                    file=sys.stderr,
+                )
+        else:
+            effective_schemas = app_schemas
     else:
         effective_schemas = schemas or []
 
@@ -81,22 +88,20 @@ def meta_export(
 
     if db_name:
         # 单库模式：不查 TDS，DuckDB 直接作为最终元数据
-        df_tables = duck_tables.reset_index(drop=True)
-        df_columns = duck_columns.reset_index(drop=True)
+        df_tables = duck_tables
+        df_columns = duck_columns
     else:
-        # 全量模式：TDS + DuckDB 合并
-        tds_loader = TDSLoader(kundb, workspace_uuid, df_app_db_map["schema"].to_list())
+        # 全量模式：TDS + DuckDB 合并（TDS 按 --schemas 过滤，与 DuckDB 一致）
+        tds_loader = TDSLoader(kundb, workspace_uuid, effective_schemas)
         tds_tables = tds_loader.PhysicalTable
         tds_columns = tds_loader.Col
         df_tables = merge_metadata(tds_tables, duck_tables, "full_table_name")
         df_columns = merge_metadata(tds_columns, duck_columns, "column")
 
     # --- Load apps and standards ---
-    app_loader = AppInfoLoader(app_list_file, df_app_db_map["name"].to_list())
+    app_names = [db_name] if db_name else df_app_db_map["name"].to_list()
+    app_loader = AppInfoLoader(app_list_file, app_names)
     df_apps = app_loader.Application
-    if db_name:
-        # 单库模式：只保留该 app
-        df_apps = df_apps[df_apps["name"] == db_name].reset_index(drop=True)
     std_loader = StandardLoader(kundb, workspace_uuid)
     df_stds = std_loader.Standard
 
@@ -109,6 +114,8 @@ def meta_export(
     assign_node_ids(df_columns, "Col", "column")
     assign_node_ids(df_apps, "Application", "app_id")
     assign_node_ids(df_stds, "Standard", "standard_id")
+    table_idx_to_id = df_tables["node_id"].tolist()
+    col_idx_to_id = df_columns["node_id"].tolist()
 
     files = []
 
@@ -164,8 +171,6 @@ def meta_export(
     if relationship_file:
         try:
             df_relates_to = load_relationships(relationship_file, df_tables, df_columns)
-            relations_count = len(df_relates_to)
-            table_idx_to_id = df_tables["node_id"].tolist()
             if not df_relates_to.empty:
                 df_relates_to["source"] = [
                     table_idx_to_id[i] for i in df_relates_to["source"]
@@ -186,6 +191,7 @@ def meta_export(
                 ],
             )
             files.append("-r " + str(output / "RELATES_TO.csv"))
+            relations_count = len(df_relates_to)
             print(f"成功生成 RELATES_TO.csv，包含 {len(df_relates_to)} 个关系 来自[{relationship_file}]")
         except Exception as e:
             print(f"警告: 无法加载关系文件: {e}")
@@ -210,8 +216,6 @@ def meta_export(
             # positional index -> node_id 映射
             metric_idx_to_id = df_metrics["node_id"].tolist()
             dim_idx_to_id = df_dimensions["node_id"].tolist()
-            table_idx_to_id = df_tables["node_id"].tolist()
-            col_idx_to_id = df_columns["node_id"].tolist()
 
             # USES_TABLE 边
             uses_table = metric_loader.uses_table_edges.copy()
@@ -280,7 +284,7 @@ def meta_export(
             metric_count = len(df_metrics)
         except Exception as e:
             print(f"警告: 无法加载指标定义文件: {e}")
-            exit(1)
+            sys.exit(1)
 
     # --- Summary ---
     print(f"成功导出: {len(df_tables)} 张表, {len(df_columns)} 个字段, "
