@@ -77,12 +77,12 @@ def main():
     )
 
     # observe 子命令：保留未知参数传递给 observe()
-    p_observe = sub.add_parser("observe", help="数据表探查")
+    p_observe = sub.add_parser("observe", help="数据表探查", add_help=False)
     p_observe.add_argument(
         "observe_args", nargs=argparse.REMAINDER, help="observe 子命令参数"
     )
 
-    args = parser.parse_args()
+    args, remaining = parser.parse_known_args()
 
     if args.action == "onboard":
         onboard(new_falkordb=args.new_falkordb, new_networkx=args.new_networkx)
@@ -112,7 +112,7 @@ def main():
         )
     elif args.action == "observe":
         # 将 observe 子命令参数设为 sys.argv 供 observe() 解析
-        sys.argv = ["govio-cli"] + args.observe_args
+        sys.argv = ["govio-cli"] + args.observe_args + remaining
         observe()
     else:
         parser.print_help()

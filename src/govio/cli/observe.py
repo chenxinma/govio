@@ -179,6 +179,7 @@ def cmd_chart(
 def observe():
     """observe 命令入口"""
     parser = argparse.ArgumentParser(
+        prog="govio-cli observe",
         description="数据表探查命令 — 加载、比较、探索数据表",
     )
     sub = parser.add_subparsers(dest="action", required=True)
