@@ -1,0 +1,196 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Govio TDS Metadata Schema",
+  "description": "TDS 元数据管理数据库查询产出的 DataFrame 结构定义，涵盖 PhysicalTable、Col、Standard、StdCompliance 四类数据",
+  "type": "object",
+  "required": ["PhysicalTable", "Col"],
+  "additionalProperties": false,
+  "properties": {
+    "PhysicalTable": {
+      "description": "物理表元数据，由 TDSLoader.load_tables() 产出",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/physical_table"
+      }
+    },
+    "Col": {
+      "description": "列元数据，由 TDSLoader.load_columns() 产出",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/column"
+      }
+    },
+    "Standard": {
+      "description": "数据标准定义，由 StandardLoader.load_standards() 产出。属性列由 META_ATTR 动态生成，此处列出固定列",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/standard"
+      }
+    },
+    "StdCompliance": {
+      "description": "数据标准与列的关联关系，由 StandardLoader.load_standard_connects() 产出",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/std_compliance"
+      }
+    }
+  },
+  "definitions": {
+    "physical_table": {
+      "type": "object",
+      "required": ["full_table_name", "schema", "table_name", "name", "data_entity_type", "database_name"],
+      "additionalProperties": false,
+      "properties": {
+        "full_table_name": {
+          "type": "string",
+          "description": "表全名，格式 schema.table_name"
+        },
+        "schema": {
+          "type": "string",
+          "description": "数据库 schema 名称"
+        },
+        "table_name": {
+          "type": "string",
+          "description": "表名"
+        },
+        "name": {
+          "type": "string",
+          "description": "表中文名（comment），无注释时回退为 table_name"
+        },
+        "data_entity_type": {
+          "type": "string",
+          "description": "实体类型，如 ORACLE_TABLE、MYSQL_TABLE 等"
+        },
+        "database_name": {
+          "type": "string",
+          "description": "所属数据库名称"
+        }
+      }
+    },
+    "column": {
+      "type": "object",
+      "required": ["column", "column_name", "name", "full_table_name", "data_entity_type", "dtype", "size", "precision", "scale", "order_no", "data_type"],
+      "additionalProperties": false,
+      "properties": {
+        "column": {
+          "type": "string",
+          "description": "列全名，格式 schema.table.column"
+        },
+        "column_name": {
+          "type": "string",
+          "description": "列名"
+        },
+        "name": {
+          "type": "string",
+          "description": "列中文名（comment），无注释时回退为 column_name"
+        },
+        "full_table_name": {
+          "type": "string",
+          "description": "所属表全名，格式 schema.table"
+        },
+        "data_entity_type": {
+          "type": "string",
+          "description": "实体类型，如 ORACLE_COLUMN、MYSQL_COLUMN 等"
+        },
+        "dtype": {
+          "type": "string",
+          "description": "原始数据库数据类型"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "字段长度"
+        },
+        "precision": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "数值精度"
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "小数位数"
+        },
+        "order_no": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "列在表中的序号"
+        },
+        "data_type": {
+          "type": "string",
+          "description": "转换后的标准数据类型（如 varchar(255)、decimal(10,2)）"
+        }
+      }
+    },
+    "standard": {
+      "type": "object",
+      "required": ["standard_id", "name"],
+      "description": "数据标准记录。standard_id 和 name 为固定列；其余列为 META_ATTR 动态 pivot 生成（如 ref_code_define 等），使用 additionalProperties 允许",
+      "additionalProperties": true,
+      "properties": {
+        "standard_id": {
+          "type": "string",
+          "description": "数据标准编码"
+        },
+        "name": {
+          "type": "string",
+          "description": "数据标准名称"
+        }
+      }
+    },
+    "std_compliance": {
+      "type": "object",
+      "required": ["standard_id", "standard_name", "database_name", "full_table_name", "column_name", "name", "data_entity_type", "dtype", "size", "precision", "scale"],
+      "additionalProperties": false,
+      "properties": {
+        "standard_id": {
+          "type": "string",
+          "description": "数据标准编码"
+        },
+        "standard_name": {
+          "type": "string",
+          "description": "数据标准名称"
+        },
+        "database_name": {
+          "type": "string",
+          "description": "所属数据库名称"
+        },
+        "full_table_name": {
+          "type": "string",
+          "description": "关联表全名，格式 schema.table"
+        },
+        "column_name": {
+          "type": "string",
+          "description": "关联列名"
+        },
+        "name": {
+          "type": "string",
+          "description": "列中文名（comment），无注释时回退为 column_name"
+        },
+        "data_entity_type": {
+          "type": "string",
+          "description": "实体类型"
+        },
+        "dtype": {
+          "type": "string",
+          "description": "原始数据库数据类型"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "字段长度"
+        },
+        "precision": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "数值精度"
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "小数位数"
+        }
+      }
+    }
+  }
+}

@@ -93,10 +93,15 @@ def load_edges(csv_dir: str) -> pd.DataFrame:
     return pd.concat(edges_list)
 
 
-def build_graph(csv_dir: str, output_gml: str):
+def build_graph(csv_dir: str, output_gml: str, incremental: bool = False):
     nodes_list = load_nodes(csv_dir)
     edges_df = load_edges(csv_dir)
-    G = nx.DiGraph()
+
+    if incremental and os.path.exists(output_gml):
+        G = nx.read_gml(output_gml)
+    else:
+        G = nx.DiGraph()
+
     for node in tqdm(nodes_list, desc="nodes"):
         id = node["id"]
         del node["id"]

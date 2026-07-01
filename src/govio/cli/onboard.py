@@ -1,4 +1,7 @@
+import csv
 import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -203,8 +206,6 @@ def import_csv_to_falkordb(
         port: FalkorDB 端口
         graph_name: 图数据库名称
     """
-    import subprocess
-
     csv_path = Path(csv_dir)
     if not csv_path.exists():
         raise FileNotFoundError(f"CSV 目录不存在: {csv_path}")
@@ -265,6 +266,185 @@ def import_csv_to_falkordb(
 
     print(result.stdout)
     print("✓ CSV 数据已导入 FalkorDB")
+
+
+# ---------------------------------------------------------------------------
+# Incremental upsert via MERGE semantics
+# ---------------------------------------------------------------------------
+
+# Known node CSV files → node labels (order matters: nodes before edges)
+_NODE_CSVS = {
+    "PhysicalTable.csv": "PhysicalTable",
+    "Col.csv": "Col",
+    "Application.csv": "Application",
+    "Standard.csv": "Standard",
+    "Metric.csv": "Metric",
+    "Dimension.csv": "Dimension",
+}
+
+# Known edge CSV files → relationship types
+_EDGE_CSVS = {
+    "HAS_COLUMN.csv": "HAS_COLUMN",
+    "USE.csv": "USE",
+    "COMPLIES_WITH.csv": "COMPLIES_WITH",
+    "RELATES_TO.csv": "RELATES_TO",
+    "USES_TABLE.csv": "USES_TABLE",
+    "REFERS_COLUMN.csv": "REFERS_COLUMN",
+    "DERIVED_FROM.csv": "DERIVED_FROM",
+    "DIMENSION_USED.csv": "DIMENSION_USED",
+    "SUPERSEDES.csv": "SUPERSEDES",
+}
+
+# Pattern: :ID(Label) or :START_ID(Label) / :END_ID(Label)
+_LABEL_RE = re.compile(r":(?:ID|START_ID|END_ID)\((\w+)\)")
+
+
+def _parse_label(col_name: str) -> str | None:
+    m = _LABEL_RE.match(col_name)
+    return m.group(1) if m else None
+
+
+def _cypher_literal(value: str | None) -> str:
+    """Convert a Python value to a Cypher literal."""
+    if value is None:
+        return "null"
+    value = value.replace("\\", "\\\\")
+    value = value.replace("'", "\\'")
+    value = value.replace("\n", "\\n")
+    value = value.replace("\r", "\\r")
+    value = value.replace("\t", "\\t")
+    value = value.replace("\0", "\\0")
+    return "'" + value + "'"
+
+
+def _build_node_merge(
+    id_col: str, prop_cols: list[str], label: str, row: list
+) -> str:
+    """Construct a MERGE query for a single node row.
+
+    Uses the actual ``:ID(Label)`` column name from the CSV header so that
+    the MERGE pattern matches nodes created by ``falkordb-bulk-insert``
+    (which stores the ID value under the literal header name, not ``node_id``).
+    """
+    id_val = _cypher_literal(row[0])
+    props = ", ".join(
+        f"n.`{prop_cols[i]}` = {_cypher_literal(row[i + 1])}"
+        for i in range(len(prop_cols))
+    )
+    return f"MERGE (n:{label} {{`{id_col}`: {id_val}}}) SET {props}"
+
+
+def _build_edge_merge(
+    src_col: str,
+    dst_col: str,
+    src_label: str,
+    dst_label: str,
+    rel_type: str,
+    prop_cols: list[str],
+    row: list,
+) -> str:
+    """Construct a MERGE query for a single edge row.
+
+    Uses the actual ``:START_ID(Label)`` / ``:END_ID(Label)`` column names
+    to match nodes by the same property that ``falkordb-bulk-insert`` stored.
+    """
+    src_val = _cypher_literal(row[0])
+    dst_val = _cypher_literal(row[1])
+    base = (
+        f"MATCH (a:{src_label} {{`{src_col}`: {src_val}}}), "
+        f"(b:{dst_label} {{`{dst_col}`: {dst_val}}}) "
+        f"MERGE (a)-[r:{rel_type}]->(b)"
+    )
+    if prop_cols:
+        props = ", ".join(
+            f"r.`{prop_cols[i]}` = {_cypher_literal(row[i + 2])}"
+            for i in range(len(prop_cols))
+        )
+        return f"{base} SET {props}"
+    return base
+
+
+def _read_csv_rows(csv_path: Path) -> tuple[list[str], list[list]]:
+    """Read CSV and return (header, rows) with empty cells mapped to None."""
+    rows: list[list] = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        for r in reader:
+            rows.append([cell if cell != "" else None for cell in r])
+    return header, rows
+
+
+def _upsert(graph, csv_path: Path, build_fn, type_label: str) -> None:
+    """Read a CSV and MERGE each row into FalkorDB."""
+    header, rows = _read_csv_rows(csv_path)
+    for row in rows:
+        query = build_fn(header, row)
+        graph.query(query)
+    print(f"  {csv_path.name}: {len(rows)} {type_label} upserted")
+
+
+def upsert_csv_to_falkordb(
+    csv_dir: Path, host: str, port: int, graph_name: str
+) -> None:
+    """Incrementally upsert CSV data into FalkorDB using MERGE semantics.
+
+    Unlike ``import_csv_to_falkordb`` which deletes the graph first, this
+    function uses MERGE queries so that existing nodes/edges (e.g. those
+    created by ``onboard``) are preserved.
+    """
+    import falkordb
+
+    csv_path = Path(csv_dir)
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV 目录不存在: {csv_path}")
+
+    print(f"\n正在增量更新 FalkorDB ({host}:{port}/{graph_name})...")
+
+    client = falkordb.FalkorDB(host=host, port=port)
+    graph = client.select_graph(graph_name)
+
+    # 1. Upsert nodes
+    for filename, label in _NODE_CSVS.items():
+        filepath = csv_path / filename
+        if not filepath.exists():
+            continue
+        header, rows = _read_csv_rows(filepath)
+        if not header or not header[0].startswith(":ID("):
+            continue
+        id_col = header[0]
+        prop_cols = header[1:]
+
+        def make_node_builder(lbl, ic, pc):
+            return lambda h, row: _build_node_merge(ic, pc, lbl, row)
+
+        _upsert(graph, filepath, make_node_builder(label, id_col, prop_cols), "nodes")
+
+    # 2. Upsert edges
+    for filename, rel_type in _EDGE_CSVS.items():
+        filepath = csv_path / filename
+        if not filepath.exists():
+            continue
+        header, rows = _read_csv_rows(filepath)
+        if len(header) < 2 or not header[0].startswith(":START_ID("):
+            continue
+        src_col = header[0]
+        dst_col = header[1]
+        src_label = _parse_label(src_col) or ""
+        dst_label = _parse_label(dst_col) or ""
+        prop_cols = header[2:]
+
+        def make_edge_builder(rt, sc, dc, sl, dl, pc):
+            return lambda h, row: _build_edge_merge(sc, dc, sl, dl, rt, pc, row)
+
+        _upsert(
+            graph,
+            filepath,
+            make_edge_builder(rel_type, src_col, dst_col, src_label, dst_label, prop_cols),
+            "edges",
+        )
+
+    print("✓ FalkorDB 增量更新完成")
 
 
 def prompt_falkordb_config(csv_dir: Path) -> dict[str, Any]:

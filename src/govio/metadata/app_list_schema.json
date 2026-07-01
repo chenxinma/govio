@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Govio Application List",
+  "description": "应用系统清单 schema，用于校验 govio app_list 输入。物理格式为 Excel（sheet \"应用清单\"），此处描述重命名后的逻辑结构。",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "required": ["app_id", "name", "app_name_en", "app_type", "business_domain", "manager", "network_area", "maintenance_level", "external_vendor"],
+    "additionalProperties": false,
+    "properties": {
+      "app_id": {
+        "type": "string",
+        "minLength": 1,
+        "description": "应用系统编号（原始列头: APPID）"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "应用系统中文名称（原始列头: 应用系统\\n中文名称）"
+      },
+      "app_name_en": {
+        "type": "string",
+        "description": "应用系统英文简称（原始列头: 应用系统\\n英文简称）"
+      },
+      "app_type": {
+        "type": "string",
+        "description": "系统类型（原始列头: 系统类型）"
+      },
+      "business_domain": {
+        "type": "string",
+        "description": "业务分类（原始列头: 业务分类）"
+      },
+      "manager": {
+        "type": "string",
+        "description": "系统管理部门（原始列头: 系统管理部门）"
+      },
+      "network_area": {
+        "type": "string",
+        "description": "所属网络区域（原始列头: 所属网络区域）"
+      },
+      "maintenance_level": {
+        "type": "string",
+        "description": "系统分级（原始列头: 系统分级）"
+      },
+      "external_vendor": {
+        "type": "string",
+        "description": "外部供应商（原始列头: 外部供应商）"
+      }
+    }
+  }
+}

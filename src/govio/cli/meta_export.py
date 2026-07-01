@@ -296,7 +296,7 @@ def meta_export(
         return
 
     # --- Update graph and generate assets ---
-    from govio.cli.onboard import import_csv_to_falkordb
+    from govio.cli.onboard import upsert_csv_to_falkordb
     from govio.metadata.gen_networkx import build_graph
 
     graph = config.get("graph") or {}
@@ -311,9 +311,8 @@ def meta_export(
         host = falkordb_cfg.get("host", "localhost")
         port = falkordb_cfg.get("port", 6379)
         graph_name = falkordb_cfg.get("graph", "ontology")
-        print(f"\n正在导入 CSV 到 FalkorDB ({host}:{port}/{graph_name})...")
         try:
-            import_csv_to_falkordb(output, host, port, graph_name)
+            upsert_csv_to_falkordb(output, host, port, graph_name)
             print("✓ FalkorDB 数据已更新")
         except Exception as e:
             print(f"❌ 导入 FalkorDB 失败: {e}")
@@ -323,7 +322,7 @@ def meta_export(
         gml_path = networkx_cfg.get("gml_path", str(SKILLS_ASSETS_DIR / "ontology.gml"))
         print(f"\n正在从 CSV 生成 GML 文件 ({gml_path})...")
         try:
-            build_graph(str(output), gml_path)
+            build_graph(str(output), gml_path, incremental=True)
             print("✓ GML 文件已更新")
         except Exception as e:
             print(f"❌ 生成 GML 失败: {e}")

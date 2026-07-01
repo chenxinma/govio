@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Govio Application-Database Map",
+  "description": "应用系统与数据库 schema 的映射文件 schema，用于校验 govio app_map 输入",
+  "type": "array",
+  "minItems": 1,
+  "items": {
+    "type": "object",
+    "required": ["schema", "name"],
+    "additionalProperties": false,
+    "properties": {
+      "schema": {
+        "type": "string",
+        "minLength": 1,
+        "description": "数据库 schema 名称（大小写需与实际数据库一致）"
+      },
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "所属应用系统的中文名称"
+      }
+    }
+  }
+}
