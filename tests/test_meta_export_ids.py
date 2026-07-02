@@ -273,7 +273,7 @@ def test_main_requires_schemas_or_db_name(tmp_path, monkeypatch, capsys):
     """两者都不给应报错退出。"""
     from govio.cli import main
     monkeypatch.setattr(sys, "argv", [
-        "govio-cli", "meta-export", "--db", "x.duckdb",
+        "govio-cli", "meta", "export", "--db", "x.duckdb",
         "--output", str(tmp_path),
     ])
     with pytest.raises(SystemExit):
@@ -299,7 +299,7 @@ def test_main_db_name_unknown_exits(tmp_path, monkeypatch, capsys):
         cfg_m.return_value.load.return_value = config
         read_json_m.return_value = _mock_app_db_map()
         monkeypatch.setattr(sys, "argv", [
-            "govio-cli", "meta-export", "--db", "x.duckdb",
+            "govio-cli", "meta", "export", "--db", "x.duckdb",
             "--db-name", "nope", "--output", str(tmp_path),
         ])
         with pytest.raises(SystemExit):

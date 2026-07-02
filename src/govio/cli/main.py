@@ -1,14 +1,20 @@
 import argparse
-from pathlib import Path
+from importlib.metadata import version, PackageNotFoundError
 import sys
 
 from govio.cli.config import ConfigManager
 
-from .meta_export import meta_export
 from .onboard import onboard
-from .std_recommend import std_recommend
 from .observe import observe
 from .query import query
+from .meta import meta
+
+
+def _get_version() -> str:
+    try:
+        return version("govio")
+    except PackageNotFoundError:
+        return "unknown"
 
 
 def main():
@@ -16,25 +22,13 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="数据治理知识图谱项目，提供元数据查询、表字段比较、SQL 生成、数据标准推荐等数据治理支持功能。",
     )
+    parser.add_argument("-V", "--version", action="version", version=f"govio {_get_version()}")
     sub = parser.add_subparsers(dest="action")
 
-    p_onboard = sub.add_parser("onboard", help="初始化配置向导")
-    p_onboard.add_argument(
-        "--new-falkordb",
-        type=Path,
-        metavar="CSV_DIR",
-        help="跳过 CSV 生成，直接将指定目录的 CSV 导入 FalkorDB",
-    )
-    p_onboard.add_argument(
-        "--new-networkx",
-        type=Path,
-        metavar="CSV_DIR",
-        help="跳过 CSV 生成，直接从指定目录的 CSV 生成 GML 文件",
-    )
-    sub.add_parser("backend", help="显示当前后端类型")
+    # onboard 子命令
+    sub.add_parser("onboard", help="初始化配置向导")
 
-    p_std = sub.add_parser("std-recommend", help="数据标准推荐")
-    p_std.add_argument("--output-dir", type=Path, help="推荐数据标准的输出目录")
+    sub.add_parser("backend", help="显示当前后端类型")
 
     # query 子命令
     p_query = sub.add_parser("query", help="知识图谱查询")
@@ -54,29 +48,13 @@ def main():
         help=f"查询语句（{code_type}）",
     )
 
-    # meta-export 子命令：从 DuckDB 导出元数据 CSV
-    p_meta = sub.add_parser(
-        "meta-export", help="从 DuckDB + TDS 合并导出元数据 CSV（支持单库模式）"
-    )
-    p_meta.add_argument("--db", type=str, required=True, help="DuckDB 数据库文件路径")
+    # meta 子命令组
+    p_meta = sub.add_parser("meta", help="知识图库维护", add_help=False)
     p_meta.add_argument(
-        "--schemas",
-        type=str,
-        help="要导出的 schema 列表，逗号分隔（如 dm,dwd,dws）；全量模式",
-    )
-    p_meta.add_argument(
-        "--db-name",
-        type=str,
-        help="单库模式：按 app 名导出单个数据库的相关子图（不查 TDS）",
-    )
-    p_meta.add_argument("--output", type=Path, required=True, help="CSV 输出目录")
-    p_meta.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="仅生成 CSV 并输出状态，不更新图数据和生成 assets",
+        "meta_args", nargs=argparse.REMAINDER, help="meta 子命令参数"
     )
 
-    # observe 子命令：保留未知参数传递给 observe()
+    # observe 子命令组
     p_observe = sub.add_parser("observe", help="数据表探查", add_help=False)
     p_observe.add_argument(
         "observe_args", nargs=argparse.REMAINDER, help="observe 子命令参数"
@@ -85,7 +63,7 @@ def main():
     args, remaining = parser.parse_known_args()
 
     if args.action == "onboard":
-        onboard(new_falkordb=args.new_falkordb, new_networkx=args.new_networkx)
+        onboard()
     elif args.action == "backend":
         config_manager = ConfigManager()
         if not config_manager.exists():
@@ -97,19 +75,11 @@ def main():
             print("错误: 配置文件中未设置后端类型", file=sys.stderr)
             sys.exit(1)
         print(backend)
-    elif args.action == "std-recommend":
-        std_recommend(args.output_dir)
     elif args.action == "query":
         query(args.code)
-    elif args.action == "meta-export":
-        schemas = args.schemas.split(",") if args.schemas else None
-        meta_export(
-            db_path=args.db,
-            schemas=schemas,
-            db_name=args.db_name,
-            output=args.output,
-            dry_run=args.dry_run,
-        )
+    elif args.action == "meta":
+        sys.argv = ["govio-cli"] + args.meta_args + remaining
+        meta()
     elif args.action == "observe":
         # 将 observe 子命令参数设为 sys.argv 供 observe() 解析
         sys.argv = ["govio-cli"] + args.observe_args + remaining
