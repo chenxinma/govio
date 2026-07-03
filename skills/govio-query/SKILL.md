@@ -142,16 +142,19 @@ govio-cli query -c 'MATCH (m:Metric {code: "book_to_bill"})-[:DERIVED_FROM]->(up
 
 ### 组装 SQL
 
-使用 `scripts/sql_builder.py` 脚本组装 SQL。接受 JSON 文件作为输入。
+使用 `govio-cli sql build` 命令组装 SQL。接受 JSON 文件作为输入。
 
 #### 调用方式
 
 ```bash
 # 打印到 stdout
-uv run python scripts/sql_builder.py query.json
+govio-cli sql build -f query.json
 
 # 输出到文件
-uv run python scripts/sql_builder.py query.json -o output.sql
+govio-cli sql build -f query.json -o output.sql
+
+# 从 stdin 读取
+cat query.json | govio-cli sql build
 ```
 
 #### JSON 请求格式
@@ -256,12 +259,12 @@ DataFrame 名称格式：`metric_{指标编码}_{时间}`
 
 ```bash
 # 1. 查询当月数据并加载
-uv run python scripts/sql_builder.py current.json -o current.sql
+govio-cli sql build -f current.json -o current.sql
 govio-cli observe load --name metric_current --datasource dw --sql "$(cat current.sql)"
 
 # 2. 查询上月数据，通过 cte_refs 引用当月结果
 # compare.json 中 cte_refs 包含: {"metric_current": "<当月SQL>"}
-uv run python scripts/sql_builder.py compare.json -o compare.sql
+govio-cli sql build -f compare.json -o compare.sql
 ```
 
 #### 场景：多指标组合
@@ -419,7 +422,5 @@ govio-cli observe load --name bill_data --datasource dw --sql "SELECT sales_unit
 
 本 Skill 目录下:
 ├── reference-falkordb.md   # FalkorDB Cypher 深度参考
-├── reference-networkx.md   # NetworkX Python 深度参考
-└── scripts/
-     └── sql_builder.py     # SQL 组装脚本（CLI）
+└── reference-networkx.md   # NetworkX Python 深度参考
 ```
