@@ -1,4 +1,4 @@
-from .config import ConfigManager
+from .config import ConfigManager, MetaConfigManager
 from .main import main
 
-__all__ = ["ConfigManager", "main"]
+__all__ = ["ConfigManager", "MetaConfigManager", "main"]

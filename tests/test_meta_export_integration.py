@@ -1,7 +1,7 @@
 import pandas as pd
 import duckdb
 from govio.metadata.duckdb_loader import DuckDBLoader
-from govio.cli.meta_export import merge_metadata
+from govio.cli.meta import merge_metadata
 
 
 def test_full_merge_pipeline(tmp_path):

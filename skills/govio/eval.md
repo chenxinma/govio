@@ -40,7 +40,7 @@ govio (主控 - 需求路由)
 | P-4 | 查询结果行数 ≤ 300 | 全部 | 是 = 1 分，否 = 0 |
 | P-5 | 正确使用 `column_name` 引用 Col 节点 | metadata | 正确 = 1 分，错误 = 0 |
 | P-6 | 读取 `assets/metrics_index.md` 获取指标概览 | metrics | 读取 = 1 分，未读取 = 0 |
-| P-7 | 使用 `scripts/sql_builder.py` 组装 SQL | metrics | 使用脚本 = 1 分，手写 SQL = 0.5 分，未生成 = 0 |
+| P-7 | 使用 `govio-cli sql build` 组装 SQL | metrics | 使用脚本 = 1 分，手写 SQL = 0.5 分，未生成 = 0 |
 | P-8 | 使用 `govio-cli observe load` 执行查询 | metrics | 使用 = 1 分，其他方式 = 0.5 分，未执行 = 0 |
 
 ### 1.3 风格目标（Style）
@@ -230,9 +230,9 @@ def score_metrics_query(trace: list[Event]) -> dict:
     metrics_index_reads = [e for e in trace if "metrics_index.md" in e.target]
     scores["P-6"] = 1 if metrics_index_reads else 0
 
-    # P-7: 使用 sql_builder.py
-    sql_builder_calls = [e for e in trace if "sql_builder" in e.target]
-    scores["P-7"] = 1 if sql_builder_calls else 0
+    # P-7: 使用 govio-cli sql build
+    sql_build_calls = [e for e in trace if "sql build" in e.target]
+    scores["P-7"] = 1 if sql_build_calls else 0
 
     # P-8: 使用 govio-cli observe load
     load_calls = [e for e in trace if "govio-cli observe load" in e.target]
@@ -327,7 +327,7 @@ def score_common(trace: list[Event]) -> dict:
 2. 路由到 `govio-metrics`
 3. 读取 `metrics_index.md`
 4. 查询 `bill_income_amt` 指标元数据
-5. 使用 `sql_builder.py` 组装 SQL
+5. 使用 `govio-cli sql build` 组装 SQL
 6. 使用 `govio-cli observe load` 执行查询
 
 **期望输出**：本月账单收入数值，单位：万元
@@ -347,7 +347,7 @@ def score_common(trace: list[Event]) -> dict:
 2. 路由到 `govio-metrics`
 3. 读取 `metrics_index.md`，确认 `book_to_bill` 是派生指标
 4. 查询指标元数据：`signed_amt / bill_income_amt`
-5. 使用 `sql_builder.py` 组装带维度的 SQL
+5. 使用 `govio-cli sql build` 组装带维度的 SQL
 6. 执行查询
 
 **期望输出**：按 sales_dept 分组的签约覆盖率列表
@@ -510,7 +510,7 @@ def score_common(trace: list[Event]) -> dict:
 **期望过程**：
 1. 读取 `metrics_index.md`，确认 `bill_income_amt` 是原子指标
 2. 使用 `govio-cli query` 查询指标元数据：来源表 = `dws.income_bill_monthly`
-3. 使用 `sql_builder.py` 组装 SQL
+3. 使用 `govio-cli sql build` 组装 SQL
 4. 使用 `govio-cli observe load` 执行查询
 
 **期望输出**：本月账单收入数值，单位：万元，时间范围：2026-05
@@ -526,7 +526,7 @@ def score_common(trace: list[Event]) -> dict:
 **期望过程**：
 1. 读取 `metrics_index.md`，确认 `book_to_bill` 是派生指标
 2. 查询指标元数据：公式 = `signed_amt / bill_income_amt`
-3. 使用 `sql_builder.py` 组装带维度的 SQL
+3. 使用 `govio-cli sql build` 组装带维度的 SQL
 4. 执行查询
 
 **期望输出**：按 sales_unit 分组的签约覆盖率列表
@@ -541,7 +541,7 @@ def score_common(trace: list[Event]) -> dict:
 
 **期望过程**：
 1. 读取 `metrics_index.md`，确认 `bill_income_amt_ytd` 是原子指标
-2. 使用 `sql_builder.py` 组装 SQL，带 `order_by` 和 `limit=5`
+2. 使用 `govio-cli sql build` 组装 SQL，带 `order_by` 和 `limit=5`
 3. 执行查询
 
 **期望输出**：按 bill_income_amt_ytd 降序排列的前 5 个部门
@@ -556,7 +556,7 @@ def score_common(trace: list[Event]) -> dict:
 
 **期望过程**：
 1. 读取 `metrics_index.md`，确认 `signed_amt` 是原子指标
-2. 使用 `sql_builder.py` 组装 SQL，维度 = `report_ym`
+2. 使用 `govio-cli sql build` 组装 SQL，维度 = `report_ym`
 3. 执行查询
 
 **期望输出**：按 report_ym 分组的签约额列表
@@ -628,7 +628,7 @@ def score_common(trace: list[Event]) -> dict:
 **期望过程**：
 1. 读取 `metrics_index.md`，确认 `book_to_bill` 是派生指标，公式 = `signed_amt / bill_income_amt`
 2. 查询两个原子指标的元数据
-3. 使用 `sql_builder.py` 组装派生指标 SQL
+3. 使用 `govio-cli sql build` 组装派生指标 SQL
 4. 执行查询
 
 **关键陷阱**：派生指标 SQL 组装（P-7），需要正确处理 CTE
@@ -645,7 +645,7 @@ def score_common(trace: list[Event]) -> dict:
 
 **期望过程**：
 1. 读取 `metrics_index.md`，确认 `burndown_amt` 是派生指标，公式 = `forecast_income_amt - risk_amt`
-2. 使用 `sql_builder.py` 组装 SQL
+2. 使用 `govio-cli sql build` 组装 SQL
 3. 执行查询
 
 **期望输出**：存量消耗额数值
@@ -661,7 +661,7 @@ def score_common(trace: list[Event]) -> dict:
 **期望过程**：
 1. 读取 `metrics_index.md`，确认 `income_forecast_annual` 是派生指标
 2. 公式 = `bill_income_amt_ytd + burndown_amt + leads_forecast_amt + opp_forecast_amt`
-3. 使用 `sql_builder.py` 组装复合派生指标 SQL
+3. 使用 `govio-cli sql build` 组装复合派生指标 SQL
 4. 执行查询
 
 **关键陷阱**：复合派生指标可能需要多层 CTE

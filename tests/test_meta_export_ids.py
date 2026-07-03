@@ -35,11 +35,30 @@ def _mock_tds_columns():
 
 
 def _mock_duck_tables():
-    return pd.DataFrame(columns=_mock_tds_tables().columns)
+    return pd.DataFrame({
+        "full_table_name": ["dm.orders", "dm.customers"],
+        "schema": ["dm", "dm"],
+        "table_name": ["orders", "customers"],
+        "name": ["Orders", "Customers"],
+        "data_entity_type": ["DUCKDB_TABLE", "DUCKDB_TABLE"],
+        "database_name": ["db", "db"],
+    })
 
 
 def _mock_duck_columns():
-    return pd.DataFrame(columns=_mock_tds_columns().columns)
+    return pd.DataFrame({
+        "column": ["dm.orders.id", "dm.orders.amount", "dm.customers.id"],
+        "column_name": ["id", "amount", "id"],
+        "name": ["ID", "Amount", "ID"],
+        "full_table_name": ["dm.orders", "dm.orders", "dm.customers"],
+        "data_entity_type": ["DUCKDB_COLUMN"] * 3,
+        "dtype": ["int", "decimal", "int"],
+        "size": [0, 10, 0],
+        "precision": [0, 10, 0],
+        "scale": [0, 2, 0],
+        "order_no": [1, 2, 1],
+        "data_type": ["int", "decimal(10,2)", "int"],
+    })
 
 
 def _mock_apps():
@@ -76,13 +95,15 @@ def _patched_loaders():
         },
         "graph": {},
     }
-    with patch("govio.cli.meta_export.ConfigManager") as cfg_m, \
-         patch("govio.cli.meta_export.pd.read_json") as read_json_m, \
-         patch("govio.cli.meta_export.TDSLoader") as tds_m, \
-         patch("govio.cli.meta_export.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta_export.AppInfoLoader") as app_m, \
-         patch("govio.cli.meta_export.StandardLoader") as std_m:
+    with patch("govio.cli.meta.ConfigManager") as cfg_m, \
+         patch("govio.cli.meta.MetaConfigManager") as meta_cfg_m, \
+         patch("govio.cli.meta.pd.read_json") as read_json_m, \
+         patch("govio.cli.meta.TDSLoader") as tds_m, \
+         patch("govio.cli.meta.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta.AppInfoLoader") as app_m, \
+         patch("govio.cli.meta.StandardLoader") as std_m:
         cfg_m.return_value.load.return_value = config
+        meta_cfg_m.return_value.exists.return_value = False
         read_json_m.return_value = _mock_app_db_map()
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
@@ -94,9 +115,9 @@ def _patched_loaders():
 
 
 def test_node_csvs_have_string_ids(_patched_loaders, tmp_path):
-    from govio.cli.meta_export import meta_export
+    from govio.cli.meta import meta_export
     meta_export(db_path="ignored", schemas=["dm"], db_name=None,
-                output=tmp_path, dry_run=True)
+                output=tmp_path, graph_mode="dry_run")
 
     for fname, prefix, label in [
         ("PhysicalTable.csv", "PT", "PhysicalTable"),
@@ -113,9 +134,9 @@ def test_node_csvs_have_string_ids(_patched_loaders, tmp_path):
 
 
 def test_edge_csvs_reference_valid_node_ids(_patched_loaders, tmp_path):
-    from govio.cli.meta_export import meta_export
+    from govio.cli.meta import meta_export
     meta_export(db_path="ignored", schemas=["dm"], db_name=None,
-                output=tmp_path, dry_run=True)
+                output=tmp_path, graph_mode="dry_run")
 
     # 收集所有节点 ID
     node_ids: set[str] = set()
@@ -186,13 +207,15 @@ def test_metric_edges_use_string_ids(tmp_path):
         },
         "graph": {},
     }
-    with patch("govio.cli.meta_export.ConfigManager") as cfg_m, \
-         patch("govio.cli.meta_export.TDSLoader") as tds_m, \
-         patch("govio.cli.meta_export.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta_export.AppInfoLoader") as app_m, \
-         patch("govio.cli.meta_export.StandardLoader") as std_m, \
-         patch("govio.cli.meta_export.pd.read_json") as read_json_m:
+    with patch("govio.cli.meta.ConfigManager") as cfg_m, \
+         patch("govio.cli.meta.MetaConfigManager") as meta_cfg_m, \
+         patch("govio.cli.meta.TDSLoader") as tds_m, \
+         patch("govio.cli.meta.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta.AppInfoLoader") as app_m, \
+         patch("govio.cli.meta.StandardLoader") as std_m, \
+         patch("govio.cli.meta.pd.read_json") as read_json_m:
         cfg_m.return_value.load.return_value = config
+        meta_cfg_m.return_value.exists.return_value = False
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = _mock_duck_tables()
@@ -201,10 +224,10 @@ def test_metric_edges_use_string_ids(tmp_path):
         std_m.return_value.Standard = _mock_stds()
         read_json_m.return_value = _mock_app_db_map()
 
-        from govio.cli.meta_export import meta_export
+        from govio.cli.meta import meta_export
         out = tmp_path / "out"
         meta_export(db_path="ignored", schemas=["dm"], db_name=None,
-                    output=out, dry_run=True)
+                    output=out, graph_mode="dry_run")
 
     # Metric / Dimension 节点
     m_df = pd.read_csv(out / "Metric.csv")
@@ -270,10 +293,10 @@ def test_make_csv_utility_path_uses_string_ids(tmp_path, monkeypatch):
 
 
 def test_main_requires_schemas_or_db_name(tmp_path, monkeypatch, capsys):
-    """两者都不给应报错退出。"""
+    """有 --db 但无 --schemas 和 --db-name 应报错退出。"""
     from govio.cli import main
     monkeypatch.setattr(sys, "argv", [
-        "govio-cli", "meta-export", "--db", "x.duckdb",
+        "govio-cli", "meta", "sync", "--db", "x.duckdb",
         "--output", str(tmp_path),
     ])
     with pytest.raises(SystemExit):
@@ -294,12 +317,14 @@ def test_main_db_name_unknown_exits(tmp_path, monkeypatch, capsys):
         },
         "graph": {},
     }
-    with patch("govio.cli.meta_export.ConfigManager") as cfg_m, \
-         patch("govio.cli.meta_export.pd.read_json") as read_json_m:
+    with patch("govio.cli.meta.ConfigManager") as cfg_m, \
+         patch("govio.cli.meta.MetaConfigManager") as meta_cfg_m, \
+         patch("govio.cli.meta.pd.read_json") as read_json_m:
         cfg_m.return_value.load.return_value = config
+        meta_cfg_m.return_value.exists.return_value = False
         read_json_m.return_value = _mock_app_db_map()
         monkeypatch.setattr(sys, "argv", [
-            "govio-cli", "meta-export", "--db", "x.duckdb",
+            "govio-cli", "meta", "sync", "--db", "x.duckdb",
             "--db-name", "nope", "--output", str(tmp_path),
         ])
         with pytest.raises(SystemExit):
@@ -319,13 +344,15 @@ def test_single_db_mode_skips_tds(tmp_path):
         },
         "graph": {},
     }
-    with patch("govio.cli.meta_export.ConfigManager") as cfg_m, \
-         patch("govio.cli.meta_export.TDSLoader") as tds_m, \
-         patch("govio.cli.meta_export.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta_export.AppInfoLoader") as app_m, \
-         patch("govio.cli.meta_export.StandardLoader") as std_m, \
-         patch("govio.cli.meta_export.pd.read_json") as read_json_m:
+    with patch("govio.cli.meta.ConfigManager") as cfg_m, \
+         patch("govio.cli.meta.MetaConfigManager") as meta_cfg_m, \
+         patch("govio.cli.meta.TDSLoader") as tds_m, \
+         patch("govio.cli.meta.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta.AppInfoLoader") as app_m, \
+         patch("govio.cli.meta.StandardLoader") as std_m, \
+         patch("govio.cli.meta.pd.read_json") as read_json_m:
         cfg_m.return_value.load.return_value = config
+        meta_cfg_m.return_value.exists.return_value = False
         # TDS 若被调用会返回这些——测试断言它不应被调用
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
@@ -349,10 +376,10 @@ def test_single_db_mode_skips_tds(tmp_path):
         std_m.return_value.Standard = _mock_stds()
         read_json_m.return_value = _mock_app_db_map()
 
-        from govio.cli.meta_export import meta_export
+        from govio.cli.meta import meta_export
         out = tmp_path / "out"
         meta_export(db_path="ignored", schemas=None, db_name="billing",
-                    output=out, dry_run=True)
+                    output=out, graph_mode="dry_run")
 
     # TDSLoader 不应被实例化
     tds_m.assert_not_called()
@@ -396,23 +423,25 @@ def test_single_db_with_schemas_intersection(tmp_path):
             Col=_mock_tds_columns(),
         )
 
-    with patch("govio.cli.meta_export.ConfigManager") as cfg_m, \
-         patch("govio.cli.meta_export.TDSLoader") as _, \
-         patch("govio.cli.meta_export.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta_export.AppInfoLoader") as app_m, \
-         patch("govio.cli.meta_export.StandardLoader") as std_m, \
-         patch("govio.cli.meta_export.pd.read_json") as read_json_m:
+    with patch("govio.cli.meta.ConfigManager") as cfg_m, \
+         patch("govio.cli.meta.MetaConfigManager") as meta_cfg_m, \
+         patch("govio.cli.meta.TDSLoader") as _, \
+         patch("govio.cli.meta.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta.AppInfoLoader") as app_m, \
+         patch("govio.cli.meta.StandardLoader") as std_m, \
+         patch("govio.cli.meta.pd.read_json") as read_json_m:
         cfg_m.return_value.load.return_value = config
+        meta_cfg_m.return_value.exists.return_value = False
         duck_m.side_effect = _mock_duck
         app_m.return_value.Application = _mock_apps()
         std_m.return_value.Standard = _mock_stds()
         read_json_m.return_value = _mock_app_db_map()
 
-        from govio.cli.meta_export import meta_export
+        from govio.cli.meta import meta_export
         out = tmp_path / "out"
         # billing 对应 schema=dm，但 --schemas=dwd 与之无交集
         meta_export(db_path="ignored", schemas=["dwd"], db_name="billing",
-                    output=out, dry_run=True)
+                    output=out, graph_mode="dry_run")
 
     tables = pd.read_csv(out / "PhysicalTable.csv")
     assert len(tables) == 0  # 交集为空

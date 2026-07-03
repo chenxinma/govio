@@ -176,16 +176,59 @@ def cmd_chart(
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+def cmd_info(config: dict, args: argparse.Namespace) -> None:
+    """info 子命令分发：合并 show-datasource / list / show"""
+    # 无任何标志时，显示概览（数据源名称 + DataFrame 列表）
+    if not args.datasource and not args.df and not args.name:
+        db_manager = get_db_manager(config)
+        ds_result = list_datasources(db_manager)
+        ds_names = [ds["name"] for ds in ds_result]
+
+        store = ObserveStore()
+        df_result = list_dataframes(store=store)
+
+        print(json.dumps({
+            "datasources": ds_names,
+            "dataframes": df_result,
+        }, ensure_ascii=False, indent=2))
+        return
+
+    if args.datasource:
+        cmd_show_datasource(config, detail=False)
+    elif args.df:
+        cmd_list(config)
+    elif args.name:
+        cmd_show(config, args.name, args.rows)
+
+
+def cmd_show(config: dict, name: str, rows: int) -> None:
+    """显示已加载 DataFrame 的结构和样本数据"""
+    store = ObserveStore()
+    df = store.get(name)
+    if df is None:
+        print(json.dumps({"success": False, "error": f"DataFrame '{name}' 不存在"}))
+        return
+
+    schema = [{"column": col, "dtype": str(df[col].dtype)} for col in df.columns]
+    sample = json.loads(df.head(rows).to_json(orient="records", force_ascii=False))
+    result = {
+        "success": True,
+        "name": name,
+        "rows": len(df),
+        "columns": len(df.columns),
+        "schema": schema,
+        "sample": sample,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
 def observe():
     """observe 命令入口"""
     parser = argparse.ArgumentParser(
+        prog="govio-cli observe",
         description="数据表探查命令 — 加载、比较、探索数据表",
     )
     sub = parser.add_subparsers(dest="action", required=True)
-
-    # show-datasource
-    p = sub.add_parser("show-datasource", help="显示已配置的数据源")
-    p.add_argument("--detail", action="store_true", help="显示数据源的完整信息（默认仅列出名称）")
 
     # load --name (--datasource | --memory) --sql [-o output]
     p = sub.add_parser(
@@ -224,9 +267,6 @@ def observe():
         help="将结果 DataFrame 内容输出为 JSON 文件（records 方式、UTF-8、缩进 2）",
     )
 
-    # list
-    sub.add_parser("list", help="列出已加载的 DataFrame")
-
     # release --name / --all
     p = sub.add_parser("release", help="释放 DataFrame")
     p.add_argument("--name", help="DataFrame 名称")
@@ -254,6 +294,13 @@ def observe():
     p.add_argument("--y", required=True, help="Y 轴列名")
     p.add_argument("-o", "--output", required=True, help="输出 PNG 路径")
 
+    # info: 合并 show-datasource / list / show
+    p = sub.add_parser("info", help="数据源与 DataFrame 信息查询")
+    p.add_argument("--datasource", action="store_true", help="仅显示已配置的数据源名称")
+    p.add_argument("--df", action="store_true", help="仅显示已加载的 DataFrame 列表")
+    p.add_argument("--name", help="显示指定 DataFrame 的结构和样本数据")
+    p.add_argument("--rows", type=int, default=10, help="样本行数（默认 10，仅与 --name 配合使用）")
+
     args = parser.parse_args(sys.argv[1:])
 
     # 加载配置
@@ -272,8 +319,6 @@ def observe():
 
     # 分发子命令
     match args.action:
-        case "show-datasource":
-            cmd_show_datasource(config, args.detail)
         case "load":
             cmd_load(
                 config,
@@ -283,8 +328,6 @@ def observe():
                 memory=args.memory,
                 output=getattr(args, "output", None),
             )
-        case "list":
-            cmd_list(config)
         case "release":
             if not args.all and not args.name:
                 print("请指定 --name 或 --all")
@@ -299,6 +342,8 @@ def observe():
             cmd_visualize(config, args.relations)
         case "chart":
             cmd_chart(config, args.name, args.type, args.x, args.y, args.output)
+        case "info":
+            cmd_info(config, args)
 
 
 if __name__ == "__main__":

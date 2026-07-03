@@ -134,3 +134,75 @@ class ConfigManager:
                     raise ValueError(f"数据源 '{name}' 缺少 'url' 字段")
 
         return True
+
+
+class MetaConfigManager:
+    """管理 govio meta 命令组的配置文件 (~/.govio/meta_config.yaml)"""
+
+    def __init__(self, config_path: Path | None = None) -> None:
+        if config_path is None:
+            self.config_path = Path.home() / ".govio" / "meta_config.yaml"
+        else:
+            self.config_path = config_path
+
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def exists(self) -> bool:
+        """检查 meta 配置文件是否存在"""
+        return self.config_path.exists()
+
+    def load(self) -> dict[str, Any]:
+        """加载 meta 配置文件"""
+        if not self.exists():
+            raise FileNotFoundError(f"meta 配置文件不存在: {self.config_path}")
+
+        with open(self.config_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+
+    def save(self, config: dict[str, Any]) -> None:
+        """保存 meta 配置文件"""
+        with open(self.config_path, "w", encoding="utf-8") as f:
+            yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
+
+    def migrate_from_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """从旧的 config.yaml 中提取 metadata 相关字段并保存到 meta_config.yaml
+
+        提取的字段:
+        - kundb, workspace_uuid, app_list, app_map, relationship, metric, csv_dir
+        - graph section (meta sync 需要知道 graph 目标)
+        """
+        meta_config: dict[str, Any] = {}
+
+        # 提取 metadata 相关字段
+        for key in _METADATA_KEYS:
+            if key in config:
+                meta_config[key] = config[key]
+
+        # 提取 graph section（支持新旧两种格式）
+        if "graph" in config:
+            meta_config["graph"] = config["graph"]
+        else:
+            graph = {}
+            for key in _GRAPH_KEYS:
+                if key in config:
+                    graph[key] = config[key]
+            if graph:
+                meta_config["graph"] = graph
+
+        self.save(meta_config)
+        return meta_config
+
+    def load_or_migrate(self) -> dict[str, Any]:
+        """加载 meta_config.yaml，若不存在则尝试从 config.yaml 迁移"""
+        if self.exists():
+            return self.load()
+
+        # 尝试从主配置迁移
+        main_config = ConfigManager()
+        if main_config.exists():
+            config = main_config.load()
+            return self.migrate_from_config(config)
+
+        raise FileNotFoundError(
+            f"meta 配置文件不存在且无法从主配置迁移: {self.config_path}"
+        )

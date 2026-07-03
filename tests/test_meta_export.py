@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from govio.cli.meta_export import merge_metadata
+from govio.cli.meta import merge_metadata
 
 
 def test_merge_metadata_duckdb_wins():
