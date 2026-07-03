@@ -129,3 +129,119 @@ def test_empty_metrics_raises():
     """空 metrics：抛 ValueError"""
     with pytest.raises(ValueError, match="至少需要一个指标"):
         build_metric_sql(metrics=[])
+
+
+# ---------- CLI 集成测试 ----------
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+def _run_cli(*args, stdin_text=None):
+    """运行 govio-cli sql build，返回 (returncode, stdout, stderr)"""
+    cmd = [sys.executable, "-m", "govio.cli"] + list(args)
+    proc = subprocess.run(
+        cmd,
+        input=stdin_text,
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def _write_query_json(path: Path, **overrides):
+    """写入测试用 JSON 规格"""
+    req = {
+        "metrics": [{
+            "code": "bill_income_amt",
+            "name": "当月账单收入",
+            "type": "原子",
+            "source_table": "dws.income_bill_monthly",
+        }],
+        "filters": {"report_ym": "2026-05"},
+    }
+    req.update(overrides)
+    path.write_text(json.dumps(req, ensure_ascii=False), encoding="utf-8")
+    return req
+
+
+def test_cli_build_file_to_stdout():
+    """-f 文件输入 → stdout 输出 SQL"""
+    with tempfile.TemporaryDirectory() as d:
+        qpath = Path(d) / "q.json"
+        _write_query_json(qpath)
+        rc, out, err = _run_cli("sql", "build", "-f", str(qpath))
+        assert rc == 0, f"stderr: {err}"
+        assert "WITH" in out
+        assert "atomic_income_bill_monthly" in out
+        assert out.endswith("\n")
+
+
+def test_cli_build_file_to_output_file():
+    """-f 文件 + -o 输出文件"""
+    with tempfile.TemporaryDirectory() as d:
+        qpath = Path(d) / "q.json"
+        opath = Path(d) / "out.sql"
+        _write_query_json(qpath)
+        rc, out, err = _run_cli("sql", "build", "-f", str(qpath), "-o", str(opath))
+        assert rc == 0, f"stderr: {err}"
+        assert out == ""
+        content = opath.read_text(encoding="utf-8")
+        assert "WITH" in content
+        assert content.endswith("\n")
+
+
+def test_cli_build_stdin_input():
+    """stdin 管道输入"""
+    req = {
+        "metrics": [{
+            "code": "bill_income_amt",
+            "name": "当月账单收入",
+            "type": "原子",
+            "source_table": "dws.income_bill_monthly",
+        }],
+        "filters": {"report_ym": "2026-05"},
+    }
+    rc, out, err = _run_cli("sql", "build", stdin_text=json.dumps(req))
+    assert rc == 0, f"stderr: {err}"
+    assert "WITH" in out
+
+
+def test_cli_build_file_not_found():
+    """文件不存在 → exit 1"""
+    rc, out, err = _run_cli("sql", "build", "-f", "/nonexistent/q.json")
+    assert rc == 1
+    assert "文件不存在" in err
+
+
+def test_cli_build_json_parse_error():
+    """JSON 解析失败 → exit 1"""
+    with tempfile.TemporaryDirectory() as d:
+        qpath = Path(d) / "q.json"
+        qpath.write_text("{invalid json", encoding="utf-8")
+        rc, out, err = _run_cli("sql", "build", "-f", str(qpath))
+        assert rc == 1
+        assert "JSON 解析失败" in err
+
+
+def test_cli_build_value_error_propagation():
+    """build_metric_sql ValueError → exit 1"""
+    with tempfile.TemporaryDirectory() as d:
+        qpath = Path(d) / "q.json"
+        req = {
+            "metrics": [{
+                "code": "bill_income_amt",
+                "name": "当月账单收入",
+                "type": "原子",
+                "source_table": "dws.income_bill_monthly",
+            }],
+            "filters": {},
+        }
+        qpath.write_text(json.dumps(req), encoding="utf-8")
+        rc, out, err = _run_cli("sql", "build", "-f", str(qpath))
+        assert rc == 1
+        assert "SQL 组装失败" in err
+        assert "report_ym" in err
