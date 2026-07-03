@@ -16,9 +16,9 @@ description: 数据治理查询能力。当需要查询元数据（应用、表�
 
 ## 步骤（强制顺序）
 
-**Step 0** ⚠️ 读取 `assets/schema.md`（**仅此一次，不得重复读取**）
+**Step 0** ⚠️ 读取 `../govio/assets/schema.md`（**仅此一次，不得重复读取**）
 
-**Step 1** 如果 prompt 含中文系统名，用 Grep 搜索 `assets/names/` 获取标准英文代码（见"名称解析"）
+**Step 1** 如果 prompt 含中文系统名，用 Grep 搜索 `../govio/assets/names/` 获取标准英文代码（见"名称解析"）
 
 **Step 2** 判断查询类型：
 - 包含"指标"、"收入"、"签约"、"金额"、"YTD"等业务指标关键词 → 指标问数流程
@@ -352,7 +352,7 @@ govio-cli observe load --name bill_data --datasource dw --sql "SELECT sales_unit
 
 ### 指标概览
 
-`assets/metrics_index.md` 中包含所有指标的索引：
+`../govio/assets/metrics_index.md` 中包含所有指标的索引：
 
 #### 原子指标
 
@@ -377,8 +377,8 @@ govio-cli observe load --name bill_data --datasource dw --sql "SELECT sales_unit
 
 当 prompt 包含中文系统名（如"报价单中心系统""薪税系统"），**必须先 Grep 确认标准英文代码**：
 
-- **networkx 后端**：Grep 搜索 `assets/names/node_names.md`
-- **falkordb 后端**：Grep 搜索 `assets/names/` 下所有 `*.md` 文件，或先用 Glob 列出文件名定位（格式：`{应用名}_{缩写}.md`，如 `薪税生产系统_PAYPRO.md`）
+- **networkx 后端**：Grep 搜索 `../govio/assets/names/node_names.md`
+- **falkordb 后端**：Grep 搜索 `../govio/assets/names/` 下所有 `*.md` 文件，或先用 Glob 列出文件名定位（格式：`{应用名}_{缩写}.md`，如 `薪税生产系统_PAYPRO.md`）
 
 ## 查询终止策略
 
@@ -409,14 +409,17 @@ govio-cli observe load --name bill_data --datasource dw --sql "SELECT sales_unit
 ## 资源文件
 
 ```
-assets/
-├── schema.md            # 图模式（Step 0 必读，仅读一次）
-├── metrics_index.md     # 指标索引
-├── ontology.gml         # GML 元模型数据（NetworkX 后端）
-└── names/               # 名称映射
-     ├── node_names.md   #   (networkx) 全部节点名称汇总
-     └── *.md            #   (falkordb) 按应用分文件
-scripts/
-├── sql_builder.py       # SQL 组装脚本（CLI）
-└── query_example.json   # 查询请求示例
+../govio/assets/            # 共享资源（位于父 govio skill 目录下）
+├── schema.md               # 图模式（Step 0 必读，仅读一次）
+├── metrics_index.md        # 指标索引
+├── ontology.gml            # GML 元模型数据（NetworkX 后端）
+└── names/                  # 名称映射
+     ├── node_names.md      #   (networkx) 全部节点名称汇总
+     └── *.md               #   (falkordb) 按应用分文件
+
+本 Skill 目录下:
+├── reference-falkordb.md   # FalkorDB Cypher 深度参考
+├── reference-networkx.md   # NetworkX Python 深度参考
+└── scripts/
+     └── sql_builder.py     # SQL 组装脚本（CLI）
 ```
