@@ -61,7 +61,7 @@ flowchart TD
     C["📚 语义&数据基础｜消歧义｜知识图谱<br/>引擎：FalkorDB / NetworkX<br/>▷ 指标(原子/派生)+计算公式+数据血缘<br/>▷ 业务维度+维度枚举值<br/>▷ 物理表→字段→数据标准<br/>▷ 应用归属+业务域划分"]:::semanticLayer
 
     %% 第四层：数据执行
-    D["🗄️ 执行层｜受控数据查询<br/>govio-cli observe load → 数据源 → DataFrame<br/>sql_builder.py 自动SQL组装"]:::execLayer
+    D["🗄️ 执行层｜受控数据查询<br/>govio-cli observe load → 数据源 → DataFrame<br/>govio-cli sql build 自动SQL组装"]:::execLayer
 
     %% 流向箭头
     A ==> B
@@ -114,7 +114,7 @@ Step 2  -> 查询知识图谱获取元数据：
            - 来源表: dws.income_bill_monthly
            - 引用列: bill_income_amt
            - 可用维度: sales_unit, sales_dept, biz_mode, ...
-Step 3  -> sql_builder.py 组装 SQL
+Step 3  -> govio-cli sql build 组装 SQL
 Step 4  -> govio-cli observe load 执行查询
 Step 5  -> 格式化输出（含单位、时间范围）
 ```
@@ -168,7 +168,7 @@ Step 2  查询指标元数据（来源表、实际列名、维度）
   |
 Step 3  探查数据范围 + 维度值（不假设当前月份有数据）
   |
-Step 4  组装 SQL（sql_builder.py）
+Step 4  组装 SQL（govio-cli sql build）
   |
 Step 5  执行查询（govio-cli observe load）
   |
@@ -196,7 +196,7 @@ Govio 建立了结构化的评估框架，将"感觉更好"转化为可量化分
 | 维度       | 检查项示例                                               | 量化方式        |
 | -------- | --------------------------------------------------- | ----------- |
 | **结果目标** | 查询返回正确结果、SQL 语义正确、指标数据准确                            | 与知识图谱原始数据比对 |
-| **过程目标** | 首次读取 schema.md、使用 sql_builder.py、使用 govio-cli query | Trace 事件检查  |
+| **过程目标** | 首次读取 schema.md、使用 govio-cli sql build、使用 govio-cli query | Trace 事件检查  |
 | **风格目标** | Cypher 双引号、中文回答技术术语保留英文、结果含单位                       | 格式检查        |
 | **效率目标** | 不重复读取 schema、无冗余命令、路由决策快速                           | 命令计数        |
 
@@ -235,7 +235,7 @@ Govio 通过 `govio-observe` 的CLI架构设计实现了"能做什么"和"能看
 
 6. **构建知识图谱**：将元数据（应用、表、字段、指标、维度）加载到 FalkorDB 或 NetworkX
 7. **实现指标语义层**：指标的来源表、引用列、血缘关系、维度关系全部结构化存储
-8. **SQL 组装脚本**：`sql_builder.py` 接收结构化 JSON，生成标准 SQL，避免 Agent 手写 SQL 的不确定性
+8. **SQL 组装脚本**：`govio-cli sql build` 接收结构化 JSON，生成标准 SQL，避免 Agent 手写 SQL 的不确定性
 9. **名称映射**：`assets/names/` 目录存储中文系统名到标准代码的映射
 
 ### 阶段三：持续验证与演进
