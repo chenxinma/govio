@@ -8,6 +8,7 @@ from .onboard import onboard
 from .observe import observe
 from .query import query
 from .meta import meta
+from .sql import sql
 
 
 def _get_version() -> str:
@@ -60,6 +61,12 @@ def main():
         "observe_args", nargs=argparse.REMAINDER, help="observe 子命令参数"
     )
 
+    # sql 子命令组
+    p_sql = sub.add_parser("sql", help="指标 SQL 组装", add_help=False)
+    p_sql.add_argument(
+        "sql_args", nargs=argparse.REMAINDER, help="sql 子命令参数"
+    )
+
     args, remaining = parser.parse_known_args()
 
     if args.action == "onboard":
@@ -84,6 +91,9 @@ def main():
         # 将 observe 子命令参数设为 sys.argv 供 observe() 解析
         sys.argv = ["govio-cli"] + args.observe_args + remaining
         observe()
+    elif args.action == "sql":
+        sys.argv = ["govio-cli"] + args.sql_args + remaining
+        sql()
     else:
         parser.print_help()
         sys.exit(1)
