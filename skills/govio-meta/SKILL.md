@@ -86,10 +86,12 @@ DuckDB/TDS → meta_export() in meta.py → CSV → FalkorDB MERGE / NetworkX GM
 
 **数据源（交互模式可选）**：
 - **TDS**：仅从元数据库读取，schemas 从 `app_map.json` 自动获取
-- **DuckDB**：仅从 DuckDB 读取，需指定 schemas 或 db-name
+- **DuckDB**：仅从 DuckDB 读取，需指定 schemas 或 db-name；**跳过 Standard 数据标准读取**（数据标准仅存于 TDS，DuckDB 无对应来源），产出的 `Standard.csv` 只有表头
 - **Both**：TDS + DuckDB 合并，DuckDB 数据覆盖同名 TDS 数据
 
 命令行模式通过 `--db` 有无自动推断（有则 DuckDB，无则 TDS）。
+
+> 注：DuckDB 模式不访问 TDS，因此配置中的 `kundb` 在该模式下非必须（TDS/Both 模式仍必须）。数据标准节点需后续从 TDS 补齐或在 Both 模式下获取。
 
 **交互模式行为**：
 1. 加载 meta 配置

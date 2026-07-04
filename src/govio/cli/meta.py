@@ -98,7 +98,11 @@ def meta_export(
     # graph 配置始终从 config.yaml 读取
     graph_config = ConfigManager().load()
 
-    if not all([kundb, app_list_file, app_map_file]):
+    # kundb 仅在需要访问 TDS 时必须（tds/both 用于表/字段或数据标准；duckdb 跳过标准）
+    required = [app_list_file, app_map_file]
+    if source in ("tds", "both"):
+        required.append(kundb)
+    if not all(required):
         print("❌ 配置缺少必要字段，请检查 metadata 中的 kundb, app_list, app_map")
         sys.exit(1)
 
@@ -160,8 +164,12 @@ def meta_export(
     app_names = [db_name] if db_name else df_app_db_map["name"].to_list()
     app_loader = AppInfoLoader(app_list_file, app_names)
     df_apps = app_loader.Application
-    std_loader = StandardLoader(kundb, workspace_uuid)
-    df_stds = std_loader.Standard
+    if source == "duckdb":
+        print("提示: DuckDB 模式跳过 Standard 数据标准的读取")
+        df_stds = pd.DataFrame(columns=["standard_id"])
+    else:
+        std_loader = StandardLoader(kundb, workspace_uuid)
+        df_stds = std_loader.Standard
 
     # --- Assign string IDs ---
     df_tables = df_tables.reset_index(drop=True)

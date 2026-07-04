@@ -383,6 +383,8 @@ def test_single_db_mode_skips_tds(tmp_path):
 
     # TDSLoader 不应被实例化
     tds_m.assert_not_called()
+    # DuckDB 模式同样跳过 Standard 数据标准读取
+    std_m.assert_not_called()
 
     # 只导出 dm.orders 这张表
     tables = pd.read_csv(out / "PhysicalTable.csv")
@@ -398,6 +400,11 @@ def test_single_db_mode_skips_tds(tmp_path):
     # USE 边只连 billing -> dm.orders
     use = pd.read_csv(out / "USE.csv")
     assert len(use) == 1
+
+    # Standard.csv 只有表头，无数据行
+    stds = pd.read_csv(out / "Standard.csv")
+    assert stds.columns[0] == ":ID(Standard)"
+    assert len(stds) == 0
 
 
 def test_single_db_with_schemas_intersection(tmp_path):
