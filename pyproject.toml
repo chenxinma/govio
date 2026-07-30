@@ -24,6 +24,7 @@ dependencies = [
     "sqlalchemy>=2.0.45",
     "tqdm>=4.67.1",
     "trino>=0.337.0",
+    "cryptography>=49.0.0",
 ]
 
 [build-system]

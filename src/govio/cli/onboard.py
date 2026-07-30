@@ -1,10 +1,10 @@
-import sys
 from pathlib import Path
 from typing import Any
 
 import questionary
 
 from .config import ConfigManager
+from govio.crypto import encrypt_value, parse_password_from_url
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +87,22 @@ def prompt_connect_args(existing: dict[str, Any] | None = None) -> dict[str, Any
     return connect_args
 
 
+def _encrypt_url_password(url: str) -> dict[str, Any]:
+    """解析 URL 中的密码并加密，返回存储字段
+
+    Args:
+        url: 原始连接 URL
+
+    Returns:
+        dict: 包含 url（脱敏）和 encrypted_password（若有密码）
+    """
+    masked_url, password = parse_password_from_url(url)
+    result: dict[str, Any] = {"url": masked_url}
+    if password:
+        result["encrypted_password"] = encrypt_value(password)
+    return result
+
+
 def prompt_datasource_config(
     existing_datasources: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
@@ -101,6 +117,7 @@ def prompt_datasource_config(
     print("\n=== 数据源配置（可选）===\n")
     print("配置数据源供 observe 命令使用")
     print("可添加 MySQL、DuckDB 等数据源\n")
+    print("密码将自动加密存储，配置文件可安全分享\n")
 
     datasources: dict[str, Any] = (
         dict(existing_datasources) if existing_datasources else {}
@@ -144,8 +161,12 @@ def prompt_datasource_config(
                     continue
             existing_args = datasources.get(name, {}).get("connect_args") or None
             connect_args = prompt_connect_args(existing_args)
-            datasources[name] = {"url": url, "connect_args": connect_args}
-            print(f"  已添加数据源: {name}")
+
+            # 加密密码并存储脱敏 URL
+            ds_entry = _encrypt_url_password(url)
+            ds_entry["connect_args"] = connect_args
+            datasources[name] = ds_entry
+            print(f"  已添加数据源: {name}（密码已加密）")
 
         elif action == "del":
             if not datasources:

@@ -3,6 +3,8 @@ import yaml
 from pathlib import Path
 from typing import Any
 
+from govio.crypto import encrypt_value, parse_password_from_url
+
 # 旧格式中属于 metadata section 的字段
 _METADATA_KEYS = {"kundb", "workspace_uuid", "app_list", "app_map", "relationship", "metric", "csv_dir"}
 # 旧格式中属于 graph section 的字段
@@ -35,12 +37,55 @@ class ConfigManager:
         if self._is_old_format(config):
             config = self._migrate(config)
 
+        # 迁移明文密码为加密存储
+        if self._has_plaintext_passwords(config):
+            config = self._migrate_passwords(config)
+
         return config
 
     def save(self, config: dict[str, Any]) -> None:
         """保存配置文件"""
         with open(self.config_path, "w", encoding="utf-8") as f:
             yaml.dump(config, f, allow_unicode=True, default_flow_style=False)
+
+    # ------------------------------------------------------------------
+    # 密码加密迁移
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _has_plaintext_passwords(config: dict[str, Any]) -> bool:
+        """检测数据源中是否存在明文密码"""
+        datasources = config.get("datasources", {})
+        for ds_data in datasources.values():
+            if not isinstance(ds_data, dict):
+                continue
+            url = ds_data.get("url", "")
+            _, password = parse_password_from_url(url)
+            if password and not ds_data.get("encrypted_password"):
+                return True
+        return False
+
+    def _migrate_passwords(self, config: dict[str, Any]) -> dict[str, Any]:
+        """将数据源中的明文密码迁移为加密存储"""
+        backup_path = self.config_path.with_suffix(".yaml.bak")
+        shutil.copy2(self.config_path, backup_path)
+
+        datasources = config.get("datasources", {})
+        for name, ds_data in datasources.items():
+            if not isinstance(ds_data, dict):
+                continue
+            url = ds_data.get("url", "")
+            masked_url, password = parse_password_from_url(url)
+            if password and not ds_data.get("encrypted_password"):
+                ds_data["url"] = masked_url
+                ds_data["encrypted_password"] = encrypt_value(password)
+
+        self.save(config)
+        return config
+
+    # ------------------------------------------------------------------
+    # 旧格式迁移
+    # ------------------------------------------------------------------
 
     def _is_old_format(self, config: dict[str, Any]) -> bool:
         """检测是否为旧的扁平格式"""
