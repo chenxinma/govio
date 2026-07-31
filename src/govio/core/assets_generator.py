@@ -112,10 +112,11 @@ class AssetsGenerator:
             app_name_en, name = app_row
 
             # 查询该应用使用的所有物理表
+            # 注意：变量名不能用 table，TABLE 是 Ladybug 的保留字，会触发解析错误。
             tables_query = """
-            MATCH (app:Application {app_name_en: $app_name_en})-[:USE]->(table:PhysicalTable)
-            RETURN table.full_table_name, table.name AS table_name
-            ORDER BY table.full_table_name
+            MATCH (app:Application {app_name_en: $app_name_en})-[:USE]->(t:PhysicalTable)
+            RETURN t.full_table_name, t.name AS table_name
+            ORDER BY t.full_table_name
             """
             tables = self.graph.query(tables_query, {"app_name_en": app_name_en})
 
@@ -132,7 +133,7 @@ class AssetsGenerator:
 
                 # 查询该物理表的所有字段
                 cols_query = """
-                MATCH (table:PhysicalTable {full_table_name: $full_table_name})-[:HAS_COLUMN]->(col:Col)
+                MATCH (t:PhysicalTable {full_table_name: $full_table_name})-[:HAS_COLUMN]->(col:Col)
                 RETURN col.column_name, col.name AS col_name
                 ORDER BY col.order_no
                 """
