@@ -233,6 +233,7 @@ def onboard():
         choices=[
             questionary.Choice("networkx - 本地 GML 文件", value="networkx"),
             questionary.Choice("falkordb - FalkorDB 图数据库", value="falkordb"),
+            questionary.Choice("ladybug - Ladybug 嵌入式图数据库", value="ladybug"),
         ],
         default="networkx",
     ).ask()
@@ -244,7 +245,7 @@ def onboard():
             validate=lambda v: True if Path(v).exists() else "GML 文件不存在",
         ).ask()
         graph_config = {"backend": "networkx", "networkx": {"gml_path": str(Path(gml_path_input))}}
-    else:
+    elif backend == "falkordb":
         print("\n--- FalkorDB 配置 ---\n")
         host = questionary.text(
             "请输入 FalkorDB 主机地址:",
@@ -264,6 +265,18 @@ def onboard():
         ).ask() or "ontology"
 
         graph_config = {"backend": "falkordb", "falkordb": {"host": host, "port": port, "graph": graph_name}}
+    else:
+        # ladybug
+        print("\n--- Ladybug 配置 ---\n")
+        default_db = str(Path.home() / ".govio" / "ontology.lbdb")
+        db_path_input = questionary.text(
+            "请输入 Ladybug 数据库文件路径:",
+            default=default_db,
+        ).ask() or default_db
+        graph_config = {
+            "backend": "ladybug",
+            "ladybug": {"db_path": str(Path(db_path_input))},
+        }
 
     full_config: dict[str, Any] = {"graph": graph_config}
 

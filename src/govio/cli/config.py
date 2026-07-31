@@ -8,7 +8,7 @@ from govio.crypto import encrypt_value, parse_password_from_url
 # 旧格式中属于 metadata section 的字段
 _METADATA_KEYS = {"kundb", "workspace_uuid", "app_list", "app_map", "relationship", "metric", "csv_dir"}
 # 旧格式中属于 graph section 的字段
-_GRAPH_KEYS = {"backend", "networkx", "falkordb"}
+_GRAPH_KEYS = {"backend", "networkx", "falkordb", "ladybug"}
 
 
 class ConfigManager:
@@ -127,11 +127,11 @@ class ConfigManager:
 
     @staticmethod
     def _validate_backend(scope: dict[str, Any]) -> None:
-        """验证 backend 相关配置（networkx/falkordb）"""
+        """验证 backend 相关配置（networkx/falkordb/ladybug）"""
         if "backend" not in scope:
             raise ValueError("配置缺少 'backend' 字段")
         backend = scope["backend"]
-        if backend not in ["networkx", "falkordb"]:
+        if backend not in ["networkx", "falkordb", "ladybug"]:
             raise ValueError(f"不支持的 backend: {backend}")
         if backend == "networkx":
             if "networkx" not in scope:
@@ -144,6 +144,11 @@ class ConfigManager:
             for field in ["host", "port", "graph"]:
                 if field not in scope["falkordb"]:
                     raise ValueError(f"FalkorDB 配置缺少 '{field}' 字段")
+        elif backend == "ladybug":
+            if "ladybug" not in scope:
+                raise ValueError("Ladybug backend 需要 'ladybug' 配置")
+            if "db_path" not in scope["ladybug"]:
+                raise ValueError("Ladybug 配置缺少 'db_path' 字段")
 
     def validate(self, config: dict[str, Any]) -> bool:
         """验证配置的有效性

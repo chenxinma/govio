@@ -6,21 +6,23 @@
 import json
 from pathlib import Path
 
-from ..graph import NetworkXGraph, FalkorDBGraph
+from ..graph import FalkorDBGraph, LadybugGraph, NetworkXGraph
 
 
 class AssetsGenerator:
     """资产文件生成器
 
-    根据图谱类型（NetworkXGraph 或 FalkorDBGraph）生成相应的资产文件。
+    根据图谱类型生成相应的资产文件。
 
     Args:
-        graph: NetworkXGraph 或 FalkorDBGraph 实例
+        graph: NetworkXGraph / FalkorDBGraph / LadybugGraph 实例
         output_dir: 输出目录路径
     """
 
     def __init__(
-        self, graph: NetworkXGraph | FalkorDBGraph, output_dir: Path
+        self,
+        graph: NetworkXGraph | FalkorDBGraph | LadybugGraph,
+        output_dir: Path,
     ) -> None:
         self.graph = graph
         self.output_dir = output_dir
@@ -39,17 +41,17 @@ class AssetsGenerator:
         """生成名称索引文件
 
         NetworkXGraph: 生成 names/node_names.md (JSON Lines 格式)
-        FalkorDBGraph: 生成 names/{name}_{app_name_en}.md (Markdown 格式)
+        FalkorDBGraph / LadybugGraph: 生成 names/{name}_{app_name_en}.md (Markdown 格式)
         """
         names_dir = self.output_dir / "names"
         if not names_dir.exists():
             names_dir.mkdir(parents=True, exist_ok=True)
 
-        # 检测图谱类型
+        # 检测图谱类型：NetworkX 暴露 G 属性，其余为 Cypher 后端
         if hasattr(self.graph, "G"):
             self._generate_names_networkx(names_dir)
         else:
-            self._generate_names_falkordb(names_dir)
+            self._generate_names_cypher(names_dir)
 
     def _generate_names_networkx(self, names_dir: Path) -> None:
         """为 NetworkX 生成名称索引
@@ -57,7 +59,7 @@ class AssetsGenerator:
         格式: JSON Lines，每行一个节点
         {"id": "node_id", "name": "节点名称", "node_type": "Application"}
         """
-        if not type(self.graph) is NetworkXGraph:
+        if type(self.graph) is not NetworkXGraph:
             return None
 
         g = self.graph.G
@@ -89,13 +91,13 @@ class AssetsGenerator:
                 for node in nodes:
                     f.write(json.dumps(node, ensure_ascii=False) + "\n")
 
-    def _generate_names_falkordb(self, names_dir: Path) -> None:
-        """为 FalkorDB 生成名称索引
+    def _generate_names_cypher(self, names_dir: Path) -> None:
+        """为 Cypher 后端（FalkorDB / Ladybug）生成名称索引
 
         按应用分组，每个应用一个文件
         格式: {name}_{app_name_en}.md
         """
-        if not type(self.graph) is FalkorDBGraph:
+        if not isinstance(self.graph, (FalkorDBGraph, LadybugGraph)):
             return None
         # 查询所有应用
         apps_query = """
@@ -166,8 +168,8 @@ class AssetsGenerator:
                 for nid in g.nodes()
                 if g.nodes[nid].get("node_type") == "Metric"
             ]
-        elif type(self.graph) is FalkorDBGraph:
-            # FalkorDB: 查询所有 Metric 节点
+        elif isinstance(self.graph, (FalkorDBGraph, LadybugGraph)):
+            # Cypher 后端（FalkorDB / Ladybug）：查询所有 Metric 节点
             try:
                 result = self.graph.query(
                     "MATCH (m:Metric) RETURN m.code, m.name, m.type, "
