@@ -1,20 +1,20 @@
 from typing import Any
 
-from ..graph import FalkorDBGraph, NetworkXGraph
+from ..graph import FalkorDBGraph, LadybugGraph, NetworkXGraph
 
 
 class GraphFactory:
     """图对象工厂，根据配置创建不同的图对象"""
 
     @staticmethod
-    def create(config: dict[str, Any]) -> NetworkXGraph | FalkorDBGraph:
+    def create(config: dict[str, Any]) -> NetworkXGraph | FalkorDBGraph | LadybugGraph:
         """根据配置创建图对象
 
         Args:
             config: 配置字典
 
         Returns:
-            NetworkXGraph 或 FalkorDBGraph 实例
+            NetworkXGraph / FalkorDBGraph / LadybugGraph 实例
 
         Raises:
             ValueError: 配置缺少必需字段或不支持的 backend 类型
@@ -48,6 +48,23 @@ class GraphFactory:
                 graph=falkordb_config["graph"],
                 host=falkordb_config.get("host", "localhost"),
                 port=falkordb_config.get("port", 6379),
+            )
+
+        elif backend == "ladybug":
+            if "ladybug" not in config:
+                raise ValueError("Ladybug backend 需要 'ladybug' 配置")
+            ladybug_config = config["ladybug"]
+            if "db_path" not in ladybug_config:
+                raise ValueError("Ladybug 配置缺少 'db_path' 字段")
+
+            return LadybugGraph(
+                ladybug_config["db_path"],
+                buffer_pool_size=ladybug_config.get(
+                    "buffer_pool_size", 256 * 1024 * 1024
+                ),
+                max_db_size=ladybug_config.get(
+                    "max_db_size", 1 * 1024 * 1024 * 1024
+                ),
             )
 
         else:

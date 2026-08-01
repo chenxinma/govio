@@ -77,11 +77,11 @@ govio-cli meta config
 
 ### sync - 同步元数据
 
-从元数据库（DuckDB/TDS）提取元数据，生成 CSV，更新图数据库（FalkorDB MERGE 或 NetworkX GML 重建），最后生成 assets。
+从元数据库（DuckDB/TDS）提取元数据，生成 CSV，更新图数据库（FalkorDB / Ladybug MERGE 或 NetworkX GML 重建），最后生成 assets。
 
 **数据流**：
 ```
-DuckDB/TDS → meta_export() in meta.py → CSV → FalkorDB MERGE / NetworkX GML rebuild → assets
+DuckDB/TDS → meta_export() in meta.py → CSV → FalkorDB / Ladybug MERGE / NetworkX GML rebuild → assets
 ```
 
 **数据源（交互模式可选）**：

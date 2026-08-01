@@ -1,6 +1,6 @@
 ---
 name: govio-query
-description: 数据治理查询能力。当需要查询元数据（应用、表、字段、数据标准）或指标数据（指标值、维度分析、趋势统计）时触发。通过 govio-cli query 命令执行，支持 Cypher（FalkorDB）和 Python（NetworkX）两种后端。
+description: 数据治理查询能力。当需要查询元数据（应用、表、字段、数据标准）或指标数据（指标值、维度分析、趋势统计）时触发。通过 govio-cli query 命令执行，支持 Cypher（FalkorDB / Ladybug）和 Python（NetworkX）两类后端。
 ---
 
 # Govio 查询
@@ -36,7 +36,10 @@ description: 数据治理查询能力。当需要查询元数据（应用、表�
 | 后端 | 查询语言 | 深度参考 |
 |------|---------|---------|
 | `falkordb` | Cypher | [reference-falkordb.md](reference-falkordb.md) |
+| `ladybug` | Cypher | [reference-ladybug.md](reference-ladybug.md) |
 | `networkx` | Python，操作 `g` 对象 | [reference-networkx.md](reference-networkx.md) |
+
+> FalkorDB 与 Ladybug 均使用 Cypher，查询写法基本一致；Ladybug 为本地嵌入式 `.lbdb` 文件，差异见 [reference-ladybug.md](reference-ladybug.md)。
 
 ## Cypher 语法规范
 
@@ -381,7 +384,7 @@ govio-cli observe load --name bill_data --datasource dw --sql "SELECT sales_unit
 当 prompt 包含中文系统名（如"报价单中心系统""薪税系统"），**必须先 Grep 确认标准英文代码**：
 
 - **networkx 后端**：Grep 搜索 `../govio/assets/names/node_names.md`
-- **falkordb 后端**：Grep 搜索 `../govio/assets/names/` 下所有 `*.md` 文件，或先用 Glob 列出文件名定位（格式：`{应用名}_{缩写}.md`，如 `薪税生产系统_PAYPRO.md`）
+- **falkordb / ladybug 后端**：Grep 搜索 `../govio/assets/names/` 下所有 `*.md` 文件，或先用 Glob 列出文件名定位（格式：`{应用名}_{缩写}.md`，如 `薪税生产系统_PAYPRO.md`）
 
 ## 查询终止策略
 
@@ -422,5 +425,6 @@ govio-cli observe load --name bill_data --datasource dw --sql "SELECT sales_unit
 
 本 Skill 目录下:
 ├── reference-falkordb.md   # FalkorDB Cypher 深度参考
+├── reference-ladybug.md    # Ladybug Cypher 深度参考
 └── reference-networkx.md   # NetworkX Python 深度参考
 ```

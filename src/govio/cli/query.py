@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 import sys
 
-from govio import NetworkXGraph, FalkorDBGraph
+from govio import NetworkXGraph, FalkorDBGraph, LadybugGraph
 from .config import ConfigManager
 import pandas as pd
 
@@ -93,6 +93,20 @@ def cmd_falkordb(cypher: str, host: str = "localhost", port: int = 6379, graph_n
     output_result(data)
 
 
+def cmd_ladybug(cypher: str, db_path: str):
+    """Ladybug 查询处理（Cypher，与 FalkorDB 语法兼容）"""
+    g = LadybugGraph(db_path)
+
+    if not cypher.upper().startswith("MATCH"):
+        print("Please write a MATCH query.")
+        sys.exit(1)
+
+    logger.info("Cypher: " + cypher)
+
+    data = g.query(cypher)
+    output_result(data)
+
+
 def query(query_text):
     """Query CLI 主函数"""
     
@@ -122,6 +136,13 @@ def query(query_text):
             port=falkordb_config.get("port", 6379),
             graph_name=falkordb_config.get("graph", "ontology"),
         )
+    elif backend == "ladybug":
+        ladybug_config = graph.get("ladybug", {})
+        db_path = ladybug_config.get("db_path")
+        if not db_path:
+            print("配置文件缺少 graph.ladybug.db_path 字段")
+            sys.exit(1)
+        cmd_ladybug(query_text, db_path)
     else:
         print(f"不支持的 backend: {backend}")
         sys.exit(1)

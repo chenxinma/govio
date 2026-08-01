@@ -15,6 +15,7 @@ from .config import ConfigManager, MetaConfigManager
 from govio.core.graph_factory import GraphFactory
 from govio.core.assets_generator import AssetsGenerator
 from govio.graph.falkordb_loader import import_csv_to_falkordb, upsert_csv_to_falkordb
+from govio.graph.ladybug_loader import import_csv_to_ladybug, upsert_csv_to_ladybug
 from govio.metadata.database import TDSLoader
 from govio.metadata.application import AppInfoLoader
 from govio.metadata.standard import StandardLoader
@@ -394,6 +395,24 @@ def meta_export(
             print(f"✓ GML 文件已{label}")
         except Exception as e:
             print(f"❌ {label} GML 失败: {e}")
+            return
+    elif backend == "ladybug":
+        ladybug_cfg = graph.get("ladybug", {})
+        db_path = ladybug_cfg.get("db_path")
+        bp = ladybug_cfg.get("buffer_pool_size", 256 * 1024 * 1024)
+        maxdb = ladybug_cfg.get("max_db_size", 1 * 1024 * 1024 * 1024)
+        if not db_path:
+            print("❌ Ladybug 配置缺少 db_path，跳过图数据更新")
+            return
+        try:
+            if incremental:
+                upsert_csv_to_ladybug(output, db_path, buffer_pool_size=bp, max_db_size=maxdb)
+                print("✓ Ladybug 数据已更新")
+            else:
+                import_csv_to_ladybug(output, db_path, buffer_pool_size=bp, max_db_size=maxdb)
+                print("✓ Ladybug 数据已重建")
+        except Exception as e:
+            print(f"❌ 导入 Ladybug 失败: {e}")
             return
     else:
         print("提示: 未配置 graph backend，跳过图数据更新")

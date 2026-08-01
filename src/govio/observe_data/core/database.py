@@ -24,8 +24,10 @@ class DatabaseManager:
         """初始化所有数据源连接"""
         for name, config in self._datasources.items():
             try:
-                if config.url.startswith("duckdb://"):
-                    db_path = config.url[9:]
+                # 使用 resolved_url 自动解密密码
+                url = config.resolved_url
+                if url.startswith("duckdb://"):
+                    db_path = url[9:]
                     if not Path(db_path).exists():
                         raise ValueError(f"目录不存在: {db_path}")
                     if Path(db_path).is_dir():
@@ -40,7 +42,7 @@ class DatabaseManager:
                         self._duckdb_dirs[name] = str(Path(db_path).parent)
                 else:
                     self._engines[name] = create_engine(
-                        config.url, connect_args=config.connect_args
+                        url, connect_args=config.connect_args
                     )
             except Exception as e:
                 raise RuntimeError(f"初始化数据源 '{name}' 失败: {e}") from e

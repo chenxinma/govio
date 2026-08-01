@@ -33,12 +33,12 @@ def main():
 
     # query 子命令
     p_query = sub.add_parser("query", help="知识图谱查询")
-    code_type = "NetworkX 用 Python 代码，FalkorDB 用 Cypher"
+    code_type = "NetworkX 用 Python 代码，FalkorDB/Ladybug 用 Cypher"
     config_manager = ConfigManager()
     if config_manager.exists():
         config = config_manager.load()
         backend = (config.get("graph") or {}).get("backend")
-        if backend == "falkordb":
+        if backend in ("falkordb", "ladybug"):
             code_type = "Cypher"
         elif backend == "networkx":
             code_type = "Python 代码"

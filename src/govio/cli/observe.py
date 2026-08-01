@@ -26,7 +26,11 @@ def get_db_manager(config: dict) -> DatabaseManager:
 
     datasources = config.get("datasources", {})
     ds_configs = {
-        name: DataSourceConfig(url=ds["url"], connect_args=ds.get("connect_args", {}))
+        name: DataSourceConfig(
+            url=ds["url"],
+            connect_args=ds.get("connect_args", {}),
+            encrypted_password=ds.get("encrypted_password"),
+        )
         for name, ds in datasources.items()
     }
     return DatabaseManager(ds_configs)
