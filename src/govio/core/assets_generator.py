@@ -99,13 +99,16 @@ class AssetsGenerator:
         """
         if not isinstance(self.graph, (FalkorDBGraph, LadybugGraph)):
             return None
-        # 查询所有应用
-        apps_query = """
-        MATCH (app:Application)
-        RETURN app.app_name_en AS app_name_en, app.name AS name
-        ORDER BY app.app_name_en
-        """
-        apps = self.graph.query(apps_query)
+        # 查询所有应用（Application 节点可能不存在，静默跳过）
+        try:
+            apps_query = """
+            MATCH (app:Application)
+            RETURN app.app_name_en AS app_name_en, app.name AS name
+            ORDER BY app.app_name_en
+            """
+            apps = self.graph.query(apps_query)
+        except Exception:
+            return
 
         # 按应用逐次处理
         for app_row in apps:
