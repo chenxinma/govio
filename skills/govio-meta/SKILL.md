@@ -1,6 +1,6 @@
 ---
 name: govio-meta
-description: 知识图谱维护命令组。当需要同步元数据、推荐数据标准、或管理配置时触发。包含 sync（同步元数据到图数据库）、recommend（数据标准推荐）、config（查看/修改配置）三个子命令。
+description: 知识图谱维护命令组。当需要同步元数据、推荐数据标准、或管理配置时触发。包含 sync（同步元数据到图数据库，支持分步子命令）、recommend（数据标准推荐）、config（查看/修改配置）三个子命令。
 ---
 
 # Govio Meta 知识图谱维护
@@ -12,6 +12,7 @@ description: 知识图谱维护命令组。当需要同步元数据、推荐数�
 | 子命令 | 用途 | 典型场景 |
 |--------|------|----------|
 | `govio-cli meta sync` | 完整/增量同步管线 | 读取元数据源 → 生成 CSV → 更新图数据 → 生成 assets |
+| `govio-cli meta sync <step>` | 分步同步子命令 | 按需导入各类数据，独立运行、幂等 |
 | `govio-cli meta recommend` | 数据标准推荐 | 为非标字段推荐匹配的数据标准 |
 | `govio-cli meta config` | 查看/修改配置 | 管理元数据源和输出配置 |
 
@@ -26,7 +27,7 @@ description: 知识图谱维护命令组。当需要同步元数据、推荐数�
 
 ## 使用模式
 
-### 模式 A: 交互模式
+### 模式 A: 完整管线（交互模式）
 
 启动交互式向导，显示配置后选择数据源：
 
@@ -41,7 +42,7 @@ govio-cli meta sync
 4. 选择 CSV 输出目录
 5. 选择执行模式：仅生成 CSV / 生成 CSV 并更新图库（增量 MERGE）/ 生成 CSV 并重建图库（删除后重新插入）
 
-### 模式 B: 命令行模式
+### 模式 B: 完整管线（命令行模式）
 
 ```bash
 # 从 DuckDB 读取
@@ -54,7 +55,39 @@ govio-cli meta sync --db /path/to/meta.duckdb --db-name sales --output ./output/
 govio-cli meta sync --dry-run --db /path/to/meta.duckdb --schemas dbo
 ```
 
-### 模式 C: 数据标准推荐
+### 模式 C: 分步同步（子命令）
+
+每个子命令独立运行，通过 output 目录的 CSV 文件作为共享状态，支持增量合并（幂等）。
+
+```bash
+# 步骤 1: 导入元数据（物理表、字段、HAS_COLUMN 边）
+govio-cli meta sync meta --source duckdb --db /path/to/meta.duckdb --schemas dm --output ./output/
+govio-cli meta sync meta --source tds --kundb "mysql://..." --output ./output/
+
+# 步骤 2: 导入应用清单（Application 节点 + USE 边）
+govio-cli meta sync app --app-list apps.xlsx --app-map app_map.json --output ./output/
+
+# 步骤 3: 导入数据标准（Standard 节点，仅 TDS）
+govio-cli meta sync std --kundb "mysql://..." --output ./output/
+
+# 步骤 4: 导入已有标准-字段关联（COMPLIES_WITH 边，仅 TDS）
+govio-cli meta sync compliance --kundb "mysql://..." --output ./output/
+
+# 步骤 5: 导入表关系（RELATES_TO 边）
+govio-cli meta sync rel --file relationships.json --output ./output/
+
+# 步骤 6: 导入指标维度定义（Metric, Dimension + 5 种边）
+govio-cli meta sync metric --file metrics.json --output ./output/
+
+# 步骤 7: 更新图数据库 + 生成 assets
+govio-cli meta sync graph --output ./output/ --mode update
+```
+
+**推荐执行顺序**：`meta` → `app` → `std` → `compliance` → `rel` → `metric` → `graph`
+
+但各步骤可以按需独立运行，只要依赖的 CSV 文件已存在于 output 目录中。
+
+### 模式 D: 数据标准推荐
 
 为不符合标准的字段推荐匹配的数据标准：
 
@@ -63,7 +96,7 @@ govio-cli meta recommend
 govio-cli meta recommend --output-dir ./output/
 ```
 
-### 模式 D: 配置管理
+### 模式 E: 配置管理
 
 查看或修改 meta 配置：
 
@@ -81,7 +114,7 @@ govio-cli meta config
 
 **数据流**：
 ```
-DuckDB/TDS → meta_export() in meta.py → CSV → FalkorDB / Ladybug MERGE / NetworkX GML rebuild → assets
+DuckDB/TDS → step functions in meta.py → CSV → FalkorDB / Ladybug MERGE / NetworkX GML rebuild → assets
 ```
 
 **数据源（交互模式可选）**：
@@ -103,6 +136,20 @@ DuckDB/TDS → meta_export() in meta.py → CSV → FalkorDB / Ladybug MERGE / N
 **节点类型**：`PhysicalTable`, `Col`, `Application`, `Standard`, `Metric`, `Dimension`
 
 **边类型**：`HAS_COLUMN`, `USE`, `COMPLIES_WITH`, `RELATES_TO`, `USES_TABLE`, `REFERS_COLUMN`, `DERIVED_FROM`, `DIMENSION_USED`, `SUPERSEDES`
+
+### sync 子命令
+
+| 子命令 | 功能 | 输入 | 输出 CSV |
+|--------|------|------|----------|
+| `sync meta` | 导入 TDS/DuckDB 元数据 | --source, --db, --schemas, --kundb | PhysicalTable.csv, Col.csv, HAS_COLUMN.csv |
+| `sync app` | 导入应用清单 | --app-list, --app-map | Application.csv, USE.csv |
+| `sync std` | 导入数据标准 | --kundb | Standard.csv |
+| `sync compliance` | 导出已有标准-字段关联 | --kundb | COMPLIES_WITH.csv |
+| `sync rel` | 导入表关系 | --file (JSON) | RELATES_TO.csv |
+| `sync metric` | 导入指标维度定义 | --file (JSON) | Metric.csv, Dimension.csv + 5 边 CSV |
+| `sync graph` | 更新图数据库 + assets | --output, --mode | (无新 CSV，更新图库) |
+
+每个子命令都支持 `--output` 指定 CSV 输出目录。不指定时默认 `./output`。
 
 ### recommend - 数据标准推荐
 
