@@ -1,6 +1,6 @@
 [project]
 name = "govio"
-version = "0.5.1"
+version = "0.5.2"
 description = "Add your description here"
 readme = "README.md"
 license = "MIT"
