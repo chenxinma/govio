@@ -19,11 +19,16 @@
 
 ## 安装
 
+> 📖 详细的安装引导、示例数据导入和 Agent 集成步骤请参考 [安装指南](docs/install.md)。
+
 ```bash
 # 安装 uv (如果尚未安装)
 # https://docs.astral.sh/uv/getting-started/installation/
 
-# 构建 wheel 并一键安装 govio-cli（持久化工具）
+# 从 PyPI 安装
+uv tool install govio
+
+# 或从源码构建
 uv build
 ./start.sh
 ```
