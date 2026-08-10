@@ -94,12 +94,12 @@ class AssetsGenerator:
     def _generate_names_cypher(self, names_dir: Path) -> None:
         """为 Cypher 后端（FalkorDB / Ladybug）生成名称索引
 
-        按应用分组，每个应用一个文件
-        格式: {name}_{app_name_en}.md
+        有 Application 节点时按应用分组；无应用节点时按 database/schema 聚合。
         """
         if not isinstance(self.graph, (FalkorDBGraph, LadybugGraph)):
             return None
-        # 查询所有应用（Application 节点可能不存在，静默跳过）
+
+        # 查询所有应用（Application 节点可能不存在）
         try:
             apps_query = """
             MATCH (app:Application)
@@ -108,9 +108,19 @@ class AssetsGenerator:
             """
             apps = self.graph.query(apps_query)
         except Exception:
-            return
+            apps = []
 
-        # 按应用逐次处理
+        if apps:
+            self._generate_names_by_app(names_dir, apps)
+        else:
+            # DuckDB 等纯元数据导入场景：没有 Application，按 schema 聚合
+            self._generate_names_by_schema(names_dir)
+
+    def _generate_names_by_app(self, names_dir: Path, apps: list) -> None:
+        """按应用分组生成名称索引
+
+        格式: {name}_{app_name_en}.md
+        """
         for app_row in apps:
             app_name_en, name = app_row
 
@@ -118,44 +128,102 @@ class AssetsGenerator:
             # 注意：变量名不能用 table，TABLE 是 Ladybug 的保留字，会触发解析错误。
             tables_query = """
             MATCH (app:Application {app_name_en: $app_name_en})-[:USE]->(t:PhysicalTable)
-            RETURN t.full_table_name, t.name AS table_name
+            RETURN t.full_table_name AS full_table_name, t.name AS table_name
             ORDER BY t.full_table_name
             """
             tables = self.graph.query(tables_query, {"app_name_en": app_name_en})
 
-            md_content = []
-
-            # 按物理表逐次处理
-            for table_row in tables:
-                full_table_name, table_name = table_row
-
-                if not table_name or table_name == "None":
-                    table_name = ""
-
-                md_content.append(f"# {full_table_name} {table_name}")
-
-                # 查询该物理表的所有字段
-                cols_query = """
-                MATCH (t:PhysicalTable {full_table_name: $full_table_name})-[:HAS_COLUMN]->(col:Col)
-                RETURN col.column_name, col.name AS col_name
-                ORDER BY col.order_no
-                """
-                cols = self.graph.query(
-                    cols_query, {"full_table_name": full_table_name}
-                )
-
-                for col_row in cols:
-                    column_name, col_name = col_row
-                    if not col_name or col_name == "None":
-                        col_name = ""
-                    md_content.append(f"- {column_name} {col_name}")
-
-                md_content.append("")  # 空行分隔
+            md_content = self._build_table_section(tables)
 
             # 写入文件
-            file_path = names_dir / f"{name}_{app_name_en}.md"
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(md_content))
+            if md_content:
+                file_path = names_dir / f"{name}_{app_name_en}.md"
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(md_content))
+
+    def _generate_names_by_schema(self, names_dir: Path) -> None:
+        """无 Application 节点时，按 database/schema 聚合生成名称索引
+
+        格式: {database_name}_{schema}_names.md（空值用 default 兜底）
+        """
+        try:
+            schemas_query = """
+            MATCH (t:PhysicalTable)
+            RETURN DISTINCT t.database_name AS database_name, t.schema AS schema_name
+            ORDER BY t.database_name, t.schema
+            """
+            schemas = self.graph.query(schemas_query)
+        except Exception:
+            return
+
+        for schema_row in schemas:
+            database_name, schema_name = schema_row
+            database_name = database_name or ""
+            schema_name = schema_name or ""
+
+            tables_query = """
+            MATCH (t:PhysicalTable {
+                database_name: $database_name,
+                schema: $schema_name
+            })
+            RETURN t.full_table_name AS full_table_name, t.name AS table_name
+            ORDER BY t.full_table_name
+            """
+            tables = self.graph.query(
+                tables_query,
+                {
+                    "database_name": database_name,
+                    "schema_name": schema_name,
+                },
+            )
+
+            md_content = self._build_table_section(tables)
+
+            if md_content:
+                safe_db = database_name or "default"
+                safe_schema = schema_name or "default"
+                file_path = names_dir / f"{safe_db}_{safe_schema}_names.md"
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(md_content))
+
+    def _build_table_section(self, tables: list) -> list[str]:
+        """根据 PhysicalTable 列表构建 markdown 段落（表名 + 字段列表）
+
+        Args:
+            tables: 物理表查询结果，每项为 (full_table_name, table_name)
+
+        Returns:
+            markdown 行列表
+        """
+        md_content: list[str] = []
+
+        for table_row in tables:
+            full_table_name, table_name = table_row
+
+            if not table_name or table_name == "None":
+                table_name = ""
+
+            md_content.append(f"# {full_table_name} {table_name}")
+
+            # 查询该物理表的所有字段
+            cols_query = """
+            MATCH (t:PhysicalTable {full_table_name: $full_table_name})-[:HAS_COLUMN]->(col:Col)
+            RETURN col.column_name AS column_name, col.name AS col_name
+            ORDER BY col.order_no
+            """
+            cols = self.graph.query(
+                cols_query, {"full_table_name": full_table_name}
+            )
+
+            for col_row in cols:
+                column_name, col_name = col_row
+                if not col_name or col_name == "None":
+                    col_name = ""
+                md_content.append(f"- {column_name} {col_name}")
+
+            md_content.append("")  # 空行分隔
+
+        return md_content
 
     def generate_metric_index(self) -> None:
         """生成指标索引文件 metrics_index.md

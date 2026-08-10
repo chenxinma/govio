@@ -120,6 +120,38 @@ def test_assets_generator_falkordb_names():
         assert app_file.exists()
 
 
+def test_assets_generator_falkordb_names_without_app():
+    """无 Application 节点时，按 database/schema 聚合生成名称索引。"""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_dir = Path(tmpdir) / "assets"
+        output_dir.mkdir()
+
+        mock_graph = MagicMock(spec=FalkorDBGraph)
+        mock_graph.schema = "## FalkorDB schema:\n节点：[]\n关联: []\n"
+
+        mock_graph.query = MagicMock()
+        mock_graph.query.side_effect = [
+            [],  # 无 Application 节点
+            [["", "dbo"]],  # database_name / schema 列表
+            [["dbo.T1", "T1"]],  # 表列表
+            [["id", "ID"]],  # 字段列表
+        ]
+
+        generator = AssetsGenerator(mock_graph, output_dir)
+        generator.generate_all()
+
+        assert (output_dir / "schema.md").exists()
+        names_dir = output_dir / "names"
+        assert names_dir.exists()
+
+        fallback_file = names_dir / "default_dbo_names.md"
+        assert fallback_file.exists()
+
+        content = fallback_file.read_text(encoding="utf-8")
+        assert "# dbo.T1 T1" in content
+        assert "- id ID" in content
+
+
 def test_assets_generator_ladybug_names():
     """Ladybug 真实 Cypher 路径：generate_names 不应触发保留字解析错误。
 
