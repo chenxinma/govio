@@ -37,19 +37,21 @@ def assign_node_ids(df: pd.DataFrame, node_type: str, key_col: str) -> None:
     冲突可能来自重复业务键，也可能来自不同业务键的 SHA256[:8] 截断碰撞
     （32 位空间，万级节点下概率可忽略但非零）。错误信息区分两种情况。
     """
+    # 缺失值检测：NaN/None/NaT 或空字符串。
+    # ponytail: pandas 3.0 起 astype(str) 不再把 NaN 转成 "nan"，
+    # 必须用 isna() 直接判断；同时移除对字面量 "nan"/"None" 的匹配，
+    # 避免误伤名为 None/nan 的合法业务键。
+    missing = df[key_col].isna() | df[key_col].astype(str).str.strip().eq("")
+    if missing.any():
+        raise ValueError(
+            f"{node_type} 节点的 {key_col} 列存在缺失值（NaN/None/空），无法生成 ID"
+        )
     keys = df[key_col].astype(str).tolist()
-    for k in keys:
-        if k in ("nan", "None", "<NA>", ""):
-            raise ValueError(
-                f"{node_type} 节点的 {key_col} 列存在缺失值（NaN/None/空），无法生成 ID"
-            )
     ids = [make_id(node_type, k) for k in keys]
     if len(set(ids)) != len(ids):
         dup_keys = [k for k, c in Counter(keys).items() if c > 1]
         if dup_keys:
-            raise ValueError(
-                f"{node_type} 节点业务键重复: {dup_keys}"
-            )
+            raise ValueError(f"{node_type} 节点业务键重复: {dup_keys}")
         # 重复 ID 但无重复键 → SHA256 截断碰撞
         id_counts = Counter(ids)
         colliding = [nid for nid, c in id_counts.items() if c > 1]

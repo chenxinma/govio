@@ -10,6 +10,7 @@ from govio.metadata.node_id import (
 def test_make_id_format():
     """ID = 2 字符前缀 + 8 hex，共 10 位。"""
     import re
+
     node_id = make_id("PhysicalTable", "dm.orders")
     assert len(node_id) == 10
     assert node_id.startswith("PT")
@@ -70,6 +71,27 @@ def test_assign_node_ids_raises_on_nan_key():
     df = pd.DataFrame({"full_table_name": ["dm.t1", None]})
     with pytest.raises(ValueError, match="缺失值"):
         assign_node_ids(df, "PhysicalTable", "full_table_name")
+
+
+def test_assign_node_ids_raises_on_float_nan():
+    """pandas 3.0 默认 str dtype 下 NaN 不再 stringify，须靠 isna() 捕获。"""
+    df = pd.DataFrame({"full_table_name": ["dm.t1", float("nan")]})
+    with pytest.raises(ValueError, match="缺失值"):
+        assign_node_ids(df, "PhysicalTable", "full_table_name")
+
+
+def test_assign_node_ids_raises_on_empty_string():
+    df = pd.DataFrame({"full_table_name": ["dm.t1", ""]})
+    with pytest.raises(ValueError, match="缺失值"):
+        assign_node_ids(df, "PhysicalTable", "full_table_name")
+
+
+def test_assign_node_ids_accepts_literal_none_key():
+    """字面量 "None" 是合法业务键，不应被误判为缺失值。"""
+    df = pd.DataFrame({"full_table_name": ["dm.t1", "None"]})
+    assign_node_ids(df, "PhysicalTable", "full_table_name")
+    assert "node_id" in df.columns
+    assert len(df["node_id"].iloc[1]) == 10
 
 
 def test_write_node_csv_header_and_id_column(tmp_path):
