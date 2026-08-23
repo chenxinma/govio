@@ -17,6 +17,7 @@ description: 数据探查与比对命令组。当需要查看数据源、加载�
 | `govio-cli observe load` | 加载数据 | 从数据库抽取或二次加工 |
 | `govio-cli observe release` | 释放资源 | 清理不需要的 DataFrame |
 | `govio-cli observe explore` | 探索关系 | 发现表之间的关联 |
+| `govio-cli observe visualize-relations` | 生成关系图谱 | 将 explore 输出的关系渲染为 nodes/edges |
 | `govio-cli observe compare` | 比对数据 | 验证数据一致性 |
 | `govio-cli observe chart` | 生成图表 | 可视化数据趋势 |
 
@@ -235,10 +236,12 @@ govio-cli observe explore
 govio-cli observe explore --dataframes customers orders > relations.json
 
 # 生成图谱数据
-govio-cli observe visualize-relations --relations "$(cat relations.json)"
+govio-cli observe visualize-relations --relations-file relations.json
 ```
 
 返回结果包含 `nodes` 和 `edges`，可用于关系图谱渲染。
+
+输入文件格式参见 `assets/visualize-relations-schema.json`，通常直接使用 `explore` 子命令的输出即可（也支持仅传入 `relations` 数组）。
 
 ---
 

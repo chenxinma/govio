@@ -261,11 +261,14 @@ govio-cli observe explore
 
 ### Step 3: 生成关系图谱
 
+先将 `explore` 结果保存为 JSON 文件，再通过文件路径传入：
+
 ```bash
-govio-cli observe visualize-relations --relations '<explore_result_json>'
+govio-cli observe explore --dataframes df1 df2 df3 > relations.json
+govio-cli observe visualize-relations --relations-file relations.json
 ```
 
-产出 nodes 和 edges 数据，用于渲染关系图谱。
+产出 nodes 和 edges 数据，用于渲染关系图谱。输入文件格式参见 `govio-observe` Skill 的 `assets/visualize-relations-schema.json`。
 
 ### Step 4: 人工审查筛选
 

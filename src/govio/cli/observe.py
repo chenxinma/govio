@@ -143,10 +143,14 @@ def cmd_explore(config: dict, dataframes: list[str] | None = None) -> None:
     print(json.dumps({"success": True, **result}, ensure_ascii=False, indent=2))
 
 
-def cmd_visualize(config: dict, relations_json: str) -> None:
+def cmd_visualize(config: dict, relations_file: str) -> None:
     """可视化关系"""
     try:
-        relations = json.loads(relations_json)
+        with open(relations_file, "r", encoding="utf-8") as f:
+            relations = json.load(f)
+    except FileNotFoundError:
+        print(json.dumps({"success": False, "error": f"关系文件不存在: {relations_file}"}))
+        return
     except json.JSONDecodeError as e:
         print(json.dumps({"success": False, "error": f"JSON 解析失败: {e}"}))
         return
@@ -286,9 +290,13 @@ def observe():
     p = sub.add_parser("explore", help="探查 DataFrame 之间的关系")
     p.add_argument("--dataframes", nargs="*", help="DataFrame 名称列表")
 
-    # visualize-relations --relations <json>
+    # visualize-relations --relations-file <path>
     p = sub.add_parser("visualize-relations", help="生成关系图谱")
-    p.add_argument("--relations", required=True, help="关系 JSON")
+    p.add_argument(
+        "--relations-file",
+        required=True,
+        help="关系 JSON 文件路径（通常为 explore 命令的输出）",
+    )
 
     # chart --name --type --x --y -o
     p = sub.add_parser("chart", help="从 DataFrame 生成图表 PNG")
@@ -343,7 +351,7 @@ def observe():
         case "explore":
             cmd_explore(config, args.dataframes if args.dataframes else None)
         case "visualize-relations":
-            cmd_visualize(config, args.relations)
+            cmd_visualize(config, args.relations_file)
         case "chart":
             cmd_chart(config, args.name, args.type, args.x, args.y, args.output)
         case "info":
