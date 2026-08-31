@@ -176,6 +176,20 @@ def _validate_inputs(self):
 - Avoid inline comments that restate the obvious
 - Use module-level docstrings to explain purpose
 
+### File Encoding
+
+Always specify `encoding="utf-8"` for file reads and writes (Windows locale defaults to cp936, which corrupts Chinese text and breaks cross-platform tests):
+
+```python
+# Preferred
+path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+path.read_text(encoding="utf-8")
+
+# Avoid (uses locale default encoding)
+path.write_text(text)
+path.read_text()
+```
+
 ### File Organization
 
 ```

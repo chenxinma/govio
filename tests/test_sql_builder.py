@@ -142,12 +142,13 @@ from pathlib import Path
 
 def _run_cli(*args, stdin_text=None):
     """运行 govio-cli sql build，返回 (returncode, stdout, stderr)"""
-    cmd = [sys.executable, "-m", "govio.cli"] + list(args)
+    cmd = [sys.executable, "-X", "utf8", "-m", "govio.cli"] + list(args)
     proc = subprocess.run(
         cmd,
         input=stdin_text,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     return proc.returncode, proc.stdout, proc.stderr
 

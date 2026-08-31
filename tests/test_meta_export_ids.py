@@ -197,7 +197,7 @@ def test_metric_edges_use_string_ids(tmp_path):
         ],
     }
     metric_file = tmp_path / "metric.json"
-    metric_file.write_text(json.dumps(metric_data, ensure_ascii=False))
+    metric_file.write_text(json.dumps(metric_data, ensure_ascii=False), encoding="utf-8")
 
     config = {
         "metadata": {
