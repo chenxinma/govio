@@ -1,3 +1,5 @@
+
+
 # Govio
 
 ✅ 核心构词：Gov（Governance，数据治理核心）+ io（Data IO，数据交互 / 数据流转，数据治理的核心载体）
@@ -532,6 +534,7 @@ echo '{"metrics": [{"code": "bill_income_amt", "name": "当月账单收入", "ty
 ```python
 from govio.metadata.recommender import create_recommender
 from govio.metadata.database import TDSLoader
+from govio.metadata.standard import StandardLoader
 
 # 加载已贯标列
 std_loader = StandardLoader(db="mysql+pymysql://user:pass@host/db", workspace_uuid="your-uuid")
