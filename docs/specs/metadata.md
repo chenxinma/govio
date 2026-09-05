@@ -1,17 +1,17 @@
 # govio.metadata -- Metadata Loading and Recommendation
 
-Pipeline for extracting metadata from MySQL databases, loading app/standard info, defining relationships and metrics, and recommending data standards.
+Pipeline for extracting metadata from databases, loading app/standard info, defining relationships and metrics, recommending data standards, and generating node IDs.
 
-## DatabaseLoader
+## TDSLoader
 
-`database.py`
+`database.py` (formerly `DatabaseLoader`)
 
-Extracts table and column metadata from MySQL via SQLAlchemy.
+Extracts table and column metadata from TDS (metadata database) via SQLAlchemy.
 
 ### Constructor
 
 ```python
-DatabaseLoader(
+TDSLoader(
     db: str,                          # SQLAlchemy connection URL
     workspace_uuid: str,              # Tenant workspace identifier
     schema_limits: list[str] | None,  # Optional schema name filter
@@ -36,6 +36,42 @@ load_columns() -> pd.DataFrame   # SQL query with data type conversion
 ```
 
 Oracle type conversion (`_convert_data_type`): NVARCHAR2/VARCHAR2 -> VARCHAR, NUMBER -> DECIMAL/BIGINT/INTEGER, fallback to lowercase.
+
+---
+
+## DuckDBLoader
+
+`duckdb_loader.py`
+
+Loads metadata from a local DuckDB file using the duckdb Python library directly (no SQLAlchemy). Produces DataFrames with the same column schema as TDSLoader.
+
+### Constructor
+
+```python
+DuckDBLoader(db_path: str, schemas: list[str])
+```
+
+### Properties
+
+| Property | Description |
+|---|---|
+| `PhysicalTable` | Same schema as TDSLoader, `data_entity_type = "DUCKDB_TABLE"` |
+| `Col` | Same schema as TDSLoader, `data_entity_type = "DUCKDB_COLUMN"` |
+
+### Methods
+
+```python
+load_tables() -> pd.DataFrame    # Queries duckdb_tables() system table
+load_columns() -> pd.DataFrame   # Queries information_schema.columns + duckdb_columns()
+```
+
+---
+
+## TrinoLoader
+
+`trino_loader.py`
+
+Loads metadata from a Trino database connector.
 
 ---
 
@@ -143,6 +179,42 @@ load_relationships(json_path, df_tables, df_columns) -> pd.DataFrame
 
 ---
 
+## Node ID Generator
+
+`node_id.py`
+
+Generates deterministic 10-character string IDs for graph nodes.
+
+### ID Format
+
+```
+<2-char type prefix><SHA256(business_key)[:8] uppercase hex>
+```
+
+| Node Type | Prefix | Business Key Column |
+|---|---|---|
+| PhysicalTable | `PT` | `full_table_name` |
+| Col | `CO` | `column` |
+| Application | `AP` | `app_id` |
+| Standard | `ST` | `standard_id` |
+| Metric | `ME` | `code` |
+| Dimension | `DI` | `code` |
+
+### Functions
+
+```python
+make_id(node_type: str, business_key: str) -> str
+# Returns 10-char string ID, e.g., "PTA1B2C3D4"
+
+assign_node_ids(df: pd.DataFrame, node_type: str, key_col: str) -> None
+# In-place adds "node_id" column to df. Raises ValueError on missing keys or ID collisions.
+
+write_node_csv(df: pd.DataFrame, path: Path, node_type: str) -> None
+# Writes CSV with :ID(NodeType) as first column header.
+```
+
+---
+
 ## StandardRecommender
 
 `recommender.py`
@@ -177,18 +249,9 @@ Features: table name, column name, column comment, data type (encoded), numeric 
 
 ```python
 find_k_neighbors(column: pd.Series, exclude_columns: set[str] | None) -> list[tuple[int, float]]
-# K most similar compliant columns. Returns [(index, similarity)] descending.
-
 recommend(column: pd.Series) -> list[dict[str, Any]]
-# Returns [{'standard_id', 'standard_name', 'score', 'rank'}, ...]
-
 batch_recommend(columns: pd.DataFrame, exclude_compliant: bool = True) -> pd.DataFrame
-# Skips PK columns (order_no==1). Returns: column, column_name, full_table_name, name,
-# table_name, dtype, data_type, recommended_standard_id, recommended_standard_name,
-# recommendation_score, top_recommendations (JSON)
-
 evaluate(test_columns: pd.DataFrame, test_standards: dict[str, str]) -> dict[str, float]
-# Returns {'accuracy', 'coverage', 'top_n_accuracy', 'total_samples'}
 ```
 
 ### Factory Function
@@ -258,11 +321,13 @@ JSON Schema (draft-07) for metric definitions:
 Converts CSV node/edge files to NetworkX GML format.
 
 ```python
-load_nodes(csv_dir: str) -> list[dict]         # Read node CSVs, parse :ID(NodeType) headers
-load_edges(csv_dir: str) -> pd.DataFrame       # Read edge CSVs, parse :START_ID/:END_ID headers
-build_graph(csv_dir: str, output_gml: str)     # Build nx.DiGraph, write GML
-gml_generate() -> None                         # CLI: --csv, -o/--output
+load_nodes(csv_dir: str) -> list[dict]
+load_edges(csv_dir: str) -> pd.DataFrame
+build_graph(csv_dir: str, output_gml: str, incremental: bool = False)
+gml_generate() -> None  # CLI: --csv, -o/--output
 ```
+
+When `incremental=True`, merges new CSV data into existing GML graph instead of rebuilding from scratch.
 
 Supported node CSVs: PhysicalTable, Col, Application, Standard, Metric, Dimension
 Supported edge CSVs: HAS_COLUMN, USE, COMPLIES_WITH, RELATES_TO, USES_TABLE, REFERS_COLUMN, DERIVED_FROM, DIMENSION_USED, SUPERSEDES
@@ -275,13 +340,9 @@ CLI orchestration functions.
 
 ```python
 reorder_index(dfs: list[pd.DataFrame], start: int = 1) -> None
-# Assigns sequential integer index to DataFrames for :ID(...) columns
-
 make_csv(output, db, workspace_uuid, app_list_file, df_app_db_map,
          relationship_file=None, metric_file=None) -> None
-# Main pipeline: load metadata -> CSV files (nodes + edges)
-
 data_standard_recommend(output, db, workspace_uuid, df_app_db_map) -> None
-# Batch recommendation -> COMPLIES_WITH.csv
-# Custom weights: table=0.25, name=0.35, comment=0.25, type=0.05, numeric=0.10
 ```
+
+`data_standard_recommend` uses custom weights: `table=0.25, name=0.35, comment=0.25, type=0.05, numeric=0.10`.

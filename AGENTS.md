@@ -4,11 +4,31 @@ Guidelines for AI coding agents working in this repository.
 
 ## Project Overview
 
-Govio is a data governance knowledge graph library built on NetworkX. It provides metadata management, data standard recommendation, and graph database integration capabilities.
+Govio (Governance + IO) is a data governance knowledge graph platform. It extracts metadata from relational databases, builds graph structures, and provides data standard recommendation via collaborative filtering.
 
 - **Language**: Python 3.13+
 - **Package Manager**: uv
 - **Build Backend**: hatchling
+- **Version**: see `pyproject.toml`
+
+## Documentation Sync Rule
+
+**修改 skills 或功能实现时，必须同步更新 `docs/specs/` 下对应的设计文档。**
+
+具体对应关系：
+
+| 变更内容 | 需同步更新的 spec 文档 |
+|---|---|
+| CLI 命令、子命令、参数 | `docs/specs/cli.md` |
+| 配置格式、配置迁移、加密 | `docs/specs/config.md` |
+| 图后端（NetworkX/FalkorDB/Ladybug）、CSV loader | `docs/specs/graph.md` |
+| 元数据加载器（TDS/DuckDB/Trino）、推荐器、指标、node_id | `docs/specs/metadata.md` |
+| GraphFactory、AssetsGenerator、sql_builder | `docs/specs/core.md` |
+| ObserveStore、DatabaseManager、comparator、explorer、chart | `docs/specs/observe-data.md` |
+| 节点/边类型、CSV 格式、ID 格式 | `docs/specs/data-model.md` |
+| 依赖变更、模块增删、版本变更 | `docs/specs/README.md` |
+
+更新 spec 时保持与实际代码实现一致，不要留下过时的类名、方法签名或功能描述。
 
 ## Build/Lint/Test Commands
 
@@ -92,7 +112,7 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from .application import AppInfoLoader
-from .database import DatabaseLoader
+from .database import TDSLoader
 ```
 
 ### Type Hints
@@ -145,7 +165,7 @@ def validate_relationship(self, rel: dict[str, Any], index: int) -> bool:
 - Use factory functions for complex object creation
 
 ```python
-class DatabaseLoader:
+class TDSLoader:
     def __init__(self, db: str, workspace_uuid: str, schema_limits: list[str] | None = None) -> None:
         self.engine = create_engine(db)
         self.workspace_uuid = workspace_uuid
@@ -194,16 +214,63 @@ path.read_text()
 
 ```
 src/govio/
-├── __init__.py          # Public exports only
-├── graph/               # Graph database implementations
+├── __init__.py              # Public exports (FalkorDBGraph, LadybugGraph, NetworkXGraph, main, build_metric_sql)
+├── crypto.py                # Credential encryption/decryption
+├── cli/                     # CLI entry points
+│   ├── __init__.py          # main() entry
+│   ├── __main__.py
+│   ├── config.py            # ConfigManager, MetaConfigManager
+│   ├── main.py              # argparse dispatch
+│   ├── meta.py              # meta command group (sync/recommend/config)
+│   ├── observe.py           # observe command group
+│   ├── onboard.py           # interactive setup wizard
+│   ├── query.py             # knowledge graph query
+│   ├── sql.py               # sql build command
+│   └── std_recommend.py     # data standard recommendation
+├── core/                    # Shared core logic
 │   ├── __init__.py
+│   ├── assets_generator.py  # schema.md, names, metrics_index.md generation
+│   ├── graph_factory.py     # GraphFactory (networkx/falkordb/ladybug)
+│   └── sql_builder.py       # Metric SQL assembly (CTE, atomic/derived)
+├── graph/                   # Graph database backends
+│   ├── __init__.py          # exports NetworkXGraph, FalkorDBGraph, LadybugGraph
 │   ├── networkx_graph.py
-│   └── falkordb_graph.py
-└── metadata/            # Metadata loading and processing
+│   ├── falkordb_graph.py
+│   ├── falkordb_loader.py   # CSV bulk import/upsert to FalkorDB
+│   ├── ladybug_graph.py
+│   └── ladybug_loader.py    # CSV bulk import/upsert to Ladybug
+├── metadata/                # Metadata loading and processing
+│   ├── __init__.py
+│   ├── application.py       # AppInfoLoader
+│   ├── database.py          # TDSLoader (base: MetadataLoader)
+│   ├── duckdb_loader.py     # DuckDBLoader
+│   ├── gen_networkx.py      # CSV → GML conversion (incremental support)
+│   ├── metric.py            # MetricLoader
+│   ├── node_id.py           # Deterministic 10-char string ID generation
+│   ├── recommender.py       # StandardRecommender (k-NN)
+│   ├── relationship.py      # RelationshipLoader
+│   ├── standard.py          # StandardLoader
+│   ├── trino_loader.py      # TrinoLoader
+│   └── utility.py           # make_csv, data_standard_recommend
+└── observe_data/            # Data observation module
     ├── __init__.py
-    ├── database.py
-    ├── recommender.py
-    └── relationship.py
+    ├── config.py            # DataSourceConfig, load_config
+    └── core/
+        ├── __init__.py
+        ├── chart.py          # render_chart (bar/line PNG)
+        ├── comparator.py     # TableComparator (datacompy)
+        ├── database.py       # DatabaseManager (multi-datasource)
+        ├── dataframe_store.py
+        ├── explorer.py       # RelationExplorer (FK inference, similarity)
+        ├── observe_store.py  # ObserveStore (parquet-backed)
+        └── visualizer.py     # RelationVisualizer (networkx/JSON)
+    └── tools/
+        ├── __init__.py
+        ├── list_dataframes.py
+        ├── list_datasources.py
+        ├── load_dataframe.py    # load_dataframe, load_from_memory
+        ├── release_dataframe.py
+        └── visualize_relations.py
 ```
 
 ### Constants and Configuration
@@ -235,10 +302,11 @@ MIN_SIMILARITY = 0.7
 
 ### Entry Points
 
-The package defines CLI entry points in `pyproject.toml`:
+The package defines a CLI entry point in `pyproject.toml`:
 
-- `metadata` - Generate metadata CSV files
-- `gml_generate` - Generate GML graph files
+- `govio-cli` -> `govio.cli:main`
+
+Main subcommands: `onboard`, `backend`, `query`, `meta`, `observe`, `sql`
 
 ### Environment Variables
 
@@ -251,6 +319,20 @@ import os
 load_dotenv()
 db = os.getenv("KUNDB_URL", "")
 ```
+
+### Graph Backends
+
+Govio supports three graph backends:
+
+| Backend | Config Key | Query Language | File Format |
+|---|---|---|---|
+| NetworkX | `graph.networkx` | Python (exec) | `.gml` |
+| FalkorDB | `graph.falkordb` | Cypher | Redis-based |
+| Ladybug | `graph.ladybug` | Cypher | `.lbdb` (embedded) |
+
+### Node ID Format
+
+Node IDs are deterministic 10-char strings: `<2-char prefix><SHA256(business_key)[:8]>`. See `src/govio/metadata/node_id.py`.
 
 ### Testing
 

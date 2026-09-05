@@ -4,69 +4,120 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Govio is a Python data governance knowledge graph platform. It extracts metadata from MySQL databases, builds graph structures (via FalkorDB or NetworkX), and provides data standard recommendation using collaborative filtering (k-NN). The name combines "Governance" + "IO" (data interaction/flow).
+Govio (Governance + IO) is a data governance knowledge graph platform. It extracts metadata from relational databases, builds graph structures (via FalkorDB, Ladybug, or NetworkX), and provides data standard recommendation using collaborative filtering (k-NN).
 
 ## Commands
 
 ```bash
 # Install dependencies (uses uv package manager, Tsinghua mirror)
 uv sync
-uv sync --group dev        # includes falkordb-bulk-loader
+uv sync --group dev
 
-# Run tests (pytest-style tests in tests/, but using unittest runner in README)
+# Run tests
 uv run pytest tests/
+uv run pytest tests/ -v
+uv run pytest tests/ --cov=src/govio
 
-# CLI entry points (defined in pyproject.toml [project.scripts])
-metadata --kundb "mysql+pymysql://user:pass@host/db" --app-list "path.xlsx" --app-map "path.json" -o ./output
-metadata --kundb "..." --app-list "..." --app-map "..." -m recommend -o ./output
-metadata --kundb "..." --app-list "..." --app-map "..." --relationship rel.json -o ./output
-gml_generate --csv ./output -o ./output
+# Lint/format
+uv run ruff check src/ tests/
+uv run ruff format src/ tests/
+
+# CLI
+govio-cli onboard           # Interactive setup wizard
+govio-cli backend            # Show current graph backend
+govio-cli query -c "..."     # Knowledge graph query
+govio-cli meta sync          # Full metadata sync pipeline
+govio-cli meta sync meta     # Step: import metadata
+govio-cli meta recommend     # Data standard recommendation
+govio-cli meta config        # Manage meta config
+govio-cli observe info       # Show datasources + DataFrames
+govio-cli observe load ...   # Load DataFrame from DB or memory
+govio-cli observe compare ... # Compare two DataFrames
+govio-cli observe chart ...   # Generate PNG chart
+govio-cli sql build -f query.json  # Assemble metric SQL
 ```
+
+## Documentation Sync Rule
+
+**修改 skills 或功能实现时，必须同步更新 `docs/specs/` 下对应的设计文档。**
+
+| 变更内容 | 需同步更新的 spec 文档 |
+|---|---|
+| CLI 命令、子命令、参数 | `docs/specs/cli.md` |
+| 配置格式、配置迁移、加密 | `docs/specs/config.md` |
+| 图后端、CSV loader | `docs/specs/graph.md` |
+| 元数据加载器、推荐器、指标、node_id | `docs/specs/metadata.md` |
+| GraphFactory、AssetsGenerator、sql_builder | `docs/specs/core.md` |
+| ObserveStore、DatabaseManager、comparator、chart | `docs/specs/observe-data.md` |
+| 节点/边类型、CSV 格式、ID 格式 | `docs/specs/data-model.md` |
+| 依赖变更、模块增删、版本变更 | `docs/specs/README.md` |
 
 ## Architecture
 
 ### Source layout: `src/govio/`
 
-**`__init__.py`** — Public API surface: exports `run`, `gml_generate`, `FalkorDBGraph`, `NetworkXGraph`.
+**`cli/`** — CLI entry points (`govio-cli`):
+- `main.py` — argparse dispatch to subcommands
+- `config.py` — `ConfigManager` (main config) + `MetaConfigManager` (meta config), auto-migration
+- `meta.py` — `meta` command group: sync (full pipeline + step functions), recommend, config
+- `observe.py` — `observe` command group: info, load, release, compare, explore, chart
+- `query.py` — Knowledge graph query (dispatches to networkx/falkordb/ladybug)
+- `sql.py` — `sql build` command for metric SQL assembly
+- `onboard.py` — Interactive setup wizard
+- `std_recommend.py` — Data standard recommendation entry
 
-**`graph/`** — Graph database abstractions:
-- `networkx_graph.py` — In-memory graph via NetworkX GML files. Provides `schema` property (node/edge type inspection) and direct `G` access to the underlying `nx.DiGraph`.
-- `falkordb_graph.py` — FalkorDB (Redis-based) graph client using Cypher queries.
+**`core/`** — Shared core logic:
+- `graph_factory.py` — `GraphFactory.create()`: creates NetworkXGraph/FalkorDBGraph/LadybugGraph from config
+- `assets_generator.py` — `AssetsGenerator`: generates schema.md, names index, metrics_index.md
+- `sql_builder.py` — `build_metric_sql()`: assembles metric query SQL (CTE, atomic/derived)
 
-**`metadata/`** — Data loading and processing pipeline:
-- `database.py` — `DatabaseLoader`: extracts table/column metadata from MySQL via SQLAlchemy. Exposes `PhysicalTable` and `Col` as DataFrames. Requires `workspace_uuid` and `schema_limits`.
-- `application.py` — `AppInfoLoader`: loads app metadata from Excel (openpyxl).
-- `standard.py` — `StandardLoader`: loads data standards and compliance info from governance DB.
-- `relationship.py` — `RelationshipLoader` / `load_relationships()`: validates table relationships from JSON (supports one_to_one, one_to_many, many_to_one, many_to_many). Returns edges DataFrame.
-- `recommender.py` — `create_recommender()`: k-NN collaborative filtering for recommending data standards to non-compliant columns. Uses configurable weights (table, name, comment, type, numeric).
-- `metric.py` — `MetricLoader` / `load_metrics()`: loads metric definitions from JSON (validated by `metric_schema.json`), produces Metric/Dimension node DataFrames and edge DataFrames (USES_TABLE, REFERS_COLUMN, DERIVED_FROM, DIMENSION_USED, SUPERSEDES). Validates source table references, derived_from references, and DAG property.
-- `gen_networkx.py` — `build_graph()`: converts CSV node/edge files to NetworkX GML format. Reads specific CSV naming conventions (`:ID(NodeType)` columns for nodes, `:START_ID`/`:END_ID` for edges).
-- `utility.py` — CLI entry point (`run()`), orchestrates the full pipeline: load metadata → generate CSVs → optionally produce GML. Also contains `data_standard_recommend()` for batch recommendation mode.
+**`graph/`** — Graph database backends:
+- `networkx_graph.py` — In-memory graph via NetworkX GML files
+- `falkordb_graph.py` — FalkorDB (Redis-based) graph client using Cypher
+- `falkordb_loader.py` — CSV bulk import/upsert to FalkorDB
+- `ladybug_graph.py` — Ladybug embedded graph database (.lbdb files), Cypher queries
+- `ladybug_loader.py` — CSV bulk import/upsert to Ladybug
 
-### Graph model
+**`metadata/`** — Metadata loading and processing:
+- `database.py` — `TDSLoader`: extracts table/column metadata from TDS via SQLAlchemy
+- `duckdb_loader.py` — `DuckDBLoader`: loads metadata from local DuckDB files
+- `trino_loader.py` — `TrinoLoader`: loads metadata from Trino
+- `application.py` — `AppInfoLoader`: loads app metadata from Excel
+- `standard.py` — `StandardLoader`: loads data standards and compliance info
+- `relationship.py` — `RelationshipLoader`: validates and loads table relationships from JSON
+- `recommender.py` — `StandardRecommender`: k-NN collaborative filtering for data standard recommendation
+- `metric.py` — `MetricLoader`: loads metric/dimension definitions from JSON
+- `node_id.py` — Deterministic 10-char string ID generation (SHA256-based)
+- `gen_networkx.py` — CSV → GML conversion with incremental merge support
+- `utility.py` — CLI orchestration: make_csv, data_standard_recommend
 
-Node types: `PhysicalTable`, `Col`, `Application`, `Standard`, `Metric`, `Dimension`
-Edge types: `HAS_COLUMN` (table→col), `USE` (app→table), `COMPLIES_WITH` (col→standard), `RELATES_TO` (table→table), `USES_TABLE` (metric→table), `REFERS_COLUMN` (metric→col), `DERIVED_FROM` (metric→metric), `DIMENSION_USED` (metric→dimension), `SUPERSEDES` (metric→metric)
+**`observe_data/`** — Data observation module:
+- `config.py` — DataSourceConfig, load_config
+- `core/observe_store.py` — ObserveStore (parquet-backed DataFrame persistence)
+- `core/database.py` — DatabaseManager (multi-datasource connection manager)
+- `core/comparator.py` — TableComparator (datacompy-based comparison)
+- `core/explorer.py` — RelationExplorer (FK inference, column similarity)
+- `core/chart.py` — render_chart (bar/line PNG with Chinese font support)
+- `core/visualizer.py` — RelationVisualizer (networkx/JSON output)
+- `tools/` — CLI-facing tool functions for each observe subcommand
 
-`Calculation` node type and `CALCULATED_BY`/`BASED_ON` edges are reserved for future shared calculation templates.
+### Graph backends
 
-CSV files use FalkorDB bulk-import header conventions (`:ID(Type)`, `:START_ID(Type)`, `:END_ID(Type)`). The GML generator parses these headers to reconstruct typed graphs.
+| Backend | Config Key | Query Language | Storage |
+|---|---|---|---|
+| NetworkX | `graph.networkx` | Python (exec) | `.gml` file |
+| FalkorDB | `graph.falkordb` | Cypher | Redis-based |
+| Ladybug | `graph.ladybug` | Cypher | `.lbdb` embedded file |
 
-### Data flow
+### Node ID format
 
-1. `metadata` CLI → DatabaseLoader + AppInfoLoader + StandardLoader → CSV files (node + edge)
-2. `metadata --relationship` appends RELATES_TO.csv
-3. `metadata` with `--metric` (via onboard) appends Metric.csv, Dimension.csv, and metric edge CSVs
-4. `metadata -m recommend` generates COMPLIES_WITH.csv via recommender
-4. `gml_generate` → CSV files → NetworkX GML graph
-5. `NetworkXGraph` loads GML for query/inspection
+Node IDs are deterministic 10-char strings: `<2-char prefix><SHA256(business_key)[:8]>`.
+Prefixes: PT (PhysicalTable), CO (Col), AP (Application), ST (Standard), ME (Metric), DI (Dimension).
 
 ### Key conventions
 
-- Python 3.13+, uses modern type hints (`X | None` syntax, not `Optional[X]`)
+- Python 3.13+, uses modern type hints (`X | None` syntax)
 - All metadata loaders return pandas DataFrames
 - Node identities use dotted format: `db.schema.table.column`
-- `workspace_uuid` is hardcoded in utility.py but parameterized in loader classes
-- Tests use pytest (despite README mentioning unittest) — run with `uv run pytest`
 - Chinese language is used in comments, print statements, and documentation
-- **Skill 同步约定**: 当 `govio-cli` 命令组(`observe`、`onboard`、`query` 等)做了调整或新增功能时,必须同步更新 `skills/` 目录下对应的 skill 文档(如 `skills/govio-observe/SKILL.md`),保持 CLI 与 skill 描述一致。提交时与代码改动放在同一个 commit 或紧随其后。
+- Always use `encoding="utf-8"` for file reads/writes (Windows cp936 compatibility)
