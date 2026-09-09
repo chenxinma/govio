@@ -16,19 +16,19 @@ EDA 的两个机制（维度聚合画像、覆盖漏斗）依赖业务语义输�
 
 | 维度列 | 展示名 | 码值/归并规则 | NULL 展示值 | 度量 |
 |--------|--------|--------------|------------|------|
-| doc_status | 合同状态 | 见下方 CASE | - | COUNT(DISTINCT doc_number) |
-| cb_name | 合同主体 | = '上海外服…' -> 外服本部，else 其他 | - | 同上 |
-| bu_name | 所属机构 | 无 | 空白 | 同上 |
+| order_status | 订单状态 | 见下方 CASE | - | COUNT(DISTINCT order_id) |
+| customer_tier | 客户等级 | = 'VIP' -> 重点客户，else 普通 | - | 同上 |
+| region | 所属区域 | 无 | 空白 | 同上 |
 ```
 
 维度表达式的四种形态（业务输入的落点）：
 
 | 形态 | 表达式模式 | 示例 |
 |------|----------|------|
-| 直接列 | `col` | `org_name` |
-| 码值解码 | `CASE col WHEN 'v' THEN '语义' … ELSE '其他' END` | doc_status '30'/'14' -> 待关闭 |
-| 归并分组 | `CASE WHEN col IN (…) THEN '组A' ELSE '其他' END` | 主体归并为本部/其他 |
-| NULL 展示 | `COALESCE(col, '展示值')` | bu_name 空白 |
+| 直接列 | `col` | `region` |
+| 码值解码 | `CASE col WHEN 'v' THEN '语义' … ELSE '其他' END` | order_status '30'/'14' -> 已完成/已取消 |
+| 归并分组 | `CASE WHEN col IN (…) THEN '组A' ELSE '其他' END` | 客户等级归并为重点/普通 |
+| NULL 展示 | `COALESCE(col, '展示值')` | region 空白 |
 
 ## 覆盖口径定义表（覆盖漏斗用）
 
@@ -37,10 +37,10 @@ EDA 的两个机制（维度聚合画像、覆盖漏斗）依赖业务语义输�
 
 | 项 | 值 |
 |----|-----|
-| 全集 | df_a，口径谓词: `delete_flag IS NULL AND comp 关联存在` |
-| 覆盖目标 | df_b（目标键列: doc_number） |
-| 关联键 | df_a.center_id = df_b.doc_number |
-| 归因分层（有序） | 1) 无 comp 关联 -> 无关联客户；2) else -> 未归集 |
+| 全集 | df_order，口径谓词: `is_deleted = 0 AND customer_id IS NOT NULL` |
+| 覆盖目标 | df_invoice（目标键列: order_id） |
+| 关联键 | df_order.order_id = df_invoice.order_id |
+| 归因分层（有序） | 1) 无客户关联 -> 无关联客户；2) else -> 未开票 |
 ```
 
 要点：

@@ -68,7 +68,7 @@ govio-cli observe visualize-relations --relations-file relations.json
 | 2 | 相似列 | customers.email | orders.customer_email | 85% | 同义 |
 | 3 | 外键 | orders.product_id | products.id | 90% | 确认 |
 | 4 | 相似列 | orders.status | orders.order_status | 75% | 同表不同列 |
-| 5 | 业务关联 | projects.bpext | customers.comp_no | - | 业务补充 |
+| 5 | 业务关联 | projects.customer_code | customers.cust_code | - | 业务补充 |
 ```
 
 **审查结果分类**：
@@ -80,9 +80,9 @@ govio-cli observe visualize-relations --relations-file relations.json
 
 自动发现覆盖不了所有关联，以下场景需要人工补充：
 
-1. **语义关联但命名不同**：如 `bpext` -> `comp_no`（业务编码对齐）
+1. **语义关联但命名不同**：如 `customer_code` -> `cust_code`（业务编码对齐）
 2. **多跳关联**：A->B->C 的间接关系
-3. **业务规则关联**：如"项目结算客户 ⊆ 商机客户"（非 FK 关系）
+n3. **业务规则关联**：如"订单客户 ⊆ 发票客户"（非 FK 关系）
 4. **跨库关联**：不同数据源中的同义字段
 
 当关联已由业务输入明确给出（键映射已知）时，可跳过本阶段的自动发现，直接进入 Phase 3 核查。

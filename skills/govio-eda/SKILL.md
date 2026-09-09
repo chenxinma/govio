@@ -16,8 +16,8 @@ description: EDA 探索性数据分析流程。当用户需要对数据集进行
 | 数据探查 | "帮我探查一下这批数据"、"分析这些表的结构和关系" |
 | 数据质量 | "检查数据一致性"、"发现跨系统的数据差异" |
 | 关联分析 | "这些表之间有什么关系"、"验证外键是否正确" |
-| 业务核查 | "检查项目和商机的状态是否一致"、"客户主数据是否对齐" |
-| 维度画像 | "按业务维度看看分布"、"按状态×主体×机构统计一下" |
+| 业务核查 | "检查订单和发货单的状态是否一致"、"客户主数据是否对齐" |
+| 维度画像 | "按业务维度看看分布"、"按状态×区域×渠道统计一下" |
 | 覆盖漏斗 | "A 数据在 B 的覆盖情况"、"归集了多少、漏了多少" |
 
 ## 核心原则
@@ -30,6 +30,7 @@ description: EDA 探索性数据分析流程。当用户需要对数据集进行
 - **探查深度**：快速概览还是完整 4 阶段？
 - **产出要求**：报告给谁看？需要哪些异常数据集？
 - **业务输入**：做维度画像需收集维度定义，做覆盖漏斗需收集覆盖口径。模板与兜底路径见 [references/business-inputs.md](references/business-inputs.md)
+- **渐进披露**：进入某阶段时读取对应 reference 文档，不要预载全部
 
 ### 2. 计划驱动
 
@@ -41,7 +42,7 @@ EDA 任务必须编写 Plan，保存到 `docs/govio/plans/YYYY-MM-DD-eda-[项目
 
 ### 4. 渐进披露
 
-进入某阶段（或使用某机制）时才读取对应 reference 文档；执行中保持当前阶段文档为唯一展开的详细指引，上一阶段文档的内容以已产出的卡片/清单为准。
+进入某阶段（或使用某机制）时才读取对应 reference 文档；执行中保持当前阶段文档为唯一展开的详细指引。上一阶段的结果以画布上已产出的卡片/清单为准，**不要从 reference 文档中复制 SQL 模板或卡片模板到聊天中**——reference 是 Agent 的执行手册，不是给用户看的文档。
 
 ## 标准流程
 
@@ -54,12 +55,13 @@ Phase 1 画像 -> Phase 2 推断关联 -> Phase 3 核查关联 -> Phase 4 一致
                     汇总为 EDA Markdown 报告
 ```
 
-| 阶段 | 回答的问题 | 产出 | 详细步骤 |
-|------|-----------|------|---------|
-| Phase 1 画像 | 我拿到的是什么数据？ | 数据集卡片、维度画像卡片 | [references/phase-1-profile.md](references/phase-1-profile.md) |
-| Phase 2 推断关联 | 数据集之间有什么关系？ | 候选关联清单 | [references/phase-2-relations.md](references/phase-2-relations.md) |
-| Phase 3 核查关联 | 关联真实存在吗？覆盖了多少？ | 关联验证报告、覆盖漏斗卡片 | [references/phase-3-verify.md](references/phase-3-verify.md) |
-| Phase 4 一致性核查 | 关联数据是否一致？有无业务违规？ | 一致性报告 + 异常数据 JSON | [references/phase-4-consistency.md](references/phase-4-consistency.md) |
+| 阶段 | 回答的问题 | 产出 | 何时读取 reference |
+|------|-----------|------|-------------------|
+| Phase 1 画像 | 我拿到的是什么数据？ | 数据集卡片、维度画像卡片 | **进入 Phase 1 时**读取 [references/phase-1-profile.md](references/phase-1-profile.md) |
+| Phase 2 推断关联 | 数据集之间有什么关系？ | 候选关联清单 | **进入 Phase 2 时**读取 [references/phase-2-relations.md](references/phase-2-relations.md) |
+| Phase 3 核查关联 | 关联真实存在吗？覆盖了多少？ | 关联验证报告、覆盖漏斗卡片 | **进入 Phase 3 时**读取 [references/phase-3-verify.md](references/phase-3-verify.md) |
+| Phase 4 一致性核查 | 关联数据是否一致？有无业务违规？ | 一致性报告 + 异常数据 JSON | **进入 Phase 4 时**读取 [references/phase-4-consistency.md](references/phase-4-consistency.md) |
+| 澄清阶段 | 维度定义 / 覆盖口径是什么？ | 维度与口径清单 | **做维度画像或覆盖漏斗前**读取 [references/business-inputs.md](references/business-inputs.md) |
 
 ## 使用模式
 
@@ -79,7 +81,7 @@ Phase 1 画像 -> Phase 2 推断关联 -> Phase 3 核查关联 -> Phase 4 一致
 完整探查流程，产出完整报告。
 
 ```
-用户: "对销售系统做一次完整的数据探查"
+用户: "对 CRM 系统做一次完整的数据探查"
 -> Phase 1-4 全部执行
 -> 产出: 完整 EDA 报告 + 异常数据 JSON（后续合并为 Excel）
 ```
@@ -89,7 +91,7 @@ Phase 1 画像 -> Phase 2 推断关联 -> Phase 3 核查关联 -> Phase 4 一致
 已有数据，直接做一致性检查。
 
 ```
-用户: "检查这两个系统的客户数据是否一致"
+用户: "检查 CRM 和 ERP 的客户数据是否一致"
 -> 跳过 Phase 1-2（数据已加载或快速加载）
 -> Phase 3: 验证关联
 -> Phase 4: 执行"字段一致性"规则

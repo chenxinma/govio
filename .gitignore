@@ -26,3 +26,5 @@ assets/
 .mimocode/
 .pi/
 .codegraph/
+.mcp.json
+.claude/

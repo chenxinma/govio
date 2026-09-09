@@ -108,10 +108,10 @@ SELECT s.join_key, s.status AS src_status, t.status AS tgt_status
 FROM source_df s
 JOIN target_df t ON s.join_key = t.join_key
 WHERE (s.status, t.status) IN (
-  ('已撤销', '赢单'),
-  ('立项中', '赢单'),
-  ('已结束', '进行中'),
-  ('不通过', '赢单')
+  ('已取消', '已发货'),
+  ('待审核', '已完成'),
+  ('已关闭', '进行中'),
+  ('已拒绝', '已完成')
 )
 ```
 
@@ -184,32 +184,32 @@ WHERE c.parent_key IS NULL
 
 ## 规则实例化示例
 
-以 R1（IHRO 项目结算客户 vs MDM 主数据）为例：
+以 CRM 客户 vs ERP 客户主数据字段一致性为例：
 
 ```markdown
-**规则**: IHRO 项目结算客户 vs MDM 主数据字段一致性
+**规则**: CRM 客户 vs ERP 客户主数据字段一致性
 **模式**: 字段一致性 (1a)
-**源表**: ihro_settle_cust（已加载）
-**目标表**: mdm_customer（已加载）
-**JOIN 键**: settle_cust.comp_no = mdm.comp_no
-**比对字段**: uni_soc_cret_code, cust_no, pot_cust_no, cust_name
+**源表**: crm_customers（已加载）
+**目标表**: erp_customers（已加载）
+**JOIN 键**: crm.cust_code = erp.cust_code
+**比对字段**: tax_id, cust_name, phone, address
 
 **SQL**:
 SELECT
-  s.comp_no,
-  s.uni_soc_cret_code AS src_usci, t.uni_soc_cret_code AS tgt_usci,
-  s.cust_no AS src_cust_no, t.cust_no AS tgt_cust_no,
+  s.cust_code,
+  s.tax_id AS src_tax_id, t.tax_id AS tgt_tax_id,
+  s.cust_name AS src_name, t.cust_name AS tgt_name,
   CASE
-    WHEN s.uni_soc_cret_code = t.uni_soc_cret_code
-     AND s.cust_no = t.cust_no
-     AND s.pot_cust_no = t.pot_cust_no
-     AND s.cust_name = t.cust_name THEN '一致'
-    WHEN s.uni_soc_cret_code IS NULL AND t.uni_soc_cret_code IS NULL
-     AND s.cust_no IS NULL AND t.cust_no IS NULL THEN '双方都空'
+    WHEN s.tax_id = t.tax_id
+     AND s.cust_name = t.cust_name
+     AND s.phone = t.phone
+     AND s.address = t.address THEN '一致'
+    WHEN s.tax_id IS NULL AND t.tax_id IS NULL
+     AND s.cust_name IS NULL AND t.cust_name IS NULL THEN '双方都空'
     ELSE '不一致'
   END AS status
-FROM ihro_settle_cust s
-JOIN mdm_customer t ON s.comp_no = t.comp_no
+FROM crm_customers s
+JOIN erp_customers t ON s.cust_code = t.cust_code
 ```
 
 ## 产出: 一致性核查报告
@@ -217,7 +217,7 @@ JOIN mdm_customer t ON s.comp_no = t.comp_no
 ```markdown
 ## 一致性核查结果
 
-### 规则 1: IHRO vs MDM 字段一致性
+### 规则 1: CRM vs ERP 客户字段一致性
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
@@ -227,18 +227,18 @@ JOIN mdm_customer t ON s.comp_no = t.comp_no
 | 源空目标有值 | 100 | 1% |
 | 双方都空 | 0 | 0% |
 
-**异常**: 1,200 条不一致记录 -> `eda_项目_IHRO_vs_MDM_异常.json`（后续合并为 Excel）
+**异常**: 1,200 条不一致记录 -> `eda_crm_erp_客户一致性_异常.json`（后续合并为 Excel）
 
-### 规则 2: 项目结算客户 ⊆ 商机客户
+### 规则 2: 订单客户 ⊆ 发票客户
 
 | 检查项 | 结果 |
 |--------|------|
-| 项目客户总数 | 1,000 |
-| 在商机中找到 | 950 |
+| 订单客户总数 | 1,000 |
+| 在发票中找到 | 950 |
 | 缺失数 | 50 |
-| **判定** | 50 个项目客户不在商机集合中 |
+| **判定** | 50 个订单客户不在发票客户集合中 |
 
-**异常**: 50 条缺失记录 -> `eda_项目_客户子集_异常.json`（后续合并为 Excel）
+**异常**: 50 条缺失记录 -> `eda_订单_发票客户子集_异常.json`（后续合并为 Excel）
 ```
 
 ## 导出异常数据

@@ -69,7 +69,7 @@ LIMIT 50
 
 **影响**：
 - 重复键会导致 JOIN 膨胀（1:N 变 1:M）
-- 需要确认是数据问题还是业务设计（如 1 项目对多商机）
+- 需要确认是数据问题还是业务设计（如 1 订单对多发货单）
 
 ## Step 4: 值域重叠分析
 
@@ -137,8 +137,8 @@ ORDER BY cnt DESC
 
 ```sql
 CASE
-  WHEN comp 关联不存在 THEN '无关联客户'
-  ELSE '未归集'
+  WHEN customer_id IS NULL THEN '无关联客户'
+  ELSE '未开票'
 END
 ```
 
