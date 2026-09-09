@@ -22,7 +22,7 @@ Uses `argparse` with subparsers:
 
 `config.py`
 
-Manages `~/.govio/config.yaml`. Supports auto-migration from old flat format to new nested format, and password encryption.
+Manages `~/.govio/config.yaml`. Auto-migrates plaintext passwords to encrypted storage.
 
 ### Constructor
 
@@ -34,48 +34,19 @@ ConfigManager(config_path: Path | None = None)  # Default: ~/.govio/config.yaml
 
 ```python
 exists() -> bool
-load() -> dict[str, Any]              # Raises FileNotFoundError; auto-migrates old format
+load() -> dict[str, Any]              # Raises FileNotFoundError; auto-encrypts plaintext passwords
 save(config: dict[str, Any]) -> None  # YAML with unicode support
 validate(config: dict[str, Any]) -> bool  # Raises ValueError on issues
 ```
 
-### Auto-migration
-
-On `load()`, automatically migrates:
-1. **Old flat format** → new nested format (`metadata`, `graph`, `datasources` sections)
-2. **Plaintext passwords** → encrypted storage (`encrypted_password` field, backed up to `.yaml.bak`)
-
 ### Validation Rules
 
+- `graph`: required section
 - `graph.backend`: required, `"networkx"`, `"falkordb"`, or `"ladybug"`
 - `graph.networkx.gml_path`: required if backend is networkx
 - `graph.falkordb.host/port/graph`: required if backend is falkordb
 - `graph.ladybug.db_path`: required if backend is ladybug
 - `datasources.*`: optional, each entry must have `url` key
-
----
-
-## MetaConfigManager
-
-`config.py`
-
-Manages `~/.govio/meta_config.yaml` for the `meta` command group.
-
-### Constructor
-
-```python
-MetaConfigManager(config_path: Path | None = None)  # Default: ~/.govio/meta_config.yaml
-```
-
-### Methods
-
-```python
-exists() -> bool
-load() -> dict[str, Any]
-save(config: dict[str, Any]) -> None
-migrate_from_config(config: dict) -> dict[str, Any]  # Extract metadata fields from main config
-load_or_migrate() -> dict[str, Any]  # Load or auto-migrate from main config
-```
 
 ---
 
@@ -131,29 +102,31 @@ Knowledge graph maintenance command group: `govio-cli meta`.
 
 ### Subcommands
 
+All subcommands are independent, CLI-only (no config file dependency). All inputs are explicit CLI arguments.
+
 | Subcommand | Description |
 |---|---|
-| `meta sync` | Full pipeline (interactive or CLI mode) |
-| `meta sync meta` | Import TDS/DuckDB metadata (PhysicalTable, Col, HAS_COLUMN) |
-| `meta sync app` | Import application list (Application + USE edges) |
-| `meta sync std` | Import data standards (Standard nodes, TDS only) |
-| `meta sync compliance` | Export existing standard-column associations (COMPLIES_WITH, TDS only) |
-| `meta sync rel` | Import table relationships (RELATES_TO edges) |
-| `meta sync metric` | Import metric/dimension definitions (Metric, Dimension + 5 edge types) |
-| `meta sync graph` | Update graph database + generate assets |
+| `meta meta` | Import TDS/DuckDB metadata (PhysicalTable, Col, HAS_COLUMN) |
+| `meta app` | Import application list (Application + USE edges) |
+| `meta std` | Import data standards (Standard nodes, TDS only) |
+| `meta compliance` | Export existing standard-column associations (COMPLIES_WITH, TDS only) |
+| `meta rel` | Import table relationships (RELATES_TO edges) |
+| `meta metric` | Import metric/dimension definitions (Metric, Dimension + 5 edge types) |
+| `meta graph` | Graph database management (update/rebuild/clear + assets) |
 | `meta recommend` | Data standard recommendation |
-| `meta config` | Interactive meta config management |
+
+Recommended order: `meta` → `app` → `std` → `compliance` → `rel` → `metric` → `graph`
 
 ### Data Sources
 
-The `sync` pipeline supports three data source modes:
-- **TDS**: Read from metadata database only
-- **DuckDB**: Read from local DuckDB file only (skips Standard data)
-- **Both**: Merge TDS + DuckDB (DuckDB wins on conflict)
+The `meta` subcommand supports three data source modes (`--source`):
+- **tds**: Read from metadata database only; `--kundb`, `--workspace-uuid`, `--schemas` are required
+- **duckdb**: Read from local DuckDB file only (requires `--db`; skips Standard data)
+- **both**: Merge TDS + DuckDB (DuckDB wins on conflict); TDS-side params same as tds mode
 
 ### Step Functions
 
-Each `sync` subcommand maps to an independent, idempotent step function:
+Each subcommand maps to an independent, idempotent step function:
 
 ```python
 step_meta_export(output, source, db_path, schemas, db_name, kundb, workspace_uuid) -> tuple[df_tables, df_columns] | None
@@ -173,14 +146,18 @@ merge_node_csv(new_df, csv_path, node_type, key_col) -> pd.DataFrame
 merge_edge_csv(new_df, csv_path, dedup_cols) -> pd.DataFrame
 ```
 
-### Graph Update
+### Graph Management
 
 ```python
 _update_graph(output, graph_mode) -> bool   # "update" (incremental) or "rebuild"
+_clear_graph() -> bool                       # Clear graph database
 _generate_assets() -> None                   # schema.md, names, metrics_index.md
 ```
 
-Supports all three backends: FalkorDB (upsert/import), Ladybug (upsert/import), NetworkX (incremental/rebuild GML).
+Graph backend config is read from `~/.govio/config.yaml` (`graph` section). Supports all three backends:
+- FalkorDB: upsert/import/delete
+- Ladybug: upsert/import/delete
+- NetworkX: incremental/rebuild GML/delete
 
 ---
 
@@ -212,10 +189,10 @@ cat query.json | govio-cli sql build
 ## std_recommend.py
 
 ```python
-std_recommend() -> None
+std_recommend(output_dir, kundb, workspace_uuid, app_map, csv_dir) -> None
 ```
 
-Reads meta config, loads `df_app_db_map` from JSON, calls `data_standard_recommend()`. Requires: `kundb`, `workspace_uuid`, `app_map`, `csv_dir`.
+All parameters are explicit function arguments. Loads `df_app_db_map` from JSON, calls `data_standard_recommend()`. Called by `meta recommend` CLI subcommand.
 
 ---
 

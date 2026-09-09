@@ -1,9 +1,12 @@
 """meta 命令组 — 知识图库维护
 
-提供元数据同步、导出、数据标准推荐、配置管理等功能。
+提供元数据导入、数据标准推荐等功能。
 
-子命令拆分设计：每个 sync 子命令都是独立可运行的步骤，通过 output 目录的 CSV 文件作为共享状态，
-支持增量合并（幂等）。可以按任意顺序运行，多次运行安全。
+各导入子命令（meta / app / std / compliance / rel / metric）完全独立运行，
+所有输入通过 CLI 参数显式传入，不依赖配置文件。通过 output 目录的 CSV 文件
+作为共享状态，支持增量合并（幂等）。
+
+推荐执行顺序：meta → app → std → compliance → rel → metric → graph
 """
 
 import argparse
@@ -12,9 +15,8 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-import questionary
 
-from .config import ConfigManager, MetaConfigManager
+from .config import ConfigManager
 from govio.core.graph_factory import GraphFactory
 from govio.core.assets_generator import AssetsGenerator
 from govio.graph.falkordb_loader import import_csv_to_falkordb, upsert_csv_to_falkordb
@@ -50,7 +52,11 @@ def merge_node_csv(
         # 已有 CSV 的第一列是 :ID(NodeType)，重命名为 node_id 以统一
         id_col = f":ID({node_type})"
         if id_col in existing.columns:
-            existing = existing.rename(columns={id_col: "node_id"})
+            if "node_id" in existing.columns:
+                # 两列并存时丢弃 :ID 列（值相同）
+                existing = existing.drop(columns=[id_col])
+            else:
+                existing = existing.rename(columns={id_col: "node_id"})
         combined = pd.concat([existing, new_df], ignore_index=True)
         dedup_col = key_col if key_col in combined.columns else None
         if dedup_col:
@@ -154,6 +160,10 @@ def _update_graph(output: Path, graph_mode: str) -> bool:
                 upsert_csv_to_ladybug(output, db_path_val, buffer_pool_size=bp, max_db_size=maxdb)
                 print("✓ Ladybug 数据已更新")
             else:
+                # rebuild 先删旧文件，避免版本不兼容导致无法打开
+                db_file = Path(db_path_val)
+                if db_file.exists():
+                    db_file.unlink()
                 import_csv_to_ladybug(output, db_path_val, buffer_pool_size=bp, max_db_size=maxdb)
                 print("✓ Ladybug 数据已重建")
         except Exception as e:
@@ -161,6 +171,51 @@ def _update_graph(output: Path, graph_mode: str) -> bool:
             return False
     else:
         print("提示: 未配置 graph backend，跳过图数据更新")
+    return True
+
+
+def _clear_graph() -> bool:
+    """清空图数据库。返回是否成功。"""
+    graph_config = ConfigManager().load()
+    graph = graph_config.get("graph") or {}
+    backend = graph.get("backend")
+
+    if backend == "falkordb":
+        from govio.graph.falkordb_loader import delete_falkordb_graph
+
+        falkordb_cfg = graph.get("falkordb", {})
+        host = falkordb_cfg.get("host", "localhost")
+        port = falkordb_cfg.get("port", 6379)
+        graph_name = falkordb_cfg.get("graph", "ontology")
+        try:
+            delete_falkordb_graph(host, port, graph_name)
+            print(f"✓ FalkorDB 图 '{graph_name}' 已删除")
+        except Exception as e:
+            print(f"❌ 删除 FalkorDB 图失败: {e}")
+            return False
+    elif backend == "networkx":
+        networkx_cfg = graph.get("networkx", {})
+        gml_path = networkx_cfg.get("gml_path", str(SKILLS_ASSETS_DIR / "ontology.gml"))
+        gml_file = Path(gml_path)
+        if gml_file.exists():
+            gml_file.unlink()
+            print(f"✓ GML 文件已删除: {gml_path}")
+        else:
+            print(f"提示: GML 文件不存在，无需删除")
+    elif backend == "ladybug":
+        ladybug_cfg = graph.get("ladybug", {})
+        db_path_val = ladybug_cfg.get("db_path")
+        if not db_path_val:
+            print("❌ Ladybug 配置缺少 db_path")
+            return False
+        db_file = Path(db_path_val)
+        if db_file.exists():
+            db_file.unlink()
+            print(f"✓ Ladybug 数据库已删除: {db_path_val}")
+        else:
+            print(f"提示: Ladybug 数据库文件不存在，无需删除")
+    else:
+        print("提示: 未配置 graph backend，跳过")
     return True
 
 
@@ -176,18 +231,6 @@ def _generate_assets() -> None:
         print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")
     except Exception as e:
         print(f"❌ 生成 assets 失败: {e}")
-
-
-# ---------------------------------------------------------------------------
-# merge / export helpers（保留兼容）
-# ---------------------------------------------------------------------------
-
-def merge_metadata(
-    df_tds: pd.DataFrame, df_duck: pd.DataFrame, key: str,
-) -> pd.DataFrame:
-    """TDS full + DuckDB incremental. DuckDB wins on conflict."""
-    combined = pd.concat([df_tds, df_duck], ignore_index=True)
-    return combined.drop_duplicates(subset=[key], keep="last").reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------
@@ -239,8 +282,12 @@ def step_meta_export(
         duck_loader = DuckDBLoader(db_path, schemas or [])
         duck_tables = duck_loader.PhysicalTable
         duck_columns = duck_loader.Col
-        df_tables = merge_metadata(tds_tables, duck_tables, "full_table_name")
-        df_columns = merge_metadata(tds_columns, duck_columns, "column")
+
+        # TDS full + DuckDB incremental, DuckDB wins on conflict
+        df_tables = pd.concat([tds_tables, duck_tables], ignore_index=True)
+        df_tables = df_tables.drop_duplicates(subset=["full_table_name"], keep="last").reset_index(drop=True)
+        df_columns = pd.concat([tds_columns, duck_columns], ignore_index=True)
+        df_columns = df_columns.drop_duplicates(subset=["column"], keep="last").reset_index(drop=True)
 
     # Assign IDs
     df_tables = df_tables.reset_index(drop=True)
@@ -295,7 +342,7 @@ def step_app_export(
     # USE edge — 需要 PhysicalTable.csv 已存在
     pt_path = output / "PhysicalTable.csv"
     if not pt_path.exists():
-        print("⚠ PhysicalTable.csv 不存在，跳过 USE 边生成。请先运行 meta sync meta")
+        print("⚠ PhysicalTable.csv 不存在，跳过 USE 边生成。请先运行 meta meta")
         return
 
     df_tables = _load_csv_with_node_ids(pt_path, "PhysicalTable", "full_table_name")
@@ -333,7 +380,7 @@ def step_rel_export(
     pt_path = output / "PhysicalTable.csv"
     col_path = output / "Col.csv"
     if not pt_path.exists() or not col_path.exists():
-        print("❌ 需要先导入元数据（PhysicalTable.csv, Col.csv），请先运行 meta sync meta")
+        print("❌ 需要先导入元数据（PhysicalTable.csv, Col.csv），请先运行 meta meta")
         return
 
     df_tables = _load_csv_with_node_ids(pt_path, "PhysicalTable", "full_table_name")
@@ -395,10 +442,10 @@ def step_compliance_export(
     col_path = output / "Col.csv"
     std_path = output / "Standard.csv"
     if not col_path.exists():
-        print("❌ 需要先导入元数据（Col.csv），请先运行 meta sync meta")
+        print("❌ 需要先导入元数据（Col.csv），请先运行 meta meta")
         return
     if not std_path.exists():
-        print("❌ 需要先导入数据标准（Standard.csv），请先运行 meta sync std")
+        print("❌ 需要先导入数据标准（Standard.csv），请先运行 meta std")
         return
 
     df_columns = _load_csv_with_node_ids(col_path, "Col", "column")
@@ -410,6 +457,9 @@ def step_compliance_export(
     if df_compliance.empty:
         print("✓ TDS 中无已有标准关联数据")
         return
+
+    # 构造 column 字段（full_table_name.column_name）以匹配 Col.csv
+    df_compliance["column"] = df_compliance["full_table_name"] + "." + df_compliance["column_name"]
 
     # 将 column 字段映射为 node_id
     col_id_map = df_columns.set_index("column")["node_id"].to_dict()
@@ -447,7 +497,7 @@ def step_metric_export(
     pt_path = output / "PhysicalTable.csv"
     col_path = output / "Col.csv"
     if not pt_path.exists() or not col_path.exists():
-        print("❌ 需要先导入元数据（PhysicalTable.csv, Col.csv），请先运行 meta sync meta", file=sys.stderr)
+        print("❌ 需要先导入元数据（PhysicalTable.csv, Col.csv），请先运行 meta meta", file=sys.stderr)
         return False
 
     df_tables = _load_csv_with_node_ids(pt_path, "PhysicalTable", "full_table_name")
@@ -552,225 +602,35 @@ def step_metric_export(
 
 
 # ---------------------------------------------------------------------------
-# Full pipeline — 向后兼容的完整管线
+# CLI command handlers — 独立子命令（CLI-only，无配置文件依赖）
 # ---------------------------------------------------------------------------
 
-def meta_export(
-    db_path: str,
-    schemas: list[str] | None,
-    db_name: str | None,
-    output: Path,
-    graph_mode: str = "dry_run",
-    source: str = "auto",
-):
-    """完整管线：元数据 → 应用 → 标准 → 关系 → 指标 → 图更新 → assets。
+def cmd_meta(args: argparse.Namespace) -> None:
+    """meta meta — 导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）"""
+    source = args.source
+    db_path = args.db or ""
+    schemas = args.schemas.split(",") if args.schemas else None
+    output = Path(args.output) if args.output else Path("./output")
+    kundb = args.kundb or ""
+    workspace_uuid = args.workspace_uuid or ""
 
-    source: "tds" | "duckdb" | "both" | "auto"（auto 按 db_path 有无自动判断）
-
-    注意：完整管线会先清空 output 目录的 CSV，再从头生成。
-    如需增量导入请使用各子命令（meta sync meta / app / std 等）。
-    """
-    output.mkdir(parents=True, exist_ok=True)
-
-    # 完整管线模式：清理旧 CSV，从头生成
-    for csv_file in output.glob("*.csv"):
-        csv_file.unlink()
-
-    # 自动推断 source
-    if source == "auto":
-        if db_path and db_name:
-            source = "duckdb"
-        elif db_path:
-            source = "duckdb"
-        else:
-            source = "tds"
-
-    if source in ("duckdb", "both") and not db_path:
-        print("错误: DuckDB 模式需要指定 --db 路径", file=sys.stderr)
-        sys.exit(1)
-
-    if source in ("duckdb", "both") and not schemas and not db_name:
-        print("错误: DuckDB 模式必须指定 --schemas 或 --db-name", file=sys.stderr)
-        sys.exit(1)
-
-    if source == "tds" and db_name:
-        print("错误: 单库模式（--db-name）仅适用于 DuckDB 数据源", file=sys.stderr)
-        sys.exit(1)
-
-    # --- Load config ---
-    meta_cfg = MetaConfigManager()
-    if meta_cfg.exists():
-        meta_config = meta_cfg.load()
-        kundb = meta_config.get("kundb", "")
-        workspace_uuid = meta_config.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
-        app_list_file = meta_config.get("app_list", "")
-        app_map_file = meta_config.get("app_map", "")
-        relationship_file = meta_config.get("relationship")
-        metric_file = meta_config.get("metric")
-    else:
-        main_config = ConfigManager().load()
-        metadata = main_config.get("metadata") or {}
-        kundb = metadata.get("kundb", "")
-        workspace_uuid = metadata.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
-        app_list_file = metadata.get("app_list", "")
-        app_map_file = metadata.get("app_map", "")
-        relationship_file = metadata.get("relationship")
-        metric_file = metadata.get("metric")
-
-    required = [app_list_file, app_map_file]
+    # TDS/both 模式校验必填参数
     if source in ("tds", "both"):
-        required.append(kundb)
-    if not all(required):
-        print("❌ 配置缺少必要字段，请检查 metadata 中的 kundb, app_list, app_map")
-        sys.exit(1)
-
-    df_app_db_map = pd.read_json(app_map_file, orient="records")
-
-    if db_name and db_name not in df_app_db_map["name"].values:
-        print(
-            f"错误: --db-name '{db_name}' 不在 app_map 中，可用: "
-            f"{df_app_db_map['name'].tolist()}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    # --- 决定要抽取的 schema 集合 ---
-    if db_name:
-        app_schemas = df_app_db_map.loc[
-            df_app_db_map["name"] == db_name, "schema"
-        ].tolist()
-        if schemas:
-            effective_schemas = [s for s in app_schemas if s in schemas]
-            if not effective_schemas:
-                print(
-                    f"警告: --db-name '{db_name}' 的 schema {app_schemas} "
-                    f"与 --schemas {schemas} 无交集，将导出空结果",
-                    file=sys.stderr,
-                )
-        else:
-            effective_schemas = app_schemas
-    else:
-        effective_schemas = schemas or []
-
-    # --- Step 1: 元数据 ---
-    result = step_meta_export(
-        output, source=source, db_path=db_path,
-        schemas=effective_schemas, db_name=db_name,
-        kundb=kundb, workspace_uuid=workspace_uuid,
-    )
-    if result is None:
-        sys.exit(1)
-    df_tables, df_columns = result
-
-    # --- Step 2: 应用 ---
-    step_app_export(output, app_list_file, app_map_file, db_name)
-
-    # --- Step 3: 数据标准 ---
-    if source == "duckdb":
-        print("提示: DuckDB 模式跳过 Standard 数据标准的读取")
-        # 写入空 Standard.csv 以保持一致的文件结构
-        df_empty_std = pd.DataFrame(columns=["standard_id"])
-        assign_node_ids(df_empty_std, "Standard", "standard_id")
-        write_node_csv(df_empty_std, output / "Standard.csv", "Standard")
-    else:
-        step_std_export(output, kundb, workspace_uuid)
-
-    # --- Step 4: 已有合规关联 ---
-    if source != "duckdb":
-        step_compliance_export(output, kundb, workspace_uuid)
-
-    # --- Step 5: 表关系 ---
-    if relationship_file:
-        step_rel_export(output, relationship_file)
-
-    # --- Step 6: 指标维度 ---
-    if metric_file and source != "tds":
-        if not step_metric_export(output, metric_file):
+        missing = []
+        if not kundb:
+            missing.append("--kundb")
+        if not workspace_uuid:
+            missing.append("--workspace-uuid")
+        if not schemas:
+            missing.append("--schemas")
+        if missing:
+            print(f"❌ TDS 模式需要指定: {', '.join(missing)}", file=sys.stderr)
             sys.exit(1)
-    elif metric_file and source == "tds":
-        print("提示: TDS-only 模式跳过指标定义加载")
 
-    # --- Summary ---
-    n_tables = len(pd.read_csv(output / "PhysicalTable.csv")) if (output / "PhysicalTable.csv").exists() else 0
-    n_cols = len(pd.read_csv(output / "Col.csv")) if (output / "Col.csv").exists() else 0
-    n_apps = len(pd.read_csv(output / "Application.csv")) if (output / "Application.csv").exists() else 0
-    n_stds = len(pd.read_csv(output / "Standard.csv")) if (output / "Standard.csv").exists() else 0
-    n_rel = len(pd.read_csv(output / "RELATES_TO.csv")) if (output / "RELATES_TO.csv").exists() else 0
-    n_metric = len(pd.read_csv(output / "Metric.csv")) if (output / "Metric.csv").exists() else 0
-    print(f"\n成功导出: {n_tables} 张表, {n_cols} 个字段, "
-          f"{n_apps} 个应用, {n_stds} 个标准, {n_rel} 个数据关系, {n_metric} 个指标")
-
-    if graph_mode == "dry_run":
-        return
-
-    # --- Update/rebuild graph ---
-    _update_graph(output, graph_mode)
-
-    # --- Generate assets ---
-    _generate_assets()
-
-    print("\n✅ meta-export 完成！")
-
-
-# ---------------------------------------------------------------------------
-# CLI command handlers — 子命令
-# ---------------------------------------------------------------------------
-
-def _load_schemas_from_app_map(app_map_file: str) -> list[str]:
-    """从 app_map.json 读取所有 schema"""
-    with open(app_map_file, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    return list({row["schema"] for row in data})
-
-
-def _load_meta_config() -> dict:
-    """加载 meta 配置，兼容新旧格式。"""
-    meta_cfg = MetaConfigManager()
-    if meta_cfg.exists():
-        return meta_cfg.load()
-    main_config = ConfigManager().load()
-    return main_config.get("metadata") or {}
-
-
-def cmd_sync_meta(args: argparse.Namespace) -> None:
-    """meta sync meta — 导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）"""
-    if hasattr(args, "source") and args.source:
-        # CLI 模式
-        source = args.source
-        db_path = args.db or ""
-        schemas = args.schemas.split(",") if args.schemas else None
-        output = Path(args.output) if args.output else Path("./output")
-        kundb = args.kundb or ""
-        workspace_uuid = args.workspace_uuid or ""
-    else:
-        # 交互模式
-        config = _load_meta_config()
-        source = questionary.select(
-            "数据来源:",
-            choices=[
-                questionary.Choice("TDS — 仅从元数据库读取", value="tds"),
-                questionary.Choice("DuckDB — 仅从 DuckDB 读取", value="duckdb"),
-                questionary.Choice("Both — TDS + DuckDB 合并", value="both"),
-            ],
-        ).ask()
-
-        kundb = args.kundb or config.get("kundb", "")
-        workspace_uuid = args.workspace_uuid or config.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
-
-        if source in ("tds", "both") and not kundb:
-            kundb = questionary.text("元数据库 URL:").ask() or ""
-
-        db_path = ""
-        schemas = None
-        if source in ("duckdb", "both"):
-            db_path = questionary.text("DuckDB 数据库文件路径:").ask() or ""
-            if not db_path:
-                print("错误: DuckDB 模式必须指定数据库路径", file=sys.stderr)
-                sys.exit(1)
-            schemas_input = questionary.text("要导出的 schema 列表（逗号分隔，留空导出全部）:").ask() or ""
-            schemas = [s.strip() for s in schemas_input.split(",") if s.strip()] if schemas_input else None
-
-        output = Path(questionary.text("CSV 输出目录:", default="./output").ask() or "./output")
+    # DuckDB 模式校验
+    if source in ("duckdb", "both") and not db_path:
+        print("❌ DuckDB 模式需要指定 --db", file=sys.stderr)
+        sys.exit(1)
 
     result = step_meta_export(
         output, source=source, db_path=db_path,
@@ -780,135 +640,66 @@ def cmd_sync_meta(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def cmd_sync_app(args: argparse.Namespace) -> None:
-    """meta sync app — 导入应用清单（Application 节点 + USE 边）"""
-    if hasattr(args, "app_list") and args.app_list and args.app_map:
-        app_list_file = args.app_list
-        app_map_file = args.app_map
-        output = Path(args.output) if args.output else Path("./output")
-        db_name = getattr(args, "db_name", None)
-    else:
-        config = _load_meta_config()
-        app_list_file = args.app_list or config.get("app_list", "")
-        app_map_file = args.app_map or config.get("app_map", "")
-
-        if not app_list_file:
-            app_list_file = questionary.text("应用清单 Excel 文件路径:").ask() or ""
-        if not app_map_file:
-            app_map_file = questionary.text("应用映射 JSON 文件路径:").ask() or ""
-
-        output = Path(args.output) if args.output else Path(
-            questionary.text("CSV 输出目录:", default=config.get("csv_dir", "./output")).ask() or "./output"
-        )
-        db_name = None
-
-    if not app_list_file or not app_map_file:
+def cmd_app(args: argparse.Namespace) -> None:
+    """meta app — 导入应用清单（Application 节点 + USE 边）"""
+    if not args.app_list or not args.app_map:
         print("❌ 需要指定 --app-list 和 --app-map", file=sys.stderr)
         sys.exit(1)
 
-    step_app_export(output, app_list_file, app_map_file, db_name)
+    output = Path(args.output) if args.output else Path("./output")
+    step_app_export(output, args.app_list, args.app_map, args.db_name)
 
 
-def cmd_sync_rel(args: argparse.Namespace) -> None:
-    """meta sync rel — 导入表关系（RELATES_TO 边）"""
-    if hasattr(args, "file") and args.file:
-        relationship_file = args.file
-        output = Path(args.output) if args.output else Path("./output")
-    else:
-        config = _load_meta_config()
-        relationship_file = args.file or config.get("relationship", "")
-        if not relationship_file:
-            relationship_file = questionary.text("表关系 JSON 文件路径:").ask() or ""
-        output = Path(args.output) if args.output else Path(
-            questionary.text("CSV 输出目录:", default=config.get("csv_dir", "./output")).ask() or "./output"
-        )
-
-    if not relationship_file:
+def cmd_rel(args: argparse.Namespace) -> None:
+    """meta rel — 导入表关系（RELATES_TO 边）"""
+    if not args.file:
         print("❌ 需要指定 --file", file=sys.stderr)
         sys.exit(1)
 
-    step_rel_export(output, relationship_file)
+    output = Path(args.output) if args.output else Path("./output")
+    step_rel_export(output, args.file)
 
 
-def cmd_sync_std(args: argparse.Namespace) -> None:
-    """meta sync std — 导入数据标准（Standard 节点）"""
-    kundb = getattr(args, "kundb", None)
-    workspace_uuid = getattr(args, "workspace_uuid", None)
-    output = getattr(args, "output", None)
-
-    config = _load_meta_config()
-
-    if not kundb:
-        kundb = config.get("kundb", "")
-    if not workspace_uuid:
-        workspace_uuid = config.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
-
-    if not kundb:
-        kundb = questionary.text("元数据库 URL:").ask() or ""
-
-    if not kundb:
-        print("❌ 需要指定 --kundb 或在配置中设置 kundb", file=sys.stderr)
+def cmd_std(args: argparse.Namespace) -> None:
+    """meta std — 导入数据标准（Standard 节点）"""
+    if not args.kundb:
+        print("❌ 需要指定 --kundb", file=sys.stderr)
         sys.exit(1)
 
-    output = Path(output) if output else Path(
-        questionary.text("CSV 输出目录:", default=config.get("csv_dir", "./output")).ask() or "./output"
-    )
-
-    step_std_export(output, kundb, workspace_uuid)
+    output = Path(args.output) if args.output else Path("./output")
+    step_std_export(output, args.kundb, args.workspace_uuid)
 
 
-def cmd_sync_compliance(args: argparse.Namespace) -> None:
-    """meta sync compliance — 从 TDS 导出已有标准-字段关联（COMPLIES_WITH 边）"""
-    kundb = getattr(args, "kundb", None)
-    workspace_uuid = getattr(args, "workspace_uuid", None)
-    output = getattr(args, "output", None)
-
-    config = _load_meta_config()
-
-    if not kundb:
-        kundb = config.get("kundb", "")
-    if not workspace_uuid:
-        workspace_uuid = config.get("workspace_uuid", "82ee37374b314a938bf28170ab4db7cf")
-
-    if not kundb:
-        kundb = questionary.text("元数据库 URL:").ask() or ""
-
-    if not kundb:
-        print("❌ 需要指定 --kundb 或在配置中设置 kundb", file=sys.stderr)
+def cmd_compliance(args: argparse.Namespace) -> None:
+    """meta compliance — 从 TDS 导出已有标准-字段关联（COMPLIES_WITH 边）"""
+    if not args.kundb:
+        print("❌ 需要指定 --kundb", file=sys.stderr)
         sys.exit(1)
 
-    output = Path(output) if output else Path(
-        questionary.text("CSV 输出目录:", default=config.get("csv_dir", "./output")).ask() or "./output"
-    )
-
-    step_compliance_export(output, kundb, workspace_uuid)
+    output = Path(args.output) if args.output else Path("./output")
+    step_compliance_export(output, args.kundb, args.workspace_uuid)
 
 
-def cmd_sync_metric(args: argparse.Namespace) -> None:
-    """meta sync metric — 导入指标维度定义（Metric, Dimension + 边）"""
-    if hasattr(args, "file") and args.file:
-        metric_file = args.file
-        output = Path(args.output) if args.output else Path("./output")
-    else:
-        config = _load_meta_config()
-        metric_file = args.file or config.get("metric", "")
-        if not metric_file:
-            metric_file = questionary.text("指标定义 JSON 文件路径:").ask() or ""
-        output = Path(args.output) if args.output else Path(
-            questionary.text("CSV 输出目录:", default=config.get("csv_dir", "./output")).ask() or "./output"
-        )
-
-    if not metric_file:
+def cmd_metric(args: argparse.Namespace) -> None:
+    """meta metric — 导入指标维度定义（Metric, Dimension + 边）"""
+    if not args.file:
         print("❌ 需要指定 --file", file=sys.stderr)
         sys.exit(1)
 
-    step_metric_export(output, metric_file)
+    output = Path(args.output) if args.output else Path("./output")
+    if not step_metric_export(output, args.file):
+        sys.exit(1)
 
 
-def cmd_sync_graph(args: argparse.Namespace) -> None:
-    """meta sync graph — 更新图数据库 + 生成 assets"""
+def cmd_graph(args: argparse.Namespace) -> None:
+    """meta graph — 更新/重建/清空图数据库 + 生成 assets"""
     output = Path(args.output) if args.output else Path("./output")
     graph_mode = args.mode if hasattr(args, "mode") and args.mode else "update"
+
+    if graph_mode == "clear":
+        _clear_graph()
+        print("\n✅ graph 清空完成！")
+        return
 
     if not output.exists():
         print(f"❌ 输出目录不存在: {output}", file=sys.stderr)
@@ -920,272 +711,107 @@ def cmd_sync_graph(args: argparse.Namespace) -> None:
     print("\n✅ graph 更新完成！")
 
 
-# ---------------------------------------------------------------------------
-# 原有 CLI command handlers（保留兼容）
-# ---------------------------------------------------------------------------
-
-def cmd_sync(args: argparse.Namespace) -> None:
-    """meta sync — 完整/增量同步管线"""
-
-    if args.db is not None or args.schemas or args.db_name or args.output:
-        # 命令行模式（至少传了一个参数）
-        db_path = args.db or ""
-        schemas = args.schemas.split(",") if args.schemas else None
-        db_name = args.db_name
-        output = Path(args.output) if args.output else Path("./output")
-        graph_mode = "dry_run" if args.dry_run else "update"
-        source = "auto"
-    else:
-        # 交互模式：从 meta_config.yaml 读取配置
-        meta_cfg = MetaConfigManager()
-        try:
-            config = meta_cfg.load_or_migrate()
-        except FileNotFoundError:
-            print("错误: meta 配置文件不存在且无法迁移，请先运行 govio-cli meta config", file=sys.stderr)
-            sys.exit(1)
-
-        # 显示当前配置
-        print("当前 meta 配置:")
-        cfg_fields = [
-            ("kundb", "元数据库"),
-            ("workspace_uuid", "工作区 UUID"),
-            ("app_list", "应用清单"),
-            ("app_map", "应用映射"),
-            ("relationship", "表关系"),
-            ("metric", "指标定义"),
-            ("csv_dir", "CSV 输出目录"),
-        ]
-        for key, label in cfg_fields:
-            val = config.get(key)
-            display = val if val else "(未设置)"
-            print(f"  {label}: {display}")
-        print()
-
-        # 数据源选择
-        source = questionary.select(
-            "数据来源:",
-            choices=[
-                questionary.Choice("TDS — 仅从元数据库读取", value="tds"),
-                questionary.Choice("DuckDB — 仅从 DuckDB 读取", value="duckdb"),
-                questionary.Choice("Both — TDS + DuckDB 合并", value="both"),
-            ],
-        ).ask()
-
-        if source == "tds":
-            app_map_file = config.get("app_map", "")
-            if not app_map_file:
-                print("错误: app_map 未配置，无法获取 schema 列表", file=sys.stderr)
-                sys.exit(1)
-            schemas = _load_schemas_from_app_map(app_map_file)
-            print(f"从 app_map 读取到 {len(schemas)} 个 schema: {schemas}")
-            db_path = ""
-            db_name = None
-        elif source == "duckdb":
-            db_path = questionary.text("DuckDB 数据库文件路径:").ask() or ""
-            if not db_path:
-                print("错误: DuckDB 模式必须指定数据库路径", file=sys.stderr)
-                sys.exit(1)
-            schemas_input = questionary.text("要导出的 schema 列表（逗号分隔，留空跳过）:").ask() or ""
-            db_name = questionary.text("单库模式 app 名称（留空使用全量模式）:").ask() or None
-            schemas = [s.strip() for s in schemas_input.split(",") if s.strip()] if schemas_input else None
-        else:
-            app_map_file = config.get("app_map", "")
-            if not app_map_file:
-                print("错误: app_map 未配置，无法获取 schema 列表", file=sys.stderr)
-                sys.exit(1)
-            tds_schemas = _load_schemas_from_app_map(app_map_file)
-            print(f"从 app_map 读取到 {len(tds_schemas)} 个 schema: {tds_schemas}")
-            db_path = questionary.text("DuckDB 数据库文件路径:").ask() or ""
-            if not db_path:
-                print("错误: Both 模式必须指定 DuckDB 路径", file=sys.stderr)
-                sys.exit(1)
-            schemas_input = questionary.text(
-                "DuckDB schema 列表（逗号分隔，留空使用 TDS 相同 schema）:",
-                default=",".join(tds_schemas),
-            ).ask() or ",".join(tds_schemas)
-            schemas = [s.strip() for s in schemas_input.split(",") if s.strip()] if schemas_input else tds_schemas
-            db_name = None
-
-        output_default = config.get("csv_dir", "") or config.get("output", "")
-        output_str = questionary.text("CSV 输出目录:", default=output_default).ask() or output_default
-        output = Path(output_str)
-
-        graph_mode = questionary.select(
-            "执行模式:",
-            choices=[
-                questionary.Choice("仅生成 CSV（不更新图库）", value="dry_run"),
-                questionary.Choice("生成 CSV 并更新图库（增量 MERGE）", value="update"),
-                questionary.Choice("生成 CSV 并重建图库（删除后重新插入）", value="rebuild"),
-            ],
-        ).ask()
-
-    meta_export(
-        db_path=db_path,
-        schemas=schemas,
-        db_name=db_name,
-        output=output,
-        graph_mode=graph_mode,
-        source=source,
-    )
-
-
 def cmd_recommend(args: argparse.Namespace) -> None:
     """meta recommend — 数据标准推荐"""
     from .std_recommend import std_recommend
 
-    meta_cfg = MetaConfigManager()
-    try:
-        config = meta_cfg.load_or_migrate()
-    except FileNotFoundError:
-        print("错误: meta 配置文件不存在且无法迁移，请先运行 govio-cli meta config", file=sys.stderr)
+    if not args.kundb:
+        print("❌ 需要指定 --kundb", file=sys.stderr)
+        sys.exit(1)
+    if not args.app_map:
+        print("❌ 需要指定 --app-map", file=sys.stderr)
         sys.exit(1)
 
-    output_dir = args.output_dir
-    if not output_dir:
-        output_dir = config.get("csv_dir", "") or config.get("output", "./output")
+    output_dir = Path(args.output_dir) if args.output_dir else Path("./output")
+    csv_dir = Path(args.csv_dir) if args.csv_dir else output_dir
 
-    std_recommend(Path(output_dir))
-
-
-def cmd_config(args: argparse.Namespace) -> None:
-    """meta config — 交互式配置 meta_config.yaml"""
-    meta_cfg = MetaConfigManager()
-
-    if meta_cfg.exists():
-        config = meta_cfg.load()
-        print("当前 meta 配置:")
-        for key, value in config.items():
-            print(f"  {key}: {value}")
-        print()
-
-        modify = questionary.confirm("是否修改当前配置？", default=False).ask()
-        if not modify:
-            return
-    else:
-        print("meta 配置文件不存在，开始创建...")
-        config = {}
-
-    fields = [
-        ("kundb", "元数据库 URL", ""),
-        ("workspace_uuid", "工作区 UUID", "82ee37374b314a938bf28170ab4db7cf"),
-        ("app_list", "应用清单 Excel 文件路径", ""),
-        ("app_map", "应用数据库映射 JSON 文件路径", ""),
-        ("relationship", "表关系 JSON 文件路径（可选，留空跳过）", ""),
-        ("metric", "指标定义 JSON 文件路径（可选，留空跳过）", ""),
-        ("csv_dir", "CSV 输出目录", ""),
-    ]
-
-    for key, prompt, default_val in fields:
-        current = config.get(key, default_val)
-        value = questionary.text(f"{prompt}:", default=str(current)).ask() or str(current)
-        if key in ("relationship", "metric"):
-            config[key] = value if value else None
-        else:
-            config[key] = value
-
-    meta_cfg.save(config)
-    print(f"\n配置已保存到: {meta_cfg.config_path}")
+    std_recommend(
+        output_dir=output_dir,
+        kundb=args.kundb,
+        workspace_uuid=args.workspace_uuid,
+        app_map=args.app_map,
+        csv_dir=csv_dir,
+    )
 
 
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
-def _register_sync_subparsers(sub_sync: argparse._SubParsersAction) -> None:
-    """注册 sync 子命令的子解析器"""
-
-    # meta sync meta
-    p_meta = sub_sync.add_parser("meta", help="导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）")
-    p_meta.add_argument("--source", choices=["tds", "duckdb", "both"], help="数据来源")
-    p_meta.add_argument("--db", type=str, help="DuckDB 数据库文件路径")
-    p_meta.add_argument("--schemas", type=str, help="要导出的 schema 列表，逗号分隔")
-    p_meta.add_argument("--kundb", type=str, help="TDS 元数据库 URL")
-    p_meta.add_argument("--workspace-uuid", type=str, help="工作区 UUID")
-    p_meta.add_argument("--output", type=str, help="CSV 输出目录")
-    p_meta.set_defaults(func=cmd_sync_meta)
-
-    # meta sync app
-    p_app = sub_sync.add_parser("app", help="导入应用清单（Application 节点 + USE 边）")
-    p_app.add_argument("--app-list", type=str, help="应用清单 Excel 文件路径")
-    p_app.add_argument("--app-map", type=str, help="应用数据库映射 JSON 文件路径")
-    p_app.add_argument("--db-name", type=str, help="单库模式：仅导出指定应用")
-    p_app.add_argument("--output", type=str, help="CSV 输出目录")
-    p_app.set_defaults(func=cmd_sync_app)
-
-    # meta sync rel
-    p_rel = sub_sync.add_parser("rel", help="导入表关系（RELATES_TO 边）")
-    p_rel.add_argument("--file", type=str, help="表关系 JSON 文件路径")
-    p_rel.add_argument("--output", type=str, help="CSV 输出目录")
-    p_rel.set_defaults(func=cmd_sync_rel)
-
-    # meta sync std
-    p_std = sub_sync.add_parser("std", help="导入数据标准（Standard 节点）")
-    p_std.add_argument("--kundb", type=str, help="TDS 元数据库 URL")
-    p_std.add_argument("--workspace-uuid", type=str, help="工作区 UUID")
-    p_std.add_argument("--output", type=str, help="CSV 输出目录")
-    p_std.set_defaults(func=cmd_sync_std)
-
-    # meta sync compliance
-    p_comp = sub_sync.add_parser("compliance", help="从 TDS 导出已有标准-字段关联（COMPLIES_WITH 边）")
-    p_comp.add_argument("--kundb", type=str, help="TDS 元数据库 URL")
-    p_comp.add_argument("--workspace-uuid", type=str, help="工作区 UUID")
-    p_comp.add_argument("--output", type=str, help="CSV 输出目录")
-    p_comp.set_defaults(func=cmd_sync_compliance)
-
-    # meta sync metric
-    p_metric = sub_sync.add_parser("metric", help="导入指标维度定义（Metric, Dimension + 边）")
-    p_metric.add_argument("--file", type=str, help="指标定义 JSON 文件路径")
-    p_metric.add_argument("--output", type=str, help="CSV 输出目录")
-    p_metric.set_defaults(func=cmd_sync_metric)
-
-    # meta sync graph
-    p_graph = sub_sync.add_parser("graph", help="更新图数据库 + 生成 assets")
-    p_graph.add_argument("--output", type=str, help="CSV 输出目录")
-    p_graph.add_argument("--mode", choices=["update", "rebuild"], default="update", help="更新模式")
-    p_graph.set_defaults(func=cmd_sync_graph)
-
-
 def meta():
     """meta 命令入口"""
     parser = argparse.ArgumentParser(
         prog="govio-cli meta",
-        description="知识图库维护 — 元数据同步、推荐、配置",
+        description="知识图库维护 — 元数据导入、推荐、图更新",
     )
     sub = parser.add_subparsers(dest="action", required=True)
 
-    # meta sync
-    p_sync = sub.add_parser("sync", help="完整/增量同步管线：读取元数据源 → 生成 CSV → 更新图数据 → 生成 assets")
-    p_sync.add_argument("--db", type=str, help="DuckDB 数据库文件路径")
-    p_sync.add_argument("--schemas", type=str, help="要导出的 schema 列表，逗号分隔")
-    p_sync.add_argument("--db-name", type=str, help="单库模式：按 app 名导出单个数据库的相关子图")
-    p_sync.add_argument("--output", type=str, help="CSV 输出目录")
-    p_sync.add_argument("--dry-run", action="store_true", help="仅生成 CSV 并输出状态，不更新图数据和生成 assets")
+    # --- 导入子命令 ---
 
-    # sync 子命令（meta sync meta / app / rel / std / compliance / metric / graph）
-    sync_sub = p_sync.add_subparsers(dest="sync_action")
-    _register_sync_subparsers(sync_sub)
+    # TDS 参数复用
+    tds_args = argparse.ArgumentParser(add_help=False)
+    tds_args.add_argument("--kundb", type=str, required=True, help="TDS 元数据库 URL")
+    tds_args.add_argument("--workspace-uuid", type=str, default="82ee37374b314a938bf28170ab4db7cf", help="工作区 UUID")
 
-    # meta recommend
+    # meta meta — 元数据导入
+    p_meta = sub.add_parser("meta", help="导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）")
+    p_meta.add_argument("--source", choices=["tds", "duckdb", "both"], required=True, help="数据来源")
+    p_meta.add_argument("--db", type=str, help="DuckDB 数据库文件路径")
+    p_meta.add_argument("--schemas", type=str, help="要导出的 schema 列表，逗号分隔")
+    p_meta.add_argument("--kundb", type=str, help="TDS 元数据库 URL（TDS/both 模式必须）")
+    p_meta.add_argument("--workspace-uuid", type=str, help="工作区 UUID（TDS/both 模式必须）")
+    p_meta.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
+    p_meta.set_defaults(func=cmd_meta)
+
+    # meta app — 应用清单导入
+    p_app = sub.add_parser("app", help="导入应用清单（Application 节点 + USE 边）")
+    p_app.add_argument("--app-list", type=str, required=True, help="应用清单 Excel 文件路径")
+    p_app.add_argument("--app-map", type=str, required=True, help="应用数据库映射 JSON 文件路径")
+    p_app.add_argument("--db-name", type=str, help="单库模式：仅导出指定应用")
+    p_app.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
+    p_app.set_defaults(func=cmd_app)
+
+    # meta std — 数据标准导入
+    p_std = sub.add_parser("std", help="导入数据标准（Standard 节点）", parents=[tds_args])
+    p_std.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
+    p_std.set_defaults(func=cmd_std)
+
+    # meta compliance — 已有标准关联
+    p_comp = sub.add_parser("compliance", help="从 TDS 导出已有标准-字段关联（COMPLIES_WITH 边）", parents=[tds_args])
+    p_comp.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
+    p_comp.set_defaults(func=cmd_compliance)
+
+    # meta rel — 表关系导入
+    p_rel = sub.add_parser("rel", help="导入表关系（RELATES_TO 边）")
+    p_rel.add_argument("--file", type=str, required=True, help="表关系 JSON 文件路径")
+    p_rel.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
+    p_rel.set_defaults(func=cmd_rel)
+
+    # meta metric — 指标维度导入
+    p_metric = sub.add_parser("metric", help="导入指标维度定义（Metric, Dimension + 边）")
+    p_metric.add_argument("--file", type=str, required=True, help="指标定义 JSON 文件路径")
+    p_metric.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
+    p_metric.set_defaults(func=cmd_metric)
+
+    # --- 图更新 ---
+
+    p_graph = sub.add_parser("graph", help="更新图数据库 + 生成 assets")
+    p_graph.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
+    p_graph.add_argument("--mode", choices=["update", "rebuild", "clear"], default="update", help="更新模式: update=增量, rebuild=重建, clear=清空")
+    p_graph.set_defaults(func=cmd_graph)
+
+    # --- 数据标准推荐 ---
+
     p_recommend = sub.add_parser("recommend", help="数据标准推荐")
-    p_recommend.add_argument("--output-dir", type=str, help="推荐数据标准的输出目录")
-
-    # meta config
-    sub.add_parser("config", help="交互式配置 meta_config.yaml")
+    p_recommend.add_argument("--kundb", type=str, required=True, help="TDS 元数据库 URL")
+    p_recommend.add_argument("--workspace-uuid", type=str, default="82ee37374b314a938bf28170ab4db7cf", help="工作区 UUID")
+    p_recommend.add_argument("--app-map", type=str, required=True, help="应用数据库映射 JSON 文件路径")
+    p_recommend.add_argument("--csv-dir", type=str, help="已导入的 CSV 目录（默认同 --output-dir）")
+    p_recommend.add_argument("--output-dir", type=str, help="推荐结果输出目录（默认 ./output）")
+    p_recommend.set_defaults(func=cmd_recommend)
 
     args = parser.parse_args(sys.argv[1:])
-
-    match args.action:
-        case "sync":
-            if hasattr(args, "sync_action") and args.sync_action:
-                # 子命令模式：meta sync meta / app / rel / std / compliance / metric / graph
-                args.func(args)
-            else:
-                # 完整管线模式：meta sync（向后兼容）
-                cmd_sync(args)
-        case "recommend":
-            cmd_recommend(args)
-        case "config":
-            cmd_config(args)
+    args.func(args)
 
 
 if __name__ == "__main__":

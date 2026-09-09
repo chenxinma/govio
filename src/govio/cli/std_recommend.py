@@ -3,44 +3,44 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import ConfigManager
 from ..metadata.utility import data_standard_recommend
 
 
-def std_recommend(output_dir:Path):
-    """数据标准推荐主函数"""
-    config_manager = ConfigManager()
+def std_recommend(
+    output_dir: Path,
+    kundb: str,
+    workspace_uuid: str,
+    app_map: str,
+    csv_dir: Path,
+):
+    """数据标准推荐主函数
 
-    if not config_manager.exists():
-        print("❌ 配置文件不存在，请先运行 govio onboard 进行配置")
+    Args:
+        output_dir: 推荐结果输出目录
+        kundb: TDS 元数据库 URL
+        workspace_uuid: 工作区 UUID
+        app_map: 应用数据库映射 JSON 文件路径
+        csv_dir: 已导入的 CSV 目录
+    """
+    if not kundb:
+        print("❌ 需要指定 --kundb", file=sys.stderr)
         sys.exit(1)
 
-    config = config_manager.load()
-
-    metadata = config.get("metadata", {})
-    kundb = metadata.get("kundb", "")
-    workspace_uuid = metadata.get("workspace_uuid", "")
-    app_map = metadata.get("app_map", "")
-    csv_dir = metadata.get("csv_dir", "./")
-
-    if not all([kundb, workspace_uuid, app_map, csv_dir]):
-        print("❌ 配置缺少必要字段，请检查 kundb, workspace_uuid, app_map, csv_dir")
+    if not workspace_uuid:
+        print("❌ 需要指定 --workspace-uuid", file=sys.stderr)
         sys.exit(1)
 
-    csv_dir_path = Path(csv_dir)
-    output_path = output_dir
     app_map_path = Path(app_map)
-
-    if not csv_dir_path.exists():
-        print(f"❌ CSV 目录不存在: {csv_dir_path}")
-        sys.exit(1)
-
     if not app_map_path.exists():
-        print(f"❌ 应用映射文件不存在: {app_map_path}")
+        print(f"❌ 应用映射文件不存在: {app_map_path}", file=sys.stderr)
         sys.exit(1)
 
-    if not output_path.exists():
-        output_path.mkdir(parents=True, exist_ok=True)
+    if not csv_dir.exists():
+        print(f"❌ CSV 目录不存在: {csv_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     df_app_db_map = pd.read_json(app_map)
 
@@ -53,16 +53,16 @@ def std_recommend(output_dir:Path):
 
     try:
         data_standard_recommend(
-            output=output_path,
+            output=output_dir,
             db=kundb,
             workspace_uuid=workspace_uuid,
             df_app_db_map=df_app_db_map,
         )
         print("\n✓ 推荐完成！")
-        if (output_path / "COMPLIES_WITH.csv").exists():
-            print(f"✓ 关系文件已生成: {output_path / 'COMPLIES_WITH.csv'}")
+        if (output_dir / "COMPLIES_WITH.csv").exists():
+            print(f"✓ 关系文件已生成: {output_dir / 'COMPLIES_WITH.csv'}")
     except Exception as e:
-        print(f"\n❌ 推荐失败: {e}")
+        print(f"\n❌ 推荐失败: {e}", file=sys.stderr)
         sys.exit(1)
 
 
