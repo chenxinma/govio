@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 ROOT = Path(__file__).resolve().parent
 SKILLS_DIR = ROOT / "skills"
 EXCLUDE_DIR = SKILLS_DIR / "govio" / "assets"
-OUTPUT = ROOT / "dist" / "govio-skill.zip"
+OUTPUT = ROOT / "dist" / "govio-skills.zip"
 
 
 def main() -> None:
