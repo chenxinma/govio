@@ -121,8 +121,23 @@ Recommended order: `meta` → `app` → `std` → `compliance` → `rel` → `me
 
 The `meta` subcommand supports three data source modes (`--source`):
 - **tds**: Read from metadata database only; `--kundb`, `--workspace-uuid`, `--schemas` are required
-- **duckdb**: Read from local DuckDB file only (requires `--db`; skips Standard data)
+- **duckdb**: Read from local DuckDB file only; `--db`, `--schemas` are required (skips Standard data)
 - **both**: Merge TDS + DuckDB (DuckDB wins on conflict); TDS-side params same as tds mode
+
+`--schemas` is mandatory for every source mode. Omitting it used to export zero tables silently, because `DuckDBLoader` filters with `schema_name IN (SELECT unnest(?))`. DuckDB files normally hold a single user schema named `main`.
+
+### Empty-Result Guard
+
+`step_meta_export` aborts before writing any CSV when no table is found (`df_tables.empty`):
+
+```python
+_describe_duckdb_schemas(db_path) -> str   # read-only "main(5 张表)、..." hint for the error message
+```
+
+- Returns `None`, `cmd_meta` exits with code 1
+- Error text: `❌ 未发现任何表: schema [...] 在元数据源中不存在或为空（未写入任何 CSV）`
+- For `duckdb` / `both`, the message appends the importable schemas of the file via `DuckDBLoader.list_schemas()`, so callers never need to connect to the source database themselves
+- Renaming a schema during import is not supported; node names always come from `full_table_name = <schema>.<table>`
 
 ### Step Functions
 
@@ -153,6 +168,8 @@ _update_graph(output, graph_mode) -> bool   # "update" (incremental) or "rebuild
 _clear_graph() -> bool                       # Clear graph database
 _generate_assets() -> None                   # schema.md, names, metrics_index.md
 ```
+
+`_generate_assets()` writes to `SKILLS_ASSETS_DIR = Path("skills/govio/assets")`, resolved against the current working directory, and prints the **absolute** path plus a merge hint (`如与应用读取的 assets 目录不一致，请自行合并`). The output directory is not configurable yet — see `docs/roadmap.md`.
 
 Graph backend config is read from `~/.govio/config.yaml` (`graph` section). Supports all three backends:
 - FalkorDB: upsert/import/delete

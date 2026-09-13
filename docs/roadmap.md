@@ -25,9 +25,8 @@
 
 **已完成：**
 - [x] `govio-cli onboard` 初始化向导（图后端选择 + 数据源配置）
-- [x] `govio-cli meta sync` 完整同步管线（元数据 → CSV → 图库 → assets）
-- [x] `govio-cli meta sync` 分步子命令（`meta`/`app`/`rel`/`std`/`compliance`/`metric`/`graph`）
-- [x] `govio-cli meta config` 交互式元数据配置
+- [x] `govio-cli meta` 完整同步管线（元数据 → CSV → 图库 → assets）
+- [x] `govio-cli meta` 分步子命令（`meta`/`app`/`rel`/`std`/`compliance`/`metric`/`graph`），已重构为 CLI-only 独立子命令（原 `meta sync` / `meta config` 交互式入口已移除）
 - [x] `govio-cli meta recommend` 数据标准推荐
 - [x] `govio-cli query` 知识图谱查询（Cypher / Python 自适应）
 - [x] `govio-cli backend` 查看当前图后端
@@ -101,6 +100,17 @@
 - [ ] 时间趋势分析（"近 6 个月账单收入趋势"）
 - [ ] 维度下钻（"按事业部拆分账单收入"）
 - [ ] 异常标记（"哪些维度值的指标偏离均值超过 2 倍标准差"）
+
+### CLI 工程化待办
+**目标：** 消除元数据导入流程中的现场变通（目录联接、临时库、手工合并 assets）。
+
+- [ ] **assets 输出目录可配置**：当前 `meta graph` 固定写到 CWD 相对的 `skills/govio/assets`（`cli/meta.py` 的 `SKILLS_ASSETS_DIR`），命令结束会打印绝对路径。在 govio-map 等应用场景下，真实读取目录是 `.pi/skills/govio/assets`，两者不一致时只能由用户自行合并（曾出现用 `mklink /J` 建目录联接的变通做法，现已在 `skills/govio-meta` 中明令禁止）。候选方案待讨论：`meta graph --assets-dir <path>` / `~/.govio/config.yaml` 增加 `assets_dir` / 由 `onboard` 记录应用目录并自动对齐
+- [ ] **多份 assets 副本的归并策略**：仓库 `skills/govio/assets` 与应用侧 `.pi/skills/govio/assets` 是两份独立副本，谁为准、如何同步尚未定义
+
+已评估、暂不实现（如需重启请先讨论）：
+
+- `meta meta --schema-alias main=sales`（改名导入）：0.5.5 要求 `--schemas` 写源库真实 schema，命名不一致时告知并停止；改名会牵动 node_id 稳定性与既有图谱迁移
+- `meta meta --dry-run`（只读探查规模）：目前由空结果守卫在报错时列出可用 schema 代替
 
 ---
 

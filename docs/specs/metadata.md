@@ -63,7 +63,12 @@ DuckDBLoader(db_path: str, schemas: list[str])
 ```python
 load_tables() -> pd.DataFrame    # Queries duckdb_tables() system table
 load_columns() -> pd.DataFrame   # Queries information_schema.columns + duckdb_columns()
+list_schemas() -> list[tuple[str, int]]  # Read-only (schema 名, 表数量)，排除内部 schema
 ```
+
+`list_schemas()` 排除 DuckDB 内部 schema（`information_schema` / `pg_catalog` 以及 `system` / `temp` 目录），仅用于 `--schemas` 写错时由 CLI 给出可用 schema 提示。
+
+构造参数 `schemas` 中出现不存在的 schema 时，`load_tables()` / `load_columns()` 返回空 DataFrame（不报错）；空结果由 `step_meta_export` 的守卫转为失败退出。
 
 ---
 

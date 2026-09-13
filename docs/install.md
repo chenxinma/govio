@@ -60,32 +60,34 @@ Chocolate 是内置的示例数据集，包含 DuckDB 数据库、表间关系�
 
 ### 2. 导入元数据
 
-进入解压目录，依次执行以下命令：
+进入解压目录，依次执行以下命令（各子命令独立运行，输入全部通过参数显式传入）：
 
 ```bash
 cd /path/to/chocolate
 
-# 读取 DuckDB 中的表和字段元数据
-govio-cli meta sync meta
+# 读取 DuckDB 中的表和字段元数据（--schemas 必填，写源库真实 schema 名）
+govio-cli meta meta --source duckdb --db ./chocolate.db --schemas chocolate --output ./output
 
 # 读取表间关系
-govio-cli meta sync rel
+govio-cli meta rel --file ./chocolate_relationships.json --output ./output
 
 # 读取指标和维度定义
-govio-cli meta sync metric
+govio-cli meta metric --file ./chocolate_metrics.json --output ./output
 ```
 
-每条命令会将结果写入当前目录下的 CSV 文件（默认 `./output`）。
+每条命令会将结果写入 `--output` 目录下的 CSV 文件（默认 `./output`）。该目录是子命令之间唯一的共享状态：**多次导入请复用同一目录**，已有内容会增量合并（幂等）。
+
+> schema 名写错或源库无表时，命令会失败退出（不写任何 CSV），并在错误信息中列出该库可导入的 schema。
 
 ### 3. 构建知识图谱
 
 将 CSV 数据写入图数据库并生成 assets：
 
 ```bash
-govio-cli meta sync graph --mode rebuild
+govio-cli meta graph --output ./output --mode rebuild
 ```
 
-成功后会在当前目录生成 `skills/govio/assets/`，包含：
+成功后会在当前目录生成 `skills/govio/assets/`（命令结束会打印其**绝对路径**），包含：
 
 ```
 skills/govio/assets/
@@ -112,7 +114,7 @@ Govio 通过 Skills 为 AI Agent（如 Codex、Claude Code 等）提供数据治
 
 ### 2. 复制 Assets
 
-将上一步 `meta sync graph` 生成的 assets 复制到 skills 目录中：
+将上一步 `meta graph` 生成的 assets 复制到 skills 目录中（两者路径不一致时以命令打印的绝对路径为准）：
 
 ```bash
 # 项目级

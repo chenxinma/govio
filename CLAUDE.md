@@ -26,10 +26,9 @@ uv run ruff format src/ tests/
 govio-cli onboard           # Interactive setup wizard
 govio-cli backend            # Show current graph backend
 govio-cli query -c "..."     # Knowledge graph query
-govio-cli meta sync          # Full metadata sync pipeline
-govio-cli meta sync meta     # Step: import metadata
+govio-cli meta meta --source duckdb --db x.duckdb --schemas main --output ./output   # 导入元数据 -> CSV
+govio-cli meta graph --output ./output --mode update  # CSV -> 图库 + assets
 govio-cli meta recommend     # Data standard recommendation
-govio-cli meta config        # Manage meta config
 govio-cli observe info       # Show datasources + DataFrames
 govio-cli observe load ...   # Load DataFrame from DB or memory
 govio-cli observe compare ... # Compare two DataFrames

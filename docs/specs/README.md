@@ -27,10 +27,11 @@ Govio ships with AI assistant skills under `skills/`:
 | Skill | Description |
 |---|---|
 | `govio` | 主控 Skill，需求识别与路由入口 |
-| `govio-meta` | 知识图谱维护（同步元数据、推荐标准、管理配置） |
+| `govio-meta` | 知识图谱维护（导入元数据/应用/标准/关系/指标、图更新、推荐标准） |
 | `govio-query` | 元数据/指标查询（Cypher/Python 查询、SQL 组装） |
 | `govio-observe` | 数据探查与比对（加载、探索、比对、图表） |
 | `govio-eda` | EDA 探索性数据分析（4 阶段探查流程） |
+| `govio-reconcile` | 多源数据对账（实体集合 + 关联链 + 筛选口径，5 阶段流程） |
 
 ## Dependencies
 
