@@ -17,6 +17,34 @@ class DuckDBLoader(MetadataLoader):
         self.db_path = db_path
         self.schemas = schemas
 
+    def list_schemas(self) -> list[tuple[str, int]]:
+        """列出文件中可导入的 schema 及其表数量（只读）。
+
+        排除 DuckDB 内部 schema（information_schema / pg_catalog 以及
+        system / temp 目录），用于 ``--schemas`` 写错时的错误提示。
+
+        Returns:
+            list[tuple[str, int]]: (schema 名, 表数量)，按 schema 名排序
+        """
+        conn = duckdb.connect(self.db_path, read_only=True)
+        try:
+            rows = conn.execute(
+                """
+                SELECT s.schema_name, COUNT(t.table_name) AS table_count
+                FROM duckdb_schemas() s
+                LEFT JOIN duckdb_tables() t
+                    ON t.database_name = s.database_name
+                    AND t.schema_name = s.schema_name
+                WHERE s.database_name NOT IN ('system', 'temp')
+                    AND s.schema_name NOT IN ('information_schema', 'pg_catalog')
+                GROUP BY 1
+                ORDER BY 1
+                """,
+            ).fetchall()
+        finally:
+            conn.close()
+        return [(str(name), int(count)) for name, count in rows]
+
     def load_tables(self) -> pd.DataFrame:
         conn = duckdb.connect(self.db_path, read_only=True)
         try:

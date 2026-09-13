@@ -86,3 +86,24 @@ def test_duckdb_loader_column_comments(sample_duckdb):
     df = loader.load_columns()
     id_row = df[df["column_name"] == "id"].iloc[0]
     assert id_row["name"] == "用户ID"
+
+
+def test_duckdb_loader_list_schemas(sample_duckdb):
+    """list_schemas 返回用户 schema 及表数量，排除 DuckDB 内部 schema。"""
+    schemas = dict(DuckDBLoader(sample_duckdb, []).list_schemas())
+    assert schemas["test_schema"] == 2
+    assert schemas.get("main", 0) == 0
+    assert "information_schema" not in schemas
+    assert "pg_catalog" not in schemas
+
+
+def test_duckdb_loader_list_schemas_ignores_schemas_arg(sample_duckdb):
+    """list_schemas 列出全部可导入 schema，不受构造参数限制。"""
+    assert dict(DuckDBLoader(sample_duckdb, ["nope"]).list_schemas())["test_schema"] == 2
+
+
+def test_duckdb_loader_unknown_schema_returns_empty(sample_duckdb):
+    """未知 schema 返回空结果，由 CLI 层守卫负责报错。"""
+    loader = DuckDBLoader(sample_duckdb, ["nope"])
+    assert loader.load_tables().empty
+    assert loader.load_columns().empty

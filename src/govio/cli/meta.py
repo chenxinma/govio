@@ -222,13 +222,15 @@ def _clear_graph() -> bool:
 def _generate_assets() -> None:
     """生成 schema.md、name 索引、metrics_index.md 等 assets。"""
     print("\n正在生成 assets...")
+    assets_dir = SKILLS_ASSETS_DIR.resolve()
     try:
         graph_config = ConfigManager().load()
         graph = graph_config.get("graph") or {}
         graph_obj = GraphFactory.create(graph)
-        generator = AssetsGenerator(graph_obj, SKILLS_ASSETS_DIR)
+        generator = AssetsGenerator(graph_obj, assets_dir)
         generator.generate_all()
-        print(f"✓ Assets 已生成到: {SKILLS_ASSETS_DIR}")
+        print(f"✓ Assets 已生成到: {assets_dir}")
+        print("  （路径由当前工作目录的 skills/govio/assets 解析而来；如与应用读取的 assets 目录不一致，请自行合并）")
     except Exception as e:
         print(f"❌ 生成 assets 失败: {e}")
 
@@ -236,6 +238,17 @@ def _generate_assets() -> None:
 # ---------------------------------------------------------------------------
 # Step functions — 可独立调用的管线步骤
 # ---------------------------------------------------------------------------
+
+def _describe_duckdb_schemas(db_path: str) -> str:
+    """只读列出 DuckDB 文件中可导入的 schema，用于空结果时的错误提示。"""
+    try:
+        pairs = DuckDBLoader(db_path, []).list_schemas()
+    except Exception as e:
+        return f"（读取 schema 列表失败: {e}）"
+    if not pairs:
+        return "（该文件没有可导入的 schema）"
+    return "、".join(f"{name}({count} 张表)" for name, count in pairs)
+
 
 def step_meta_export(
     output: Path,
@@ -288,6 +301,16 @@ def step_meta_export(
         df_tables = df_tables.drop_duplicates(subset=["full_table_name"], keep="last").reset_index(drop=True)
         df_columns = pd.concat([tds_columns, duck_columns], ignore_index=True)
         df_columns = df_columns.drop_duplicates(subset=["column"], keep="last").reset_index(drop=True)
+
+    # 空结果守卫：schema 写错或源库为空时直接失败，不写任何 CSV
+    if df_tables.empty:
+        schema_desc = ", ".join(schemas) if schemas else "（未指定）"
+        msg = f"❌ 未发现任何表: schema [{schema_desc}] 在元数据源中不存在或为空（未写入任何 CSV）"
+        if source in ("duckdb", "both") and db_path:
+            msg += f"\n   {db_path} 可导入的 schema: {_describe_duckdb_schemas(db_path)}"
+        msg += "\n   请确认 --schemas 后重试"
+        print(msg, file=sys.stderr)
+        return None
 
     # Assign IDs
     df_tables = df_tables.reset_index(drop=True)
@@ -609,10 +632,19 @@ def cmd_meta(args: argparse.Namespace) -> None:
     """meta meta — 导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）"""
     source = args.source
     db_path = args.db or ""
-    schemas = args.schemas.split(",") if args.schemas else None
+    schemas = [s.strip() for s in args.schemas.split(",")] if args.schemas else []
+    schemas = [s for s in schemas if s]
     output = Path(args.output) if args.output else Path("./output")
     kundb = args.kundb or ""
     workspace_uuid = args.workspace_uuid or ""
+
+    # --schemas 对所有来源均必填：省略会导致 DuckDB 模式静默导出 0 张表
+    if not schemas:
+        print(
+            "❌ 需要指定 --schemas（源库 schema 名，逗号分隔；DuckDB 文件默认 schema 为 main）",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # TDS/both 模式校验必填参数
     if source in ("tds", "both"):
@@ -621,8 +653,6 @@ def cmd_meta(args: argparse.Namespace) -> None:
             missing.append("--kundb")
         if not workspace_uuid:
             missing.append("--workspace-uuid")
-        if not schemas:
-            missing.append("--schemas")
         if missing:
             print(f"❌ TDS 模式需要指定: {', '.join(missing)}", file=sys.stderr)
             sys.exit(1)
@@ -757,7 +787,7 @@ def meta():
     p_meta = sub.add_parser("meta", help="导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）")
     p_meta.add_argument("--source", choices=["tds", "duckdb", "both"], required=True, help="数据来源")
     p_meta.add_argument("--db", type=str, help="DuckDB 数据库文件路径")
-    p_meta.add_argument("--schemas", type=str, help="要导出的 schema 列表，逗号分隔")
+    p_meta.add_argument("--schemas", type=str, help="要导出的 schema 列表，逗号分隔（必填；DuckDB 文件默认 schema 为 main）")
     p_meta.add_argument("--kundb", type=str, help="TDS 元数据库 URL（TDS/both 模式必须）")
     p_meta.add_argument("--workspace-uuid", type=str, help="工作区 UUID（TDS/both 模式必须）")
     p_meta.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
