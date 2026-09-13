@@ -236,3 +236,162 @@ class TestPromptConnectArgs:
             mock_q.text.return_value.ask.side_effect = ["ratio=0.5", ""]
             result = prompt_connect_args()
             assert result == {"ratio": 0.5}
+
+
+class TestCliDatasource:
+    """测试非交互式数据源管理（onboard --add-datasource 等）"""
+
+    @pytest.fixture
+    def cm(self, monkeypatch, tmp_path):
+        """隔离配置文件与加密密钥"""
+        from govio.cli.config import ConfigManager
+        import govio.cli.onboard as onboard_module
+
+        config_path = tmp_path / ".govio" / "config.yaml"
+        monkeypatch.setattr(
+            onboard_module, "ConfigManager", lambda: ConfigManager(config_path)
+        )
+        monkeypatch.setattr(
+            onboard_module, "encrypt_value", lambda p: f"enc:{p}"
+        )
+        return ConfigManager(config_path)
+
+    def test_add_datasource_basic(self, cm):
+        """添加含密码 URL 的数据源，密码脱敏加密存储"""
+        from govio.cli.onboard import add_datasource
+
+        entry = add_datasource(
+            "prod",
+            "mysql+pymysql://user:pw@host:3306/db",
+            connect_args={"charset": "utf8mb4"},
+        )
+        assert entry["url"] == "mysql+pymysql://user:***@host:3306/db"
+        assert entry["encrypted_password"] == "enc:pw"
+        assert entry["connect_args"] == {"charset": "utf8mb4"}
+
+        saved = cm.load()
+        assert saved["datasources"]["prod"]["url"] == "mysql+pymysql://user:***@host:3306/db"
+
+    def test_add_datasource_keeps_existing_graph(self, cm):
+        """已有图后端配置时添加数据源不会破坏原配置"""
+        from govio.cli.onboard import add_datasource
+
+        cm.save({"graph": {"backend": "networkx", "networkx": {"gml_path": "/tmp/x.gml"}}})
+        add_datasource("ds1", "duckdb:///tmp/data.duckdb")
+
+        saved = cm.load()
+        assert saved["graph"]["backend"] == "networkx"
+        assert saved["datasources"]["ds1"]["url"] == "duckdb:///tmp/data.duckdb"
+        assert saved["datasources"]["ds1"]["connect_args"] == {}
+
+    def test_add_datasource_password_separate(self, cm):
+        """--password 单独提供时嵌入 URL 后加密"""
+        from govio.cli.onboard import add_datasource
+
+        entry = add_datasource(
+            "pg", "postgresql://user@host:5432/db", password="s3cret"
+        )
+        assert entry["url"] == "postgresql://user:***@host:5432/db"
+        assert entry["encrypted_password"] == "enc:s3cret"
+
+    def test_add_datasource_password_conflict(self, cm):
+        """URL 已含密码时再传 password 报错"""
+        from govio.cli.onboard import add_datasource
+
+        with pytest.raises(ValueError, match="URL 中已包含密码"):
+            add_datasource("pg", "postgresql://user:pw@host/db", password="other")
+
+    def test_add_datasource_invalid_url(self, cm):
+        """缺少协议前缀的 URL 报错"""
+        from govio.cli.onboard import add_datasource
+
+        with pytest.raises(ValueError, match="URL 格式无效"):
+            add_datasource("bad", "host:3306/db")
+
+    def test_add_datasource_duplicate_requires_overwrite(self, cm):
+        """同名数据源默认拒绝，--overwrite 才覆盖"""
+        from govio.cli.onboard import add_datasource
+
+        add_datasource("prod", "mysql+pymysql://u:p1@h1/db")
+        with pytest.raises(ValueError, match="已存在"):
+            add_datasource("prod", "mysql+pymysql://u:p2@h2/db")
+
+        add_datasource(
+            "prod", "mysql+pymysql://u:p2@h2/db", overwrite=True
+        )
+        assert cm.load()["datasources"]["prod"]["url"] == "mysql+pymysql://u:***@h2/db"
+
+    def test_remove_datasource(self, cm):
+        """删除数据源，最后一个删除后移除 datasources 键"""
+        from govio.cli.onboard import add_datasource, remove_datasource
+
+        add_datasource("a", "duckdb:///a.duckdb")
+        add_datasource("b", "duckdb:///b.duckdb")
+        remove_datasource("a")
+        assert "a" not in cm.load()["datasources"]
+
+        remove_datasource("b")
+        assert "datasources" not in cm.load()
+
+        with pytest.raises(ValueError, match="不存在"):
+            remove_datasource("a")
+
+    def test_parse_cli_connect_args(self):
+        """命令行连接参数解析与类型转换"""
+        from govio.cli.onboard import parse_cli_connect_args
+
+        result = parse_cli_connect_args(["ssl=true", "timeout=30", "ratio=0.5", "name=x"])
+        assert result == {"ssl": True, "timeout": 30, "ratio": 0.5, "name": "x"}
+
+        assert parse_cli_connect_args(None) == {}
+
+        with pytest.raises(ValueError, match="格式错误"):
+            parse_cli_connect_args(["invalid"])
+        with pytest.raises(ValueError, match="格式错误"):
+            parse_cli_connect_args(["=value"])
+
+    def test_cli_add_datasource_end_to_end(self, cm, capsys):
+        """CLI 入口：无配置文件时自动创建并提示图后端未配置"""
+        from govio.cli.onboard import onboard_datasource_cli
+
+        onboard_datasource_cli(
+            add_name="prod",
+            url="mysql+pymysql://user:pw@host:3306/db",
+            connect_args=["charset=utf8mb4"],
+        )
+        saved = cm.load()
+        assert saved["datasources"]["prod"]["encrypted_password"] == "enc:pw"
+        out = capsys.readouterr().out
+        assert "已添加数据源: prod" in out
+        assert "尚未配置图后端" in out
+
+    def test_cli_add_without_url_exits(self, cm, capsys):
+        """CLI 入口：--add-datasource 缺少 --url 时退出码 1"""
+        from govio.cli.onboard import onboard_datasource_cli
+
+        with pytest.raises(SystemExit) as excinfo:
+            onboard_datasource_cli(add_name="prod")
+        assert excinfo.value.code == 1
+        assert "--url" in capsys.readouterr().err
+
+    def test_cli_add_and_remove_conflict_exits(self, cm):
+        """CLI 入口：添加与删除互斥"""
+        from govio.cli.onboard import onboard_datasource_cli
+
+        with pytest.raises(SystemExit) as excinfo:
+            onboard_datasource_cli(add_name="a", remove_name="b")
+        assert excinfo.value.code == 1
+
+    def test_cli_overwrite_duplicate_exits_without_flag(self, cm):
+        """CLI 入口：同名未加 --overwrite 时退出码 1"""
+        from govio.cli.onboard import onboard_datasource_cli
+
+        onboard_datasource_cli(add_name="prod", url="duckdb:///a.duckdb")
+        with pytest.raises(SystemExit) as excinfo:
+            onboard_datasource_cli(add_name="prod", url="duckdb:///b.duckdb")
+        assert excinfo.value.code == 1
+
+        onboard_datasource_cli(
+            add_name="prod", url="duckdb:///b.duckdb", overwrite=True
+        )
+        assert cm.load()["datasources"]["prod"]["url"] == "duckdb:///b.duckdb"

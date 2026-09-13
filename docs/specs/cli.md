@@ -8,7 +8,7 @@ Uses `argparse` with subparsers:
 
 | Subcommand | Description |
 |---|---|
-| `onboard` | Interactive setup wizard |
+| `onboard` | Interactive setup wizard; non-interactive datasource add/remove via flags |
 | `backend` | Display current graph backend type |
 | `query -c QUERY` | Knowledge graph query (Cypher or Python) |
 | `meta` | Knowledge graph maintenance command group |
@@ -52,29 +52,49 @@ validate(config: dict[str, Any]) -> bool  # Raises ValueError on issues
 
 ## onboard.py
 
-Interactive setup wizard. Three modes:
+Interactive setup wizard + non-interactive datasource management.
 
-1. `--new-networkx`: skip CSV generation, generate GML from existing CSV
-2. `--new-falkordb`: skip CSV generation, import CSV to FalkorDB
-3. Full interactive: prompts for CSV config, backend choice, datasource config
+### Interactive wizard behavior
+
+- No config: prompts for graph backend (networkx/falkordb/ladybug), then datasource add/delete/edit loop
+- Existing config with graph backend: offers "skip backend, edit datasources only"; otherwise asks before overwriting
+- Datasources-only config (created via `--add-datasource`): configures graph backend while preserving existing datasources
+
+### Non-interactive datasource flags
+
+| Flag | Description |
+|---|---|
+| `--add-datasource NAME` | Add datasource (requires `--url`) |
+| `--remove-datasource NAME` | Delete datasource |
+| `--url URL` | Connection URL, e.g. `mysql+pymysql://user:pass@host:3306/db` (password auto-masked + Fernet-encrypted) |
+| `--password P` | Password provided separately, injected into a password-less `scheme://user@host` URL |
+| `--connect-args KEY=VALUE` | Repeatable extra connection args (values coerced to bool/int/float) |
+| `--overwrite` | Replace existing datasource with the same name |
+
+Errors exit with code 1; adding a datasource never touches other config sections.
+
+```bash
+govio-cli onboard --add-datasource prod --url "mysql+pymysql://user:pass@host:3306/db" --connect-args charset=utf8mb4 --connect-args timeout=30
+govio-cli onboard --add-datasource staging --url "postgresql://user@host:5432/db" --password secret
+govio-cli onboard --remove-datasource staging
+```
 
 ### Key Functions
 
 ```python
-onboard(new_falkordb=None, new_networkx=None) -> None
-validate_csv_directory(csv_dir: Path) -> bool       # Checks PhysicalTable.csv exists
-prompt_csv_config(config_manager) -> dict            # Interactive CSV config
-generate_csv(config: dict) -> None                   # Calls make_csv()
-prompt_backend_choice() -> str                       # "networkx", "falkordb", or "ladybug"
-prompt_networkx_config() -> dict                     # CSV dir + GML generation
-prompt_falkordb_config(csv_dir: Path) -> dict        # Host, port, graph, import
-delete_falkordb_graph(host, port, graph_name) -> None
-import_csv_to_falkordb(csv_dir, host, port, graph_name) -> None
+validate_csv_directory(csv_dir: Path) -> bool        # Checks PhysicalTable.csv exists
+_coerce_scalar(value) -> Any                         # str -> bool/int/float/value
 prompt_connect_args(existing=None) -> dict           # Interactive key=value input
+parse_cli_connect_args(pairs) -> dict                # Parse CLI key=value pairs (raises ValueError)
+_encrypt_url_password(url) -> dict                   # {url: masked, encrypted_password?}
+_attach_password(url, password) -> str               # Inject password into password-less URL (raises ValueError)
+add_datasource(name, url, connect_args=None, password=None, overwrite=False, config_manager=None) -> dict
+remove_datasource(name, config_manager=None) -> None
+prompt_graph_config() -> dict                        # Interactive graph backend section
 prompt_datasource_config(existing=None) -> dict | None
+onboard_datasource_cli(add_name=None, remove_name=None, url=None, password=None, connect_args=None, overwrite=False) -> None
+onboard() -> None                                    # Interactive wizard entry
 ```
-
-`import_csv_to_falkordb` handles all node files (PhysicalTable, Col, Application, Standard, Metric, Dimension) and relation files (HAS_COLUMN, USE, RELATES_TO, USES_TABLE, REFERS_COLUMN, DERIVED_FROM, DIMENSION_USED, SUPERSEDES).
 
 ---
 

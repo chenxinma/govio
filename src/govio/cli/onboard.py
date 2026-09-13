@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -71,19 +72,51 @@ def prompt_connect_args(existing: dict[str, Any] | None = None) -> dict[str, Any
         if not key:
             print("  格式错误，key 不能为空")
             continue
-        value = value.strip()
-        if value.lower() in ("true", "false"):
-            value = value.lower() == "true"
-        else:
-            try:
-                value = int(value)
-            except ValueError:
-                try:
-                    value = float(value)
-                except ValueError:
-                    pass
-        connect_args[key] = value
+        connect_args[key] = _coerce_scalar(value.strip())
 
+    return connect_args
+
+
+def _coerce_scalar(value: str) -> Any:
+    """将字符串值转换为 bool/int/float，失败则保留原字符串
+
+    Args:
+        value: 原始字符串
+
+    Returns:
+        Any: 转换后的值
+    """
+    if value.lower() in ("true", "false"):
+        return value.lower() == "true"
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+
+def parse_cli_connect_args(pairs: list[str] | None) -> dict[str, Any]:
+    """解析命令行 --connect-args key=value 参数
+
+    Args:
+        pairs: key=value 字符串列表
+
+    Returns:
+        dict: 连接参数字典（值自动转换 bool/int/float）
+
+    Raises:
+        ValueError: 格式错误
+    """
+    connect_args: dict[str, Any] = {}
+    for pair in pairs or []:
+        key, sep, value = pair.partition("=")
+        if not sep or not key.strip():
+            raise ValueError(f"连接参数格式错误: {pair}（应为 key=value）")
+        connect_args[key.strip()] = _coerce_scalar(value.strip())
     return connect_args
 
 
@@ -101,6 +134,169 @@ def _encrypt_url_password(url: str) -> dict[str, Any]:
     if password:
         result["encrypted_password"] = encrypt_value(password)
     return result
+
+
+def _attach_password(url: str, password: str) -> str:
+    """将独立传入的密码嵌入无密码的 URL（scheme://user@host 形式）
+
+    Args:
+        url: 不含密码的连接 URL
+        password: 数据源密码
+
+    Returns:
+        str: 嵌入密码后的完整 URL
+
+    Raises:
+        ValueError: URL 中已含密码或格式不支持嵌入
+    """
+    _, existing = parse_password_from_url(url)
+    if existing:
+        raise ValueError("URL 中已包含密码，请勿同时使用 --password")
+
+    scheme_sep = url.find("://")
+    if scheme_sep == -1:
+        raise ValueError(f"URL 格式无效: {url}（需包含协议前缀，如 mysql+pymysql://）")
+    at_pos = url.find("@", scheme_sep + 3)
+    if at_pos == -1:
+        raise ValueError(f"URL 不含用户信息(@)，无法通过 --password 嵌入密码: {url}")
+
+    user_part = url[scheme_sep + 3 : at_pos]
+    if ":" in user_part:
+        # user: 空密码占位形式，直接在冒号后补密码
+        return f"{url[: scheme_sep + 3]}{user_part}{password}{url[at_pos:]}"
+    return f"{url[: scheme_sep + 3]}{user_part}:{password}{url[at_pos:]}"
+
+
+def add_datasource(
+    name: str,
+    url: str,
+    connect_args: dict[str, Any] | None = None,
+    password: str | None = None,
+    overwrite: bool = False,
+    config_manager: ConfigManager | None = None,
+) -> dict[str, Any]:
+    """非交互式添加/覆盖数据源并保存配置
+
+    Args:
+        name: 数据源名称
+        url: 连接 URL（可含密码，存储时自动脱敏并加密）
+        connect_args: 连接参数
+        password: 独立传入的密码（URL 不含密码时嵌入）
+        overwrite: 是否允许覆盖同名数据源
+        config_manager: 配置管理器（默认使用全局配置）
+
+    Returns:
+        dict: 保存的数据源条目
+
+    Raises:
+        ValueError: 参数冲突或同名数据源已存在且未指定 overwrite
+    """
+    name = name.strip()
+    if not name:
+        raise ValueError("数据源名称不能为空")
+    if "://" not in url:
+        raise ValueError(f"URL 格式无效: {url}（需包含协议前缀，如 mysql+pymysql://）")
+
+    if password:
+        url = _attach_password(url, password)
+
+    config_manager = config_manager or ConfigManager()
+    config = config_manager.load() if config_manager.exists() else {}
+    datasources: dict[str, Any] = dict(config.get("datasources") or {})
+    if name in datasources and not overwrite:
+        raise ValueError(f"数据源 '{name}' 已存在，使用 --overwrite 覆盖")
+
+    ds_entry = _encrypt_url_password(url)
+    ds_entry["connect_args"] = dict(connect_args or {})
+    datasources[name] = ds_entry
+    config["datasources"] = datasources
+    config_manager.save(config)
+    return ds_entry
+
+
+def remove_datasource(
+    name: str,
+    config_manager: ConfigManager | None = None,
+) -> None:
+    """非交互式删除数据源并保存配置
+
+    Args:
+        name: 数据源名称
+        config_manager: 配置管理器（默认使用全局配置）
+
+    Raises:
+        ValueError: 配置文件不存在或数据源不存在
+    """
+    config_manager = config_manager or ConfigManager()
+    if not config_manager.exists():
+        raise ValueError("配置文件不存在，无数据源可删除")
+
+    config = config_manager.load()
+    datasources: dict[str, Any] = dict(config.get("datasources") or {})
+    if name not in datasources:
+        raise ValueError(f"数据源 '{name}' 不存在")
+
+    del datasources[name]
+    if datasources:
+        config["datasources"] = datasources
+    else:
+        config.pop("datasources", None)
+    config_manager.save(config)
+
+
+def onboard_datasource_cli(
+    add_name: str | None = None,
+    remove_name: str | None = None,
+    url: str | None = None,
+    password: str | None = None,
+    connect_args: list[str] | None = None,
+    overwrite: bool = False,
+) -> None:
+    """onboard 非交互式数据源管理入口（供 CLI 参数调用）
+
+    Args:
+        add_name: 待添加的数据源名称（--add-datasource）
+        remove_name: 待删除的数据源名称（--remove-datasource）
+        url: 连接 URL（--url）
+        password: 独立密码（--password）
+        connect_args: key=value 参数列表（--connect-args，可重复）
+        overwrite: 是否覆盖同名数据源（--overwrite）
+    """
+
+    def _fail(message: str) -> None:
+        print(f"错误: {message}", file=sys.stderr)
+        sys.exit(1)
+
+    if add_name and remove_name:
+        _fail("--add-datasource 与 --remove-datasource 不能同时使用")
+
+    if add_name:
+        if not url:
+            _fail("--add-datasource 需同时提供 --url")
+        try:
+            parsed_args = parse_cli_connect_args(connect_args)
+            entry = add_datasource(
+                add_name,
+                url,
+                connect_args=parsed_args,
+                password=password,
+                overwrite=overwrite,
+            )
+        except ValueError as e:
+            _fail(str(e))
+        print(f"已添加数据源: {add_name} ({entry['url']})")
+        config_manager = ConfigManager()
+        print(f"配置文件: {config_manager.config_path}")
+        if not config_manager.exists() or "graph" not in config_manager.load():
+            print("提示: 尚未配置图后端，可运行 govio-cli onboard 完成配置")
+    elif remove_name:
+        if url or password or connect_args:
+            _fail("--remove-datasource 不接受 --url/--password/--connect-args 参数")
+        try:
+            remove_datasource(remove_name)
+        except ValueError as e:
+            _fail(str(e))
+        print(f"已删除数据源: {remove_name}")
 
 
 def prompt_datasource_config(
@@ -191,6 +387,63 @@ def prompt_datasource_config(
 # Onboard main flow (simplified)
 # ---------------------------------------------------------------------------
 
+def prompt_graph_config() -> dict[str, Any]:
+    """交互式选择图数据库后端并生成 graph 配置
+
+    Returns:
+        dict: graph 配置段
+    """
+    backend = questionary.select(
+        "请选择图数据库后端：",
+        choices=[
+            questionary.Choice("networkx - 本地 GML 文件", value="networkx"),
+            questionary.Choice("falkordb - FalkorDB 图数据库", value="falkordb"),
+            questionary.Choice("ladybug - Ladybug 嵌入式图数据库", value="ladybug"),
+        ],
+        default="networkx",
+    ).ask()
+
+    if backend == "networkx":
+        print("\n--- NetworkX 配置 ---\n")
+        gml_path_input = questionary.text(
+            "请输入 GML 文件路径:",
+            validate=lambda v: True if Path(v).exists() else "GML 文件不存在",
+        ).ask()
+        return {"backend": "networkx", "networkx": {"gml_path": str(Path(gml_path_input))}}
+    if backend == "falkordb":
+        print("\n--- FalkorDB 配置 ---\n")
+        host = questionary.text(
+            "请输入 FalkorDB 主机地址:",
+            default="localhost",
+        ).ask() or "localhost"
+
+        port_str = questionary.text(
+            "请输入 FalkorDB 端口:",
+            default="6379",
+            validate=lambda v: True if v.isdigit() else "端口必须是数字",
+        ).ask() or "6379"
+        port = int(port_str)
+
+        graph_name = questionary.text(
+            "请输入图数据库名称:",
+            default="ontology",
+        ).ask() or "ontology"
+
+        return {"backend": "falkordb", "falkordb": {"host": host, "port": port, "graph": graph_name}}
+
+    # ladybug
+    print("\n--- Ladybug 配置 ---\n")
+    default_db = str(Path.home() / ".govio" / "ontology.lbdb")
+    db_path_input = questionary.text(
+        "请输入 Ladybug 数据库文件路径:",
+        default=default_db,
+    ).ask() or default_db
+    return {
+        "backend": "ladybug",
+        "ladybug": {"db_path": str(Path(db_path_input))},
+    }
+
+
 def onboard():
     """Onboard 向导主函数 — 图数据库后端选择 + 数据源配置"""
     config_manager = ConfigManager()
@@ -215,6 +468,20 @@ def onboard():
                 config_manager.save(full_config)
                 print(f"\n配置已更新: {config_manager.config_path}")
                 return
+        elif existing_config.get("datasources"):
+            # 配置中只有数据源（如通过 --add-datasource 非交互式创建）：
+            # 补充图后端配置，保留已有数据源
+            print("\n检测到已有配置（尚未设置图后端，将保留已配置的数据源）")
+            full_config = dict(existing_config)
+            full_config["graph"] = prompt_graph_config()
+            datasources = prompt_datasource_config(full_config.get("datasources"))
+            if datasources is not None:
+                full_config["datasources"] = datasources
+            else:
+                full_config.pop("datasources", None)
+            config_manager.save(full_config)
+            print(f"\n配置已更新: {config_manager.config_path}")
+            return
 
         print("\n配置文件已存在")
         overwrite = questionary.confirm(
@@ -227,56 +494,7 @@ def onboard():
 
     # --- Graph backend selection ---
     print("\n=== Govio Onboard 向导 ===\n")
-
-    backend = questionary.select(
-        "请选择图数据库后端：",
-        choices=[
-            questionary.Choice("networkx - 本地 GML 文件", value="networkx"),
-            questionary.Choice("falkordb - FalkorDB 图数据库", value="falkordb"),
-            questionary.Choice("ladybug - Ladybug 嵌入式图数据库", value="ladybug"),
-        ],
-        default="networkx",
-    ).ask()
-
-    if backend == "networkx":
-        print("\n--- NetworkX 配置 ---\n")
-        gml_path_input = questionary.text(
-            "请输入 GML 文件路径:",
-            validate=lambda v: True if Path(v).exists() else "GML 文件不存在",
-        ).ask()
-        graph_config = {"backend": "networkx", "networkx": {"gml_path": str(Path(gml_path_input))}}
-    elif backend == "falkordb":
-        print("\n--- FalkorDB 配置 ---\n")
-        host = questionary.text(
-            "请输入 FalkorDB 主机地址:",
-            default="localhost",
-        ).ask() or "localhost"
-
-        port_str = questionary.text(
-            "请输入 FalkorDB 端口:",
-            default="6379",
-            validate=lambda v: True if v.isdigit() else "端口必须是数字",
-        ).ask() or "6379"
-        port = int(port_str)
-
-        graph_name = questionary.text(
-            "请输入图数据库名称:",
-            default="ontology",
-        ).ask() or "ontology"
-
-        graph_config = {"backend": "falkordb", "falkordb": {"host": host, "port": port, "graph": graph_name}}
-    else:
-        # ladybug
-        print("\n--- Ladybug 配置 ---\n")
-        default_db = str(Path.home() / ".govio" / "ontology.lbdb")
-        db_path_input = questionary.text(
-            "请输入 Ladybug 数据库文件路径:",
-            default=default_db,
-        ).ask() or default_db
-        graph_config = {
-            "backend": "ladybug",
-            "ladybug": {"db_path": str(Path(db_path_input))},
-        }
+    graph_config = prompt_graph_config()
 
     full_config: dict[str, Any] = {"graph": graph_config}
 
