@@ -284,7 +284,7 @@ def onboard_datasource_cli(
             )
         except ValueError as e:
             _fail(str(e))
-        print(f"已添加数据源: {add_name} ({entry['url']})")
+        print(f"已添加数据源: {add_name}")
         config_manager = ConfigManager()
         print(f"配置文件: {config_manager.config_path}")
         if not config_manager.exists() or "graph" not in config_manager.load():
