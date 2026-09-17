@@ -103,17 +103,17 @@ def test_step_meta_export_success(duck_db, tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_generate_assets_prints_absolute_path(tmp_path, capsys, monkeypatch):
-    """assets 路径以绝对路径打印，并提示与应用目录不一致时自行合并。"""
+    """assets 路径以绝对路径打印，接受 assets_dir 参数。"""
     monkeypatch.chdir(tmp_path)
+    assets_dir = Path(".agent/skills/govio/assets")
     with patch.object(meta_mod, "ConfigManager") as cm, \
             patch.object(meta_mod, "GraphFactory"), \
             patch.object(meta_mod, "AssetsGenerator"):
         cm.return_value.load.return_value = {"graph": {"backend": "ladybug"}}
-        meta_mod._generate_assets()
+        meta_mod._generate_assets(assets_dir)
 
     out = capsys.readouterr().out
     line = next(ln for ln in out.splitlines() if "Assets 已生成到" in ln)
     printed = line.split(":", 1)[1].strip()
     assert Path(printed).is_absolute()
-    assert printed.endswith(str(Path("skills/govio/assets")))
-    assert "自行合并" in out
+    assert printed.endswith(str(Path(".agent/skills/govio/assets")))

@@ -29,7 +29,7 @@ from govio.metadata.relationship import load_relationships
 from govio.metadata.metric import MetricLoader
 from govio.metadata.node_id import assign_node_ids, write_node_csv
 
-SKILLS_ASSETS_DIR = Path("skills/govio/assets")
+DEFAULT_ASSETS_DIR = Path(".agent/skills/govio/assets")
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +112,7 @@ def _load_csv_with_node_ids(
 # Graph / assets helpers
 # ---------------------------------------------------------------------------
 
-def _update_graph(output: Path, graph_mode: str) -> bool:
+def _update_graph(output: Path, graph_mode: str, assets_dir: Path) -> bool:
     """更新图数据库。返回是否成功。"""
     from govio.metadata.gen_networkx import build_graph
 
@@ -138,7 +138,7 @@ def _update_graph(output: Path, graph_mode: str) -> bool:
             return False
     elif backend == "networkx":
         networkx_cfg = graph.get("networkx", {})
-        gml_path = networkx_cfg.get("gml_path", str(SKILLS_ASSETS_DIR / "ontology.gml"))
+        gml_path = networkx_cfg.get("gml_path", str(assets_dir / "ontology.gml"))
         label = "更新" if incremental else "重建"
         print(f"\n正在从 CSV {label} GML 文件 ({gml_path})...")
         try:
@@ -174,7 +174,7 @@ def _update_graph(output: Path, graph_mode: str) -> bool:
     return True
 
 
-def _clear_graph() -> bool:
+def _clear_graph(assets_dir: Path) -> bool:
     """清空图数据库。返回是否成功。"""
     graph_config = ConfigManager().load()
     graph = graph_config.get("graph") or {}
@@ -195,7 +195,7 @@ def _clear_graph() -> bool:
             return False
     elif backend == "networkx":
         networkx_cfg = graph.get("networkx", {})
-        gml_path = networkx_cfg.get("gml_path", str(SKILLS_ASSETS_DIR / "ontology.gml"))
+        gml_path = networkx_cfg.get("gml_path", str(assets_dir / "ontology.gml"))
         gml_file = Path(gml_path)
         if gml_file.exists():
             gml_file.unlink()
@@ -219,18 +219,17 @@ def _clear_graph() -> bool:
     return True
 
 
-def _generate_assets() -> None:
+def _generate_assets(assets_dir: Path) -> None:
     """生成 schema.md、name 索引、metrics_index.md 等 assets。"""
     print("\n正在生成 assets...")
-    assets_dir = SKILLS_ASSETS_DIR.resolve()
     try:
         graph_config = ConfigManager().load()
         graph = graph_config.get("graph") or {}
         graph_obj = GraphFactory.create(graph)
-        generator = AssetsGenerator(graph_obj, assets_dir)
+        resolved = assets_dir.resolve()
+        generator = AssetsGenerator(graph_obj, resolved)
         generator.generate_all()
-        print(f"✓ Assets 已生成到: {assets_dir}")
-        print("  （路径由当前工作目录的 skills/govio/assets 解析而来；如与应用读取的 assets 目录不一致，请自行合并）")
+        print(f"✓ Assets 已生成到: {resolved}")
     except Exception as e:
         print(f"❌ 生成 assets 失败: {e}")
 
@@ -725,9 +724,10 @@ def cmd_graph(args: argparse.Namespace) -> None:
     """meta graph — 更新/重建/清空图数据库 + 生成 assets"""
     output = Path(args.output) if args.output else Path("./output")
     graph_mode = args.mode if hasattr(args, "mode") and args.mode else "update"
+    assets_dir = Path(args.assets_dir) if args.assets_dir else DEFAULT_ASSETS_DIR
 
     if graph_mode == "clear":
-        _clear_graph()
+        _clear_graph(assets_dir)
         print("\n✅ graph 清空完成！")
         return
 
@@ -735,8 +735,8 @@ def cmd_graph(args: argparse.Namespace) -> None:
         print(f"❌ 输出目录不存在: {output}", file=sys.stderr)
         sys.exit(1)
 
-    _update_graph(output, graph_mode)
-    _generate_assets()
+    _update_graph(output, graph_mode, assets_dir)
+    _generate_assets(assets_dir)
 
     print("\n✅ graph 更新完成！")
 
@@ -827,6 +827,7 @@ def meta():
 
     p_graph = sub.add_parser("graph", help="更新图数据库 + 生成 assets")
     p_graph.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
+    p_graph.add_argument("--assets-dir", type=str, help="assets 输出目录（默认 .agent/skills/govio/assets）")
     p_graph.add_argument("--mode", choices=["update", "rebuild", "clear"], default="update", help="更新模式: update=增量, rebuild=重建, clear=清空")
     p_graph.set_defaults(func=cmd_graph)
 

@@ -184,12 +184,12 @@ merge_edge_csv(new_df, csv_path, dedup_cols) -> pd.DataFrame
 ### Graph Management
 
 ```python
-_update_graph(output, graph_mode) -> bool   # "update" (incremental) or "rebuild"
-_clear_graph() -> bool                       # Clear graph database
-_generate_assets() -> None                   # schema.md, names, metrics_index.md
+_update_graph(output, graph_mode, assets_dir) -> bool   # "update" (incremental) or "rebuild"
+_clear_graph(assets_dir) -> bool                        # Clear graph database
+_generate_assets(assets_dir) -> None                    # schema.md, names, metrics_index.md
 ```
 
-`_generate_assets()` writes to `SKILLS_ASSETS_DIR = Path("skills/govio/assets")`, resolved against the current working directory, and prints the **absolute** path plus a merge hint (`如与应用读取的 assets 目录不一致，请自行合并`). The output directory is not configurable yet — see `docs/roadmap.md`.
+`meta graph` accepts `--assets-dir <path>` (default `.agent/skills/govio/assets`). The path is resolved to an absolute path and passed to all three helpers. `_generate_assets()` prints the absolute path on success.
 
 Graph backend config is read from `~/.govio/config.yaml` (`graph` section). Supports all three backends:
 - FalkorDB: upsert/import/delete

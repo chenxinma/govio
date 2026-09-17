@@ -91,8 +91,11 @@ govio-cli meta compliance --kundb "mysql+pymysql://..." --workspace-uuid <uuid> 
 govio-cli meta rel --file ./ref/relationships.json --output ./data/meta
 govio-cli meta metric --file ./ref/metrics.json --output ./data/meta
 
-# 导入图库 + 生成 assets
+# 导入图库 + 生成 assets（默认 assets 目录 .agent/skills/govio/assets）
 govio-cli meta graph --output ./data/meta --mode update
+
+# 指定 assets 输出目录
+govio-cli meta graph --output ./data/meta --assets-dir ./my/assets --mode update
 
 # 数据标准推荐
 govio-cli meta recommend --kundb "mysql+pymysql://..." --app-map ./ref/app_map.json \
@@ -127,7 +130,7 @@ meta → app → std → compliance → rel → metric → graph
 - `meta graph` 末尾打印的 **assets 绝对路径**；若与应用读取的 assets 目录不一致，提示用户自行合并
 - 失败时：原样转述 `❌` 错误信息与其中的可用 schema 列表，然后停止
 
-已知限制：assets 固定输出到当前工作目录下的 `skills/govio/assets`，暂不可通过参数指定（改进项见 `docs/roadmap.md`）。
+
 
 ## 节点与边类型
 
