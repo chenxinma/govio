@@ -84,6 +84,32 @@ uv build
 uv build --wheel
 ```
 
+### Local Deploy (full cycle)
+
+完整本地部署流程：清理旧版本 → 构建 → 安装为 uv tool → 打包 skills。
+
+```bash
+# 一键执行（等价于 start.sh）
+./start.sh
+
+# 或手动执行：
+
+# 1. 清理 dist 下旧版本（避免残留过期包）
+rm -f dist/govio-*.whl dist/govio-*.tar.gz dist/govio-skills.zip
+
+# 2. 构建新版本
+uv build
+
+# 3. 安装 govio 为 uv tool
+WHL=$(ls dist/govio-*.whl | head -1)
+uv tool install --from "$WHL" govio --compile-bytecode -p 3.13 --force
+
+# 4. 打包 skills
+uv run package_skills.py
+```
+
+> **注意**: Windows cmd 下用 `del /Q dist\govio-*.whl dist\govio-*.tar.gz` 替代步骤 1。
+
 ### Type Checking
 
 ```bash

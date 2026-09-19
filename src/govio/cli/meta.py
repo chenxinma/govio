@@ -10,7 +10,6 @@
 """
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -36,8 +35,12 @@ DEFAULT_ASSETS_DIR = Path(".agent/skills/govio/assets")
 # CSV merge helpers — 增量合并的核心机制
 # ---------------------------------------------------------------------------
 
+
 def merge_node_csv(
-    new_df: pd.DataFrame, csv_path: Path, node_type: str, key_col: str,
+    new_df: pd.DataFrame,
+    csv_path: Path,
+    node_type: str,
+    key_col: str,
 ) -> pd.DataFrame:
     """将新节点数据与已有 CSV 合并，按业务键去重（新的覆盖旧的）。
 
@@ -62,7 +65,9 @@ def merge_node_csv(
         if dedup_col:
             merged = combined.drop_duplicates(subset=[dedup_col], keep="last")
         else:
-            print(f"⚠ merge_node_csv: 未找到去重列 '{key_col}'，跳过去重", file=sys.stderr)
+            print(
+                f"⚠ merge_node_csv: 未找到去重列 '{key_col}'，跳过去重", file=sys.stderr
+            )
             merged = combined
     else:
         merged = new_df
@@ -73,7 +78,9 @@ def merge_node_csv(
 
 
 def merge_edge_csv(
-    new_df: pd.DataFrame, csv_path: Path, dedup_cols: list[str],
+    new_df: pd.DataFrame,
+    csv_path: Path,
+    dedup_cols: list[str],
 ) -> pd.DataFrame:
     """将新边数据与已有 CSV 合并，按复合键去重（新的覆盖旧的）。
 
@@ -87,7 +94,10 @@ def merge_edge_csv(
         if cols:
             merged = combined.drop_duplicates(subset=cols, keep="last")
         else:
-            print(f"⚠ merge_edge_csv: 未找到去重列 {dedup_cols}，跳过去重", file=sys.stderr)
+            print(
+                f"⚠ merge_edge_csv: 未找到去重列 {dedup_cols}，跳过去重",
+                file=sys.stderr,
+            )
             merged = combined
     else:
         merged = new_df
@@ -98,7 +108,9 @@ def merge_edge_csv(
 
 
 def _load_csv_with_node_ids(
-    csv_path: Path, node_type: str, key_col: str,
+    csv_path: Path,
+    node_type: str,
+    key_col: str,
 ) -> pd.DataFrame:
     """加载节点 CSV，若缺少 node_id 列则重新生成并写回。"""
     df = pd.read_csv(csv_path)
@@ -112,6 +124,7 @@ def _load_csv_with_node_ids(
 # Graph / assets helpers
 # ---------------------------------------------------------------------------
 
+
 def _update_graph(output: Path, graph_mode: str, assets_dir: Path) -> bool:
     """更新图数据库。返回是否成功。"""
     from govio.metadata.gen_networkx import build_graph
@@ -119,7 +132,7 @@ def _update_graph(output: Path, graph_mode: str, assets_dir: Path) -> bool:
     graph_config = ConfigManager().load()
     graph = graph_config.get("graph") or {}
     backend = graph.get("backend")
-    incremental = (graph_mode == "update")
+    incremental = graph_mode == "update"
 
     if backend == "falkordb":
         falkordb_cfg = graph.get("falkordb", {})
@@ -157,14 +170,18 @@ def _update_graph(output: Path, graph_mode: str, assets_dir: Path) -> bool:
             return False
         try:
             if incremental:
-                upsert_csv_to_ladybug(output, db_path_val, buffer_pool_size=bp, max_db_size=maxdb)
+                upsert_csv_to_ladybug(
+                    output, db_path_val, buffer_pool_size=bp, max_db_size=maxdb
+                )
                 print("✓ Ladybug 数据已更新")
             else:
                 # rebuild 先删旧文件，避免版本不兼容导致无法打开
                 db_file = Path(db_path_val)
                 if db_file.exists():
                     db_file.unlink()
-                import_csv_to_ladybug(output, db_path_val, buffer_pool_size=bp, max_db_size=maxdb)
+                import_csv_to_ladybug(
+                    output, db_path_val, buffer_pool_size=bp, max_db_size=maxdb
+                )
                 print("✓ Ladybug 数据已重建")
         except Exception as e:
             print(f"❌ 导入 Ladybug 失败: {e}")
@@ -201,7 +218,7 @@ def _clear_graph(assets_dir: Path) -> bool:
             gml_file.unlink()
             print(f"✓ GML 文件已删除: {gml_path}")
         else:
-            print(f"提示: GML 文件不存在，无需删除")
+            print("提示: GML 文件不存在，无需删除")
     elif backend == "ladybug":
         ladybug_cfg = graph.get("ladybug", {})
         db_path_val = ladybug_cfg.get("db_path")
@@ -213,7 +230,7 @@ def _clear_graph(assets_dir: Path) -> bool:
             db_file.unlink()
             print(f"✓ Ladybug 数据库已删除: {db_path_val}")
         else:
-            print(f"提示: Ladybug 数据库文件不存在，无需删除")
+            print("提示: Ladybug 数据库文件不存在，无需删除")
     else:
         print("提示: 未配置 graph backend，跳过")
     return True
@@ -237,6 +254,7 @@ def _generate_assets(assets_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 # Step functions — 可独立调用的管线步骤
 # ---------------------------------------------------------------------------
+
 
 def _describe_duckdb_schemas(db_path: str) -> str:
     """只读列出 DuckDB 文件中可导入的 schema，用于空结果时的错误提示。"""
@@ -297,16 +315,22 @@ def step_meta_export(
 
         # TDS full + DuckDB incremental, DuckDB wins on conflict
         df_tables = pd.concat([tds_tables, duck_tables], ignore_index=True)
-        df_tables = df_tables.drop_duplicates(subset=["full_table_name"], keep="last").reset_index(drop=True)
+        df_tables = df_tables.drop_duplicates(
+            subset=["full_table_name"], keep="last"
+        ).reset_index(drop=True)
         df_columns = pd.concat([tds_columns, duck_columns], ignore_index=True)
-        df_columns = df_columns.drop_duplicates(subset=["column"], keep="last").reset_index(drop=True)
+        df_columns = df_columns.drop_duplicates(
+            subset=["column"], keep="last"
+        ).reset_index(drop=True)
 
     # 空结果守卫：schema 写错或源库为空时直接失败，不写任何 CSV
     if df_tables.empty:
         schema_desc = ", ".join(schemas) if schemas else "（未指定）"
         msg = f"❌ 未发现任何表: schema [{schema_desc}] 在元数据源中不存在或为空（未写入任何 CSV）"
         if source in ("duckdb", "both") and db_path:
-            msg += f"\n   {db_path} 可导入的 schema: {_describe_duckdb_schemas(db_path)}"
+            msg += (
+                f"\n   {db_path} 可导入的 schema: {_describe_duckdb_schemas(db_path)}"
+            )
         msg += "\n   请确认 --schemas 后重试"
         print(msg, file=sys.stderr)
         return None
@@ -387,7 +411,9 @@ def step_app_export(
     )[[":START_ID(Application)", ":END_ID(PhysicalTable)"]]
 
     use_path = output / "USE.csv"
-    merge_edge_csv(df_use, use_path, [":START_ID(Application)", ":END_ID(PhysicalTable)"])
+    merge_edge_csv(
+        df_use, use_path, [":START_ID(Application)", ":END_ID(PhysicalTable)"]
+    )
 
     print(f"✓ 应用数据已导出: {len(df_apps)} 个应用, {len(df_use)} 条 USE 边")
 
@@ -420,17 +446,22 @@ def step_rel_export(
                 table_idx_to_id[i] for i in df_relates_to["target"]
             ]
             # 重命名为图导入所需的列名格式，保留元数据列
-            df_relates_to = df_relates_to.rename(columns={
-                "source": ":START_ID(PhysicalTable)",
-                "target": ":END_ID(PhysicalTable)",
-            })
+            df_relates_to = df_relates_to.rename(
+                columns={
+                    "source": ":START_ID(PhysicalTable)",
+                    "target": ":END_ID(PhysicalTable)",
+                }
+            )
 
         rel_path = output / "RELATES_TO.csv"
         merge_edge_csv(
-            df_relates_to, rel_path,
+            df_relates_to,
+            rel_path,
             [":START_ID(PhysicalTable)", ":END_ID(PhysicalTable)", "relationship_type"],
         )
-        print(f"✓ RELATES_TO 已导出: {len(df_relates_to)} 个关系 来自[{relationship_file}]")
+        print(
+            f"✓ RELATES_TO 已导出: {len(df_relates_to)} 个关系 来自[{relationship_file}]"
+        )
     except Exception as e:
         print(f"❌ 无法加载关系文件: {e}")
 
@@ -481,7 +512,9 @@ def step_compliance_export(
         return
 
     # 构造 column 字段（full_table_name.column_name）以匹配 Col.csv
-    df_compliance["column"] = df_compliance["full_table_name"] + "." + df_compliance["column_name"]
+    df_compliance["column"] = (
+        df_compliance["full_table_name"] + "." + df_compliance["column_name"]
+    )
 
     # 将 column 字段映射为 node_id
     col_id_map = df_columns.set_index("column")["node_id"].to_dict()
@@ -519,7 +552,10 @@ def step_metric_export(
     pt_path = output / "PhysicalTable.csv"
     col_path = output / "Col.csv"
     if not pt_path.exists() or not col_path.exists():
-        print("❌ 需要先导入元数据（PhysicalTable.csv, Col.csv），请先运行 meta meta", file=sys.stderr)
+        print(
+            "❌ 需要先导入元数据（PhysicalTable.csv, Col.csv），请先运行 meta meta",
+            file=sys.stderr,
+        )
         return False
 
     df_tables = _load_csv_with_node_ids(pt_path, "PhysicalTable", "full_table_name")
@@ -538,7 +574,9 @@ def step_metric_export(
 
         # Merge node CSVs
         df_metrics = merge_node_csv(df_metrics, output / "Metric.csv", "Metric", "code")
-        df_dimensions = merge_node_csv(df_dimensions, output / "Dimension.csv", "Dimension", "code")
+        df_dimensions = merge_node_csv(
+            df_dimensions, output / "Dimension.csv", "Dimension", "code"
+        )
 
         metric_idx_to_id = df_metrics["node_id"].tolist()
         dim_idx_to_id = df_dimensions["node_id"].tolist()
@@ -553,7 +591,8 @@ def step_metric_export(
                 table_idx_to_id[i] for i in uses_table[":END_ID(PhysicalTable)"]
             ]
             merge_edge_csv(
-                uses_table, output / "USES_TABLE.csv",
+                uses_table,
+                output / "USES_TABLE.csv",
                 [":START_ID(Metric)", ":END_ID(PhysicalTable)"],
             )
 
@@ -567,7 +606,8 @@ def step_metric_export(
                 col_idx_to_id[i] for i in refers_col[":END_ID(Col)"]
             ]
             merge_edge_csv(
-                refers_col, output / "REFERS_COLUMN.csv",
+                refers_col,
+                output / "REFERS_COLUMN.csv",
                 [":START_ID(Metric)", ":END_ID(Col)"],
             )
 
@@ -581,7 +621,8 @@ def step_metric_export(
                 metric_idx_to_id[i] for i in derived_from[":END_ID(Metric)"]
             ]
             merge_edge_csv(
-                derived_from, output / "DERIVED_FROM.csv",
+                derived_from,
+                output / "DERIVED_FROM.csv",
                 [":START_ID(Metric)", ":END_ID(Metric)"],
             )
 
@@ -595,7 +636,8 @@ def step_metric_export(
                 dim_idx_to_id[i] for i in dim_used[":END_ID(Dimension)"]
             ]
             merge_edge_csv(
-                dim_used, output / "DIMENSION_USED.csv",
+                dim_used,
+                output / "DIMENSION_USED.csv",
                 [":START_ID(Metric)", ":END_ID(Dimension)"],
             )
 
@@ -609,13 +651,13 @@ def step_metric_export(
                 metric_idx_to_id[i] for i in supersedes[":END_ID(Metric)"]
             ]
             merge_edge_csv(
-                supersedes, output / "SUPERSEDES.csv",
+                supersedes,
+                output / "SUPERSEDES.csv",
                 [":START_ID(Metric)", ":END_ID(Metric)"],
             )
 
         print(
-            f"✓ 指标数据已导出: {len(df_metrics)} 个指标, "
-            f"{len(df_dimensions)} 个维度"
+            f"✓ 指标数据已导出: {len(df_metrics)} 个指标, {len(df_dimensions)} 个维度"
         )
         return True
     except Exception as e:
@@ -626,6 +668,7 @@ def step_metric_export(
 # ---------------------------------------------------------------------------
 # CLI command handlers — 独立子命令（CLI-only，无配置文件依赖）
 # ---------------------------------------------------------------------------
+
 
 def cmd_meta(args: argparse.Namespace) -> None:
     """meta meta — 导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）"""
@@ -643,6 +686,16 @@ def cmd_meta(args: argparse.Namespace) -> None:
             "❌ 需要指定 --schemas（源库 schema 名，逗号分隔；DuckDB 文件默认 schema 为 main）",
             file=sys.stderr,
         )
+
+        # 尝试列出可用 schema，帮助用户选择
+        if source in ("duckdb", "both") and db_path:
+            print(f"\n📖 {db_path} 中可导入的 schema:", file=sys.stderr)
+            print(f"   {_describe_duckdb_schemas(db_path)}", file=sys.stderr)
+        elif source == "tds":
+            print("\n提示: TDS 模式下请直接指定 --schemas 参数", file=sys.stderr)
+        else:
+            print("\n提示: 请指定 --db 参数后可列出可用 schema", file=sys.stderr)
+
         sys.exit(1)
 
     # TDS/both 模式校验必填参数
@@ -662,8 +715,12 @@ def cmd_meta(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     result = step_meta_export(
-        output, source=source, db_path=db_path,
-        schemas=schemas, kundb=kundb, workspace_uuid=workspace_uuid,
+        output,
+        source=source,
+        db_path=db_path,
+        schemas=schemas,
+        kundb=kundb,
+        workspace_uuid=workspace_uuid,
     )
     if result is None:
         sys.exit(1)
@@ -768,6 +825,7 @@ def cmd_recommend(args: argparse.Namespace) -> None:
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+
 def meta():
     """meta 命令入口"""
     parser = argparse.ArgumentParser(
@@ -781,33 +839,60 @@ def meta():
     # TDS 参数复用
     tds_args = argparse.ArgumentParser(add_help=False)
     tds_args.add_argument("--kundb", type=str, required=True, help="TDS 元数据库 URL")
-    tds_args.add_argument("--workspace-uuid", type=str, default="82ee37374b314a938bf28170ab4db7cf", help="工作区 UUID")
+    tds_args.add_argument(
+        "--workspace-uuid",
+        type=str,
+        default="82ee37374b314a938bf28170ab4db7cf",
+        help="工作区 UUID",
+    )
 
     # meta meta — 元数据导入
-    p_meta = sub.add_parser("meta", help="导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）")
-    p_meta.add_argument("--source", choices=["tds", "duckdb", "both"], required=True, help="数据来源")
+    p_meta = sub.add_parser(
+        "meta", help="导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）"
+    )
+    p_meta.add_argument(
+        "--source", choices=["tds", "duckdb", "both"], required=True, help="数据来源"
+    )
     p_meta.add_argument("--db", type=str, help="DuckDB 数据库文件路径")
-    p_meta.add_argument("--schemas", type=str, help="要导出的 schema 列表，逗号分隔（必填；DuckDB 文件默认 schema 为 main）")
-    p_meta.add_argument("--kundb", type=str, help="TDS 元数据库 URL（TDS/both 模式必须）")
-    p_meta.add_argument("--workspace-uuid", type=str, help="工作区 UUID（TDS/both 模式必须）")
+    p_meta.add_argument(
+        "--schemas",
+        type=str,
+        help="要导出的 schema 列表，逗号分隔（必填；DuckDB 文件默认 schema 为 main）",
+    )
+    p_meta.add_argument(
+        "--kundb", type=str, help="TDS 元数据库 URL（TDS/both 模式必须）"
+    )
+    p_meta.add_argument(
+        "--workspace-uuid", type=str, help="工作区 UUID（TDS/both 模式必须）"
+    )
     p_meta.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
     p_meta.set_defaults(func=cmd_meta)
 
     # meta app — 应用清单导入
     p_app = sub.add_parser("app", help="导入应用清单（Application 节点 + USE 边）")
-    p_app.add_argument("--app-list", type=str, required=True, help="应用清单 Excel 文件路径")
-    p_app.add_argument("--app-map", type=str, required=True, help="应用数据库映射 JSON 文件路径")
+    p_app.add_argument(
+        "--app-list", type=str, required=True, help="应用清单 Excel 文件路径"
+    )
+    p_app.add_argument(
+        "--app-map", type=str, required=True, help="应用数据库映射 JSON 文件路径"
+    )
     p_app.add_argument("--db-name", type=str, help="单库模式：仅导出指定应用")
     p_app.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
     p_app.set_defaults(func=cmd_app)
 
     # meta std — 数据标准导入
-    p_std = sub.add_parser("std", help="导入数据标准（Standard 节点）", parents=[tds_args])
+    p_std = sub.add_parser(
+        "std", help="导入数据标准（Standard 节点）", parents=[tds_args]
+    )
     p_std.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
     p_std.set_defaults(func=cmd_std)
 
     # meta compliance — 已有标准关联
-    p_comp = sub.add_parser("compliance", help="从 TDS 导出已有标准-字段关联（COMPLIES_WITH 边）", parents=[tds_args])
+    p_comp = sub.add_parser(
+        "compliance",
+        help="从 TDS 导出已有标准-字段关联（COMPLIES_WITH 边）",
+        parents=[tds_args],
+    )
     p_comp.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
     p_comp.set_defaults(func=cmd_compliance)
 
@@ -818,8 +903,12 @@ def meta():
     p_rel.set_defaults(func=cmd_rel)
 
     # meta metric — 指标维度导入
-    p_metric = sub.add_parser("metric", help="导入指标维度定义（Metric, Dimension + 边）")
-    p_metric.add_argument("--file", type=str, required=True, help="指标定义 JSON 文件路径")
+    p_metric = sub.add_parser(
+        "metric", help="导入指标维度定义（Metric, Dimension + 边）"
+    )
+    p_metric.add_argument(
+        "--file", type=str, required=True, help="指标定义 JSON 文件路径"
+    )
     p_metric.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
     p_metric.set_defaults(func=cmd_metric)
 
@@ -827,18 +916,40 @@ def meta():
 
     p_graph = sub.add_parser("graph", help="更新图数据库 + 生成 assets")
     p_graph.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
-    p_graph.add_argument("--assets-dir", type=str, help="assets 输出目录（默认 .agent/skills/govio/assets）")
-    p_graph.add_argument("--mode", choices=["update", "rebuild", "clear"], default="update", help="更新模式: update=增量, rebuild=重建, clear=清空")
+    p_graph.add_argument(
+        "--assets-dir",
+        type=str,
+        help="assets 输出目录（默认 .agent/skills/govio/assets）",
+    )
+    p_graph.add_argument(
+        "--mode",
+        choices=["update", "rebuild", "clear"],
+        default="update",
+        help="更新模式: update=增量, rebuild=重建, clear=清空",
+    )
     p_graph.set_defaults(func=cmd_graph)
 
     # --- 数据标准推荐 ---
 
     p_recommend = sub.add_parser("recommend", help="数据标准推荐")
-    p_recommend.add_argument("--kundb", type=str, required=True, help="TDS 元数据库 URL")
-    p_recommend.add_argument("--workspace-uuid", type=str, default="82ee37374b314a938bf28170ab4db7cf", help="工作区 UUID")
-    p_recommend.add_argument("--app-map", type=str, required=True, help="应用数据库映射 JSON 文件路径")
-    p_recommend.add_argument("--csv-dir", type=str, help="已导入的 CSV 目录（默认同 --output-dir）")
-    p_recommend.add_argument("--output-dir", type=str, help="推荐结果输出目录（默认 ./output）")
+    p_recommend.add_argument(
+        "--kundb", type=str, required=True, help="TDS 元数据库 URL"
+    )
+    p_recommend.add_argument(
+        "--workspace-uuid",
+        type=str,
+        default="82ee37374b314a938bf28170ab4db7cf",
+        help="工作区 UUID",
+    )
+    p_recommend.add_argument(
+        "--app-map", type=str, required=True, help="应用数据库映射 JSON 文件路径"
+    )
+    p_recommend.add_argument(
+        "--csv-dir", type=str, help="已导入的 CSV 目录（默认同 --output-dir）"
+    )
+    p_recommend.add_argument(
+        "--output-dir", type=str, help="推荐结果输出目录（默认 ./output）"
+    )
     p_recommend.set_defaults(func=cmd_recommend)
 
     args = parser.parse_args(sys.argv[1:])

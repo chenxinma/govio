@@ -8,15 +8,26 @@ if ! command -v uv &>/dev/null; then
 fi
 echo "✓ uv $(uv --version)"
 
-# 查找 wheel 文件
+# 1. 清理 dist 下旧版本（避免残留过期包）
+rm -f dist/govio-*.whl dist/govio-*.tar.gz
+
+# 2. 构建新版本
+uv build
+
+# 3. 查找 wheel 文件
 WHL=$(ls dist/govio-*.whl 2>/dev/null | head -1)
 if [ -z "$WHL" ]; then
     echo "❌ 未找到 wheel 文件，请先构建: uv build"
     exit 1
 fi
 
-# 安装 govio 为 uv tool（持久化）
-uv tool install --from "$WHL" govio --force
+# 4. 安装 govio 为 uv tool（持久化）
+uv tool install --from "$WHL" govio --compile-bytecode -p 3.13 --force
 echo "✓ govio 已安装"
+
+# 5. 打包 skills
+uv run package_skills.py
+echo "✓ skills 已打包"
+
 echo ""
 echo "接下来运行: govio-cli onboard"

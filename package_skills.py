@@ -1,6 +1,6 @@
-"""打包 skills/ 目录为 dist/govio-skill.zip，排除 skills/govio/assets 下的内容
+"""打包 skills/ 目录为 dist/govio-skills.zip，排除 skills/govio/assets 下的内容
 
-用法: uv run python package_skills.py
+用法: uv run package_skills.py
 """
 
 from pathlib import Path
@@ -13,6 +13,10 @@ OUTPUT = ROOT / "dist" / "govio-skills.zip"
 
 
 def main() -> None:
+    # 清理旧版本
+    if OUTPUT.exists():
+        OUTPUT.unlink()
+
     files = sorted(
         p for p in SKILLS_DIR.rglob("*")
         if p.is_file() and EXCLUDE_DIR not in p.parents

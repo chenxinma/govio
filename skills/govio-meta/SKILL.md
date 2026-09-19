@@ -16,6 +16,9 @@ description: 知识图谱维护命令组。当需要导入元数据、推荐数�
 5. **无内容即停止**。CLI 报 `❌ 未发现任何表` 时，把错误原文（含它列出的可用 schema）转告用户并停止；不得改名、造临时库或手改 CSV 绕过。
 6. **导入结果不上画布**。元数据导入只做文字汇总。源库可能非常庞大，全量展示代价过高；画布展示表结构属于用户主动查询场景（`govio-query`），不在导入流程内。
 7. **禁止建 junction / 软链接**。assets 目录与应用目录不一致时，把绝对路径告知用户，由用户自行合并。
+8. **先验输入文件类型，再选参数**。`--db` 指向的文件用魔数确认，不靠后缀名猜（`.db` 既可能是 SQLite 也可能是 DuckDB，DuckDB 文件头偏移 8 起是 `DUCK`）：
+   `head -c 12 <file> | grep -qa DUCK && echo DUCKDB || echo 非DuckDB`
+   不是 DuckDB 文件就不能用 `--source duckdb`；对不上时告知用户并停止，不要自行转库（见约束 1）。
 
 ## 标准工作循环
 
@@ -45,7 +48,7 @@ description: 知识图谱维护命令组。当需要导入元数据、推荐数�
 
 - `full_table_name = <schema>.<table>`；节点名与 node_id 都由它决定（node_id = 类型前缀 + SHA256(业务键) 前 8 位，自动生成，无需干预）
 - `--schemas` **必填**，必须写源库里真实存在的 schema 名；DuckDB 文件的默认 schema 是 `main`
-- 用户给的名字（如「命名 sales」）与源库真实 schema 不一致时：**告知并停止**，请用户确认按哪个 schema 导入。当前版本不支持改名导入，**不得为此改动源库**
+- 用户给的名字与源库真实 schema 不一致时（如源库 schema 是 `main` 但用户给了 `orders`）：**告知并停止**，请用户确认按哪个 schema 导入。当前版本不支持改名导入，**不得为此改动源库**
 - schema 写错或源库为空时，CLI 会失败并列出该库可导入的 schema，直接转告用户即可
 
 ## 子命令
@@ -63,7 +66,7 @@ description: 知识图谱维护命令组。当需要导入元数据、推荐数�
 
 ## 前置条件
 
-1. 已运行 `govio-cli onboard` 完成初始化（图后端写入 `~/.govio/config.yaml` 的 `graph` section）
+1. 已运行 `govio-cli onboard` 完成初始化（图后端与数据源由 onboard 写入配置）
 2. 导入子命令不读任何配置文件，输入全部由 CLI 参数显式给出；只有 `meta graph` 读 `graph` section
 
 ## 命令速查（最小可运行）

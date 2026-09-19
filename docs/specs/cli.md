@@ -159,6 +159,16 @@ _describe_duckdb_schemas(db_path) -> str   # read-only "main(5 张表)、..." hi
 - For `duckdb` / `both`, the message appends the importable schemas of the file via `DuckDBLoader.list_schemas()`, so callers never need to connect to the source database themselves
 - Renaming a schema during import is not supported; node names always come from `full_table_name = <schema>.<table>`
 
+### Schema Discovery on Missing `--schemas`
+
+When `--schemas` is omitted, `cmd_meta` prints an error message **plus** context-dependent hints:
+
+| Source | Hint |
+|---|---|
+| `duckdb` / `both` with `--db` | Lists importable schemas via `DuckDBLoader.list_schemas()` (e.g. `📖 test.duckdb 中可导入的 schema: main(5 张表)`) |
+| `duckdb` / `both` without `--db` | `提示: 请指定 --db 参数后可列出可用 schema` |
+| `tds` | `提示: TDS 模式下请直接指定 --schemas 参数` |
+
 ### Step Functions
 
 Each subcommand maps to an independent, idempotent step function:
