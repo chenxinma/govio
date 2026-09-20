@@ -37,6 +37,7 @@ description: 知识图谱维护命令组。当需要导入元数据、推荐数�
 | 本次新增的输入 | 跑哪条 | 产出 CSV |
 |---|---|---|
 | 元数据库（TDS）/ DuckDB 文件 | `meta meta` | PhysicalTable, Col, HAS_COLUMN |
+| 已配置的 DuckDB 数据源 | `meta import-schema` | PhysicalTable, Col, HAS_COLUMN（一步完成 meta + graph） |
 | 应用清单 Excel + app_map JSON | `meta app` | Application, USE |
 | 数据标准（仅 TDS） | `meta std` | Standard |
 | 已有贯标关系（仅 TDS） | `meta compliance` | COMPLIES_WITH |
@@ -63,6 +64,7 @@ description: 知识图谱维护命令组。当需要导入元数据、推荐数�
 | `meta metric` | 导入指标维度（Metric, Dimension + 5 种边） |
 | `meta graph` | 更新/重建/清空图数据库 + 生成 assets |
 | `meta recommend` | 为非标字段推荐匹配的数据标准 |
+| `meta import-schema` | 从已配置的 DuckDB 数据源导入元数据到图库（meta + graph 一步完成） |
 
 ## 前置条件
 
@@ -103,6 +105,9 @@ govio-cli meta graph --output ./data/meta --assets-dir ./my/assets --mode update
 # 数据标准推荐
 govio-cli meta recommend --kundb "mysql+pymysql://..." --app-map ./ref/app_map.json \
   --csv-dir ./data/meta --output-dir ./data/meta
+
+# 从已配置的 DuckDB 数据源导入元数据到图库（一步完成 meta + graph）
+govio-cli meta import-schema --datasource mydb --schemas main --output ./data/meta
 ```
 
 `meta graph --mode`：`update` 增量 MERGE（默认）· `rebuild` 全量重建 · `clear` 只清空不导入。

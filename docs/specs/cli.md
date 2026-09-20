@@ -124,6 +124,8 @@ Knowledge graph maintenance command group: `govio-cli meta`.
 
 All subcommands are independent, CLI-only (no config file dependency). All inputs are explicit CLI arguments.
 
+Exception: `import-schema` reads `config.datasources` to resolve the DuckDB file path from a datasource name.
+
 | Subcommand | Description |
 |---|---|
 | `meta meta` | Import TDS/DuckDB metadata (PhysicalTable, Col, HAS_COLUMN) |
@@ -134,6 +136,7 @@ All subcommands are independent, CLI-only (no config file dependency). All input
 | `meta metric` | Import metric/dimension definitions (Metric, Dimension + 5 edge types) |
 | `meta graph` | Graph database management (update/rebuild/clear + assets) |
 | `meta recommend` | Data standard recommendation |
+| `meta import-schema` | Import metadata from a configured DuckDB datasource to graph (shortcut for meta + graph) |
 
 Recommended order: `meta` → `app` → `std` → `compliance` → `rel` → `metric` → `graph`
 
@@ -205,6 +208,25 @@ Graph backend config is read from `~/.govio/config.yaml` (`graph` section). Supp
 - FalkorDB: upsert/import/delete
 - Ladybug: upsert/import/delete
 - NetworkX: incremental/rebuild GML/delete
+
+### `import-schema` Subcommand
+
+Shortcut that combines `meta meta` + `meta graph` for DuckDB datasources already configured via `govio-cli onboard`. Reads the datasource URL from `~/.govio/config.yaml`, validates it is `duckdb://`, extracts the file path, then runs the full pipeline: CSV export → graph update → assets generation.
+
+```bash
+govio-cli meta import-schema --datasource mydb --schemas main,analytics
+govio-cli meta import-schema --datasource mydb --schemas main --output ./data --assets-dir ./assets --mode rebuild
+```
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `--datasource` | Yes | — | Datasource name from `config.datasources` (must be DuckDB) |
+| `--schemas` | Yes | — | Comma-separated schema list |
+| `--output` | No | `./output` | CSV intermediate directory |
+| `--assets-dir` | No | `.agent/skills/govio/assets` | Assets output directory |
+| `--mode` | No | `update` | `update` / `rebuild` / `clear` |
+
+Only supports DuckDB datasources (`duckdb://` URL). Non-DuckDB datasources cause exit with code 1.
 
 ---
 
