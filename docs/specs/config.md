@@ -5,10 +5,9 @@
 | File | Path | Purpose |
 |---|---|---|
 | Main config | `~/.govio/config.yaml` | Graph backend, datasources, global settings |
-| Meta config | `~/.govio/meta_config.yaml` | Metadata sources for `meta` command group |
 | Observe store | `.govio/observe/` | DataFrame persistence (parquet + manifest) |
 
-Managed by `ConfigManager` and `MetaConfigManager` in `govio.cli.config`.
+Managed by `ConfigManager` in `govio.cli.config`.
 
 ## Main Config Schema (Nested Format)
 
@@ -51,21 +50,6 @@ datasources:
 1. **Old flat format → nested format**: Fields like `backend`, `kundb`, `networkx`, etc. are reorganized into `metadata`, `graph`, and `datasources` sections. A backup is saved to `config.yaml.bak`.
 
 2. **Plaintext passwords → encrypted storage**: Passwords embedded in datasource URLs are extracted, encrypted via `govio.crypto`, and stored in the `encrypted_password` field. The URL is masked.
-
-## Meta Config Schema
-
-```yaml
-# Metadata extraction source
-kundb: "mysql+pymysql://user:pass@host/db"
-workspace_uuid: "82ee37374b314a938bf28170ab4db7cf"
-app_list: "path/to/app_list.xlsx"
-app_map: "path/to/app_map.json"
-relationship: "path/to/relationships.json"  # optional
-metric: "path/to/metrics.json"              # optional
-csv_dir: "./output"
-```
-
-`MetaConfigManager.load_or_migrate()` will auto-create from main config if meta_config.yaml doesn't exist.
 
 ## Validation Rules
 
