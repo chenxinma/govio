@@ -30,7 +30,7 @@ description: 知识图谱维护命令组。当需要导入元数据、推荐数�
 ```
 
 - **只跑本次有新输入的子命令**，不需要走完整 7 步
-- `--output` 必须指向既有 CSV 目录：指错目录等于丢掉历史增量
+- `--output` 必须指向既有 CSV 目录（单次一次性导入除外，见下节）：指错目录等于丢掉历史增量
 - CSV 目录是子命令之间唯一的共享状态；`graph` 只认目录里的固定文件名
 - `--mode update` 是增量 upsert，可反复执行
 
@@ -44,6 +44,21 @@ description: 知识图谱维护命令组。当需要导入元数据、推荐数�
 | 表关系 JSON | `meta rel` | RELATES_TO |
 | 指标定义 JSON | `meta metric` | Metric, Dimension + 5 种边 |
 | 上面任何一项跑完 | `meta graph --mode update` | 图库 + assets |
+
+### 单次导入 DuckDB 元数据（临时 CSV）
+
+只导这一次、不需要后续增量维护时，中间 CSV 写入临时目录，作业完成即清理：
+
+```bash
+tmp=$(mktemp -d)
+govio-cli meta meta --source duckdb --db /path/to/meta.duckdb --schemas main --output "$tmp"
+govio-cli meta graph --output "$tmp" --mode update
+rm -rf "$tmp"
+```
+
+- `meta import-schema` 同理：`--output` 指向临时目录，跑完删除
+- 作业（meta + graph）成功完成后删除临时目录；失败时先保留供排查，处理完再删
+- 后续还要补导增量的场景不要用临时目录，`--output` 仍指向持久 CSV 目录
 
 ## 命名语义（节点名从哪来）
 
