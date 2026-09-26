@@ -4,13 +4,16 @@ DataFrame 存储在 .govio/observe/dataframes/ 目录下的 parquet 文件中。
 清单保存在 .govio/observe/manifest.json。
 """
 
+from __future__ import annotations
+
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 OBSERVE_DIR = Path(".govio/observe")
@@ -120,6 +123,8 @@ class ObserveStore:
 
     def get(self, name: str) -> pd.DataFrame | None:
         """加载 DataFrame 到内存"""
+        import pandas as pd
+
         if name not in self._manifest.dataframes:
             return None
 
@@ -141,6 +146,8 @@ class ObserveStore:
                 # 尝试从文件读取
                 file_path = Path(data["file"])
                 if file_path.exists():
+                    import pandas as pd
+
                     df = pd.read_parquet(file_path)
                     column_info = [
                         {"name": col, "dtype": str(df[col].dtype)}

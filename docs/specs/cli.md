@@ -16,6 +16,14 @@ Uses `argparse` with subparsers:
 | `sql` | Metric SQL assembly command group |
 | `-V/--version` | Show package version |
 
+### Lazy imports (startup speed)
+
+Heavy modules are imported on demand so fast paths (`-V`, `backend`, `observe info`) start in ~0.1s:
+
+- Subcommand modules (`onboard` / `query` / `meta` / `observe` / `sql`) are imported inside `main()`'s dispatch branch, not at module top level
+- `govio/__init__.py` and `govio/metadata/__init__.py` expose their API via PEP 562 `__getattr__` lazy exports (`from govio import FalkorDBGraph` etc. still works)
+- `observe.py` imports `render_chart` (matplotlib), `visualize_relations` (networkx), `load_dataframe` (duckdb) inside the matching `cmd_*` function
+
 ---
 
 ## ConfigManager

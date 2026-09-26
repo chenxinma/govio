@@ -8,21 +8,22 @@ DataFrame 持久化到 .govio/observe/ 目录。
 import argparse
 import json
 import sys
+from typing import TYPE_CHECKING
 
 from .config import ConfigManager
+
+if TYPE_CHECKING:
+    from ..observe_data.core.database import DatabaseManager
 from ..observe_data.core.observe_store import ObserveStore
-from ..observe_data.core.database import DatabaseManager
 from ..observe_data.tools.list_dataframes import list_dataframes
-from ..observe_data.tools.load_dataframe import load_dataframe, load_from_memory
 from ..observe_data.tools.release_dataframe import release_dataframe, release_all_dataframes
-from ..observe_data.tools.visualize_relations import visualize_relations
-from ..observe_data.core.chart import render_chart
 from ..observe_data.tools.list_datasources import list_datasources
 
 
-def get_db_manager(config: dict) -> DatabaseManager:
+def get_db_manager(config: dict) -> "DatabaseManager":
     """从配置创建 DatabaseManager"""
     from ..observe_data.config import DataSourceConfig
+    from ..observe_data.core.database import DatabaseManager
 
     datasources = config.get("datasources", {})
     ds_configs = {
@@ -54,6 +55,8 @@ def cmd_load(
     output: str | None = None,
 ) -> None:
     """加载 DataFrame"""
+    from ..observe_data.tools.load_dataframe import load_dataframe, load_from_memory
+
     store = ObserveStore()
 
     if memory:
@@ -155,6 +158,8 @@ def cmd_visualize(config: dict, relations_file: str) -> None:
         print(json.dumps({"success": False, "error": f"JSON 解析失败: {e}"}))
         return
 
+    from ..observe_data.tools.visualize_relations import visualize_relations
+
     result = visualize_relations(relations=relations)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
@@ -173,6 +178,8 @@ def cmd_chart(
     if df is None:
         print(json.dumps({"success": False, "error": f"DataFrame '{name}' 不存在"}))
         return
+
+    from ..observe_data.core.chart import render_chart
 
     result = render_chart(
         df=df,
