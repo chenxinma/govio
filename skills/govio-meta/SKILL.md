@@ -111,7 +111,7 @@ govio-cli meta compliance --kundb "mysql+pymysql://..." --workspace-uuid <uuid> 
 govio-cli meta rel --file ./ref/relationships.json --output ./data/meta
 govio-cli meta metric --file ./ref/metrics.json --output ./data/meta
 
-# 导入图库 + 生成 assets（默认 assets 目录 .agent/skills/govio/assets）
+# 导入图库 + 生成 assets（默认 assets 目录 .agents/skills/govio/assets）
 govio-cli meta graph --output ./data/meta --mode update
 
 # 指定 assets 输出目录

@@ -28,7 +28,7 @@ from govio.metadata.relationship import load_relationships
 from govio.metadata.metric import MetricLoader
 from govio.metadata.node_id import assign_node_ids, write_node_csv
 
-DEFAULT_ASSETS_DIR = Path(".agent/skills/govio/assets")
+DEFAULT_ASSETS_DIR = Path(".agents/skills/govio/assets")
 
 
 # ---------------------------------------------------------------------------
@@ -957,7 +957,7 @@ def meta():
     p_graph.add_argument(
         "--assets-dir",
         type=str,
-        help="assets 输出目录（默认 .agent/skills/govio/assets）",
+        help="assets 输出目录（默认 .agents/skills/govio/assets）",
     )
     p_graph.add_argument(
         "--mode",
@@ -1008,7 +1008,7 @@ def meta():
     p_import.add_argument(
         "--assets-dir",
         type=str,
-        help="assets 输出目录（默认 .agent/skills/govio/assets）",
+        help="assets 输出目录（默认 .agents/skills/govio/assets）",
     )
     p_import.add_argument(
         "--mode",

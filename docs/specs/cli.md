@@ -202,7 +202,7 @@ _clear_graph(assets_dir) -> bool                        # Clear graph database
 _generate_assets(assets_dir) -> None                    # schema.md, names, metrics_index.md
 ```
 
-`meta graph` accepts `--assets-dir <path>` (default `.agent/skills/govio/assets`). The path is resolved to an absolute path and passed to all three helpers. `_generate_assets()` prints the absolute path on success.
+`meta graph` accepts `--assets-dir <path>` (default `.agents/skills/govio/assets`). The path is resolved to an absolute path and passed to all three helpers. `_generate_assets()` prints the absolute path on success.
 
 Graph backend config is read from `~/.govio/config.yaml` (`graph` section). Supports all three backends:
 - FalkorDB: upsert/import/delete
@@ -223,7 +223,7 @@ govio-cli meta import-schema --datasource mydb --schemas main --output ./data --
 | `--datasource` | Yes | — | Datasource name from `config.datasources` (must be DuckDB) |
 | `--schemas` | Yes | — | Comma-separated schema list |
 | `--output` | No | `./output` | CSV intermediate directory |
-| `--assets-dir` | No | `.agent/skills/govio/assets` | Assets output directory |
+| `--assets-dir` | No | `.agents/skills/govio/assets` | Assets output directory |
 | `--mode` | No | `update` | `update` / `rebuild` / `clear` |
 
 Only supports DuckDB datasources (`duckdb://` URL). Non-DuckDB datasources cause exit with code 1.
