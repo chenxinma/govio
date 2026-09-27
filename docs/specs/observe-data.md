@@ -22,6 +22,8 @@ class DataSourceConfig:
 
 File-backed DataFrame storage using parquet files.
 
+`pandas` is imported on demand (only when reading/writing parquet); manifest listing (`list()`, `exists()`, `release()`) runs without pandas loaded.
+
 ### Constants
 
 ```python
@@ -76,6 +78,8 @@ DatabaseManager(datasources: dict[str, DataSourceConfig])
 
 - DuckDB URLs: `duckdb://path` -- supports file and directory modes
 - Other URLs: SQLAlchemy engines
+- Connections are lazy: the constructor only records configs, each datasource is connected on first `execute_sql` / `get_engine` call (`_ensure(name)`). Listing datasources never opens a connection.
+- `duckdb` / `sqlalchemy` / `pandas` are imported on demand, not at module import.
 
 ### Methods
 

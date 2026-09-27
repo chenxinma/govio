@@ -117,6 +117,22 @@ uv run package_skills.py
 uv run pyright src/
 ```
 
+### CLI Usage
+
+```bash
+govio-cli onboard           # Interactive setup wizard
+govio-cli backend            # Show current graph backend
+govio-cli query -c "..."     # Knowledge graph query
+govio-cli meta meta --source duckdb --db x.duckdb --schemas main --output ./output   # 导入元数据 -> CSV
+govio-cli meta graph --output ./output --mode update  # CSV -> 图库 + assets
+govio-cli meta recommend     # Data standard recommendation
+govio-cli observe info       # Show datasources + DataFrames
+govio-cli observe load ...   # Load DataFrame from DB or memory
+govio-cli observe compare ... # Compare two DataFrames
+govio-cli observe chart ...   # Generate PNG chart
+govio-cli sql build -f query.json  # Assemble metric SQL
+```
+
 ## Code Style Guidelines
 
 ### Imports
@@ -245,7 +261,7 @@ src/govio/
 ├── cli/                     # CLI entry points
 │   ├── __init__.py          # main() entry
 │   ├── __main__.py
-│   ├── config.py            # ConfigManager, MetaConfigManager
+│   ├── config.py            # ConfigManager
 │   ├── main.py              # argparse dispatch
 │   ├── meta.py              # meta command group (sync/recommend/config)
 │   ├── observe.py           # observe command group

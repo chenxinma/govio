@@ -28,7 +28,7 @@ from govio.metadata.relationship import load_relationships
 from govio.metadata.metric import MetricLoader
 from govio.metadata.node_id import assign_node_ids, write_node_csv
 
-DEFAULT_ASSETS_DIR = Path(".agent/skills/govio/assets")
+DEFAULT_ASSETS_DIR = Path(".agents/skills/govio/assets")
 
 
 # ---------------------------------------------------------------------------
@@ -821,6 +821,44 @@ def cmd_recommend(args: argparse.Namespace) -> None:
     )
 
 
+def cmd_import_schema(args: argparse.Namespace) -> None:
+    """meta import-schema — 从已配置数据源导入元数据到图库（仅 DuckDB）"""
+    ds_name = args.datasource
+
+    config = ConfigManager().load()
+    datasources = config.get("datasources", {})
+    if ds_name not in datasources:
+        print(f"❌ 数据源 '{ds_name}' 不存在，请先用 onboard 配置", file=sys.stderr)
+        sys.exit(1)
+
+    url = datasources[ds_name].get("url", "")
+    if not url.startswith("duckdb://"):
+        print(
+            f"❌ import-schema 仅支持 DuckDB 数据源，'{ds_name}' 的 URL 不是 duckdb:// 开头",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    db_path = url[len("duckdb://") :]
+    schemas = [s.strip() for s in args.schemas.split(",") if s.strip()]
+    if not schemas:
+        print("❌ 需要指定 --schemas", file=sys.stderr)
+        sys.exit(1)
+
+    output = Path(args.output) if args.output else Path("./output")
+    assets_dir = Path(args.assets_dir) if args.assets_dir else DEFAULT_ASSETS_DIR
+
+    result = step_meta_export(
+        output, source="duckdb", db_path=db_path, schemas=schemas
+    )
+    if result is None:
+        sys.exit(1)
+
+    _update_graph(output, args.mode, assets_dir)
+    _generate_assets(assets_dir)
+    print("\n✅ import-schema 完成！")
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
@@ -919,7 +957,7 @@ def meta():
     p_graph.add_argument(
         "--assets-dir",
         type=str,
-        help="assets 输出目录（默认 .agent/skills/govio/assets）",
+        help="assets 输出目录（默认 .agents/skills/govio/assets）",
     )
     p_graph.add_argument(
         "--mode",
@@ -951,6 +989,34 @@ def meta():
         "--output-dir", type=str, help="推荐结果输出目录（默认 ./output）"
     )
     p_recommend.set_defaults(func=cmd_recommend)
+
+    # meta import-schema — 从已配置数据源导入元数据（仅 DuckDB）
+    p_import = sub.add_parser(
+        "import-schema",
+        help="从已配置的 DuckDB 数据源导入元数据到图库",
+    )
+    p_import.add_argument(
+        "--datasource", type=str, required=True, help="数据源名称（仅支持 DuckDB）"
+    )
+    p_import.add_argument(
+        "--schemas",
+        type=str,
+        required=True,
+        help="要导入的 schema 列表，逗号分隔（DuckDB 默认 schema 为 main）",
+    )
+    p_import.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
+    p_import.add_argument(
+        "--assets-dir",
+        type=str,
+        help="assets 输出目录（默认 .agents/skills/govio/assets）",
+    )
+    p_import.add_argument(
+        "--mode",
+        choices=["update", "rebuild", "clear"],
+        default="update",
+        help="更新模式: update=增量, rebuild=重建, clear=清空",
+    )
+    p_import.set_defaults(func=cmd_import_schema)
 
     args = parser.parse_args(sys.argv[1:])
     args.func(args)

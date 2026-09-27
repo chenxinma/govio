@@ -104,7 +104,7 @@
 ### CLI 工程化待办
 **目标：** 消除元数据导入流程中的现场变通（目录联接、临时库、手工合并 assets）。
 
-- [x] **assets 输出目录可配置**：`meta graph --assets-dir <path>` 参数已实现，默认 `.agent/skills/govio/assets`
+- [x] **assets 输出目录可配置**：`meta graph --assets-dir <path>` 参数已实现，默认 `.s/skills/govio/assets`
 - [ ] **多份 assets 副本的归并策略**：通过 `--assets-dir` 可指定单一输出目录，消除了多副本问题；但仓库内 `skills/govio/assets` 与应用侧的归并策略仍需用户自行管理
 
 已评估、暂不实现（如需重启请先讨论）：

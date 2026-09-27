@@ -16,6 +16,14 @@ Uses `argparse` with subparsers:
 | `sql` | Metric SQL assembly command group |
 | `-V/--version` | Show package version |
 
+### Lazy imports (startup speed)
+
+Heavy modules are imported on demand so fast paths (`-V`, `backend`, `observe info`) start in ~0.1s:
+
+- Subcommand modules (`onboard` / `query` / `meta` / `observe` / `sql`) are imported inside `main()`'s dispatch branch, not at module top level
+- `govio/__init__.py` and `govio/metadata/__init__.py` expose their API via PEP 562 `__getattr__` lazy exports (`from govio import FalkorDBGraph` etc. still works)
+- `observe.py` imports `render_chart` (matplotlib), `visualize_relations` (networkx), `load_dataframe` (duckdb) inside the matching `cmd_*` function
+
 ---
 
 ## ConfigManager
@@ -124,6 +132,8 @@ Knowledge graph maintenance command group: `govio-cli meta`.
 
 All subcommands are independent, CLI-only (no config file dependency). All inputs are explicit CLI arguments.
 
+Exception: `import-schema` reads `config.datasources` to resolve the DuckDB file path from a datasource name.
+
 | Subcommand | Description |
 |---|---|
 | `meta meta` | Import TDS/DuckDB metadata (PhysicalTable, Col, HAS_COLUMN) |
@@ -134,6 +144,7 @@ All subcommands are independent, CLI-only (no config file dependency). All input
 | `meta metric` | Import metric/dimension definitions (Metric, Dimension + 5 edge types) |
 | `meta graph` | Graph database management (update/rebuild/clear + assets) |
 | `meta recommend` | Data standard recommendation |
+| `meta import-schema` | Import metadata from a configured DuckDB datasource to graph (shortcut for meta + graph) |
 
 Recommended order: `meta` → `app` → `std` → `compliance` → `rel` → `metric` → `graph`
 
@@ -199,12 +210,31 @@ _clear_graph(assets_dir) -> bool                        # Clear graph database
 _generate_assets(assets_dir) -> None                    # schema.md, names, metrics_index.md
 ```
 
-`meta graph` accepts `--assets-dir <path>` (default `.agent/skills/govio/assets`). The path is resolved to an absolute path and passed to all three helpers. `_generate_assets()` prints the absolute path on success.
+`meta graph` accepts `--assets-dir <path>` (default `.agents/skills/govio/assets`). The path is resolved to an absolute path and passed to all three helpers. `_generate_assets()` prints the absolute path on success.
 
 Graph backend config is read from `~/.govio/config.yaml` (`graph` section). Supports all three backends:
 - FalkorDB: upsert/import/delete
 - Ladybug: upsert/import/delete
 - NetworkX: incremental/rebuild GML/delete
+
+### `import-schema` Subcommand
+
+Shortcut that combines `meta meta` + `meta graph` for DuckDB datasources already configured via `govio-cli onboard`. Reads the datasource URL from `~/.govio/config.yaml`, validates it is `duckdb://`, extracts the file path, then runs the full pipeline: CSV export → graph update → assets generation.
+
+```bash
+govio-cli meta import-schema --datasource mydb --schemas main,analytics
+govio-cli meta import-schema --datasource mydb --schemas main --output ./data --assets-dir ./assets --mode rebuild
+```
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `--datasource` | Yes | — | Datasource name from `config.datasources` (must be DuckDB) |
+| `--schemas` | Yes | — | Comma-separated schema list |
+| `--output` | No | `./output` | CSV intermediate directory |
+| `--assets-dir` | No | `.agents/skills/govio/assets` | Assets output directory |
+| `--mode` | No | `update` | `update` / `rebuild` / `clear` |
+
+Only supports DuckDB datasources (`duckdb://` URL). Non-DuckDB datasources cause exit with code 1.
 
 ---
 
