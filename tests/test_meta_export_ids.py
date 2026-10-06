@@ -1,7 +1,7 @@
 """step 函数 string ID 集成测试。mock 全部 Loader，跑 dry-run 检查 CSV。"""
 import json
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -101,8 +101,11 @@ def _run_steps(
 ):
     """测试辅助：按顺序执行 step 函数。"""
     from govio.cli.meta import (
-        step_meta_export, step_std_export,
-        step_compliance_export, step_rel_export, step_metric_export,
+        step_compliance_export,
+        step_meta_export,
+        step_metric_export,
+        step_rel_export,
+        step_std_export,
     )
 
     result = step_meta_export(
@@ -253,7 +256,7 @@ def test_metric_edges_use_string_ids(tmp_path):
 
     # Metric / Dimension 节点
     m_df = pd.read_csv(out / "Metric.csv")
-    assert ":ID(Metric)" == m_df.columns[0]
+    assert m_df.columns[0] == ":ID(Metric)"
     assert m_df[":ID(Metric)"].iloc[0].startswith("ME")
     d_df = pd.read_csv(out / "Dimension.csv")
     assert d_df[":ID(Dimension)"].iloc[0].startswith("DI")
@@ -304,7 +307,7 @@ def test_make_csv_utility_path_uses_string_ids(tmp_path, monkeypatch):
     )
 
     df = pd.read_csv(tmp_path / "PhysicalTable.csv")
-    assert ":ID(PhysicalTable)" == df.columns[0]
+    assert df.columns[0] == ":ID(PhysicalTable)"
     assert df[":ID(PhysicalTable)"].iloc[0].startswith("PT")
     assert len(df[":ID(PhysicalTable)"].iloc[0]) == 10
 

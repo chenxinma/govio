@@ -141,6 +141,7 @@ class LadybugGraph:
         """
         try:
             result = self._conn.execute(query, params or {})
-            return result.get_all()
+            rows = result.get_all()
         except Exception as e:
-            raise ValueError(f"Generated Cypher Statement is not valid\n{e}")
+            raise ValueError(f"Generated Cypher Statement is not valid\n{e}") from e
+        return rows

@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from datacompy.core import Compare
 import pandas as pd
+from datacompy.core import Compare
 
 
 class TableComparator:
@@ -22,11 +22,11 @@ class TableComparator:
 
         return {
             "match": len(source_only) == 0 and len(target_only) == 0,
-            "source_columns": sorted(list(source_cols)),
-            "target_columns": sorted(list(target_cols)),
-            "common_columns": sorted(list(common_cols)),
-            "source_only": sorted(list(source_only)),
-            "target_only": sorted(list(target_only)),
+            "source_columns": sorted(source_cols),
+            "target_columns": sorted(target_cols),
+            "common_columns": sorted(common_cols),
+            "source_only": sorted(source_only),
+            "target_only": sorted(target_only),
         }
 
     def compare_data(

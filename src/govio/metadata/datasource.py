@@ -200,7 +200,7 @@ def build_owns_edges(
         return pd.DataFrame(columns=columns)
     ds_ids = df_datasources.set_index("datasource_name")["node_id"].to_dict()
     rows = []
-    for schema, node_id in zip(df_tables["schema"], df_tables["node_id"]):
+    for schema, node_id in zip(df_tables["schema"], df_tables["node_id"], strict=False):
         ds_name = schema_map.get(str(schema))
         ds_id = ds_ids.get(ds_name or "")
         if ds_id is None:
@@ -220,9 +220,9 @@ class DatasourceLoader:
     def _load(self) -> None:
         if not self.datasource_file.exists():
             raise FileNotFoundError(f"数据源声明文件不存在: {self.datasource_file}")
-        with open(self.datasource_file, "r", encoding="utf-8") as f:
+        with open(self.datasource_file, encoding="utf-8") as f:
             data = json.load(f)
-        with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
+        with open(SCHEMA_PATH, encoding="utf-8") as f:
             schema = json.load(f)
         jsonschema.validate(instance=data, schema=schema)
 

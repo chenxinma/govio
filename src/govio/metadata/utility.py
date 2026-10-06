@@ -4,11 +4,11 @@ import pandas as pd
 
 from .database import TDSLoader
 from .datasource import DatasourceLoader, build_owns_edges, filter_frames
-from .standard import StandardLoader
-from .recommender import create_recommender
-from .relationship import load_relationships
 from .metric import MetricLoader
 from .node_id import assign_node_ids, write_node_csv
+from .recommender import create_recommender
+from .relationship import load_relationships
+from .standard import StandardLoader
 
 
 def make_csv(
@@ -206,7 +206,7 @@ def data_standard_recommend(
         csv_dir: 已导入的 CSV 目录（读取 Col.csv / Standard.csv），缺省取 output
     """
     csv_dir = csv_dir or output
-    ds_map = {schema: datasource_name for schema in schemas}
+    ds_map = dict.fromkeys(schemas, datasource_name)
 
     std_loader = StandardLoader(db, workspace_uuid, ds_map)
     # 加载数据

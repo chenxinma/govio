@@ -6,7 +6,6 @@ from trino import dbapi
 from .database import MetadataLoader
 from .datasource import qualify
 
-
 # 匹配 Trino 类型：base 或 base(params)，如 decimal(10,2)、varchar(19)、bigint
 _TYPE_RE = re.compile(r"^(\w+)\s*(?:\(([^)]*)\))?$")
 
@@ -141,7 +140,7 @@ class TrinoLoader(MetadataLoader):
         scale: list[int] = []
         order_no: list[int] = []
         for schema, table_name in zip(
-            tables["schema"].tolist(), tables["table_name"].tolist()
+            tables["schema"].tolist(), tables["table_name"].tolist(), strict=False
         ):
             sql = f"SHOW COLUMNS FROM {self._qualify(self.catalog, schema, table_name)}"
             df = self._fetch(sql)
@@ -149,7 +148,7 @@ class TrinoLoader(MetadataLoader):
             ctypes = df["Type"].astype(str).tolist()
             comments = df["Comment"].tolist()
             for i, (cname, ctype, comment) in enumerate(
-                zip(cnames, ctypes, comments), start=1
+                zip(cnames, ctypes, comments, strict=False), start=1
             ):
                 # Comment 可能为 None / NaN / ""，非空字符串才作为展示名
                 disp = comment if isinstance(comment, str) and comment else cname

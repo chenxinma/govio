@@ -1,8 +1,8 @@
 import tempfile
+from pathlib import Path
 
 import networkx as nx
 import pytest
-from pathlib import Path
 
 from govio.core.graph_factory import GraphFactory
 
@@ -36,7 +36,8 @@ def test_create_falkordb_graph_mock():
         "falkordb": {"host": "localhost", "port": 6379, "graph": "test_graph"},
     }
 
-    with pytest.raises(Exception):
+    # 无 FalkorDB 服务时可能抛 redis 连接错误等任意异常，占位用例仅断言失败
+    with pytest.raises(Exception):  # noqa: B017
         GraphFactory.create(config)
 
 

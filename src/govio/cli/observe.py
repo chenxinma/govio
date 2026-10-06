@@ -16,8 +16,11 @@ if TYPE_CHECKING:
     from ..observe_data.core.database import DatabaseManager
 from ..observe_data.core.observe_store import ObserveStore
 from ..observe_data.tools.list_dataframes import list_dataframes
-from ..observe_data.tools.release_dataframe import release_dataframe, release_all_dataframes
 from ..observe_data.tools.list_datasources import list_datasources
+from ..observe_data.tools.release_dataframe import (
+    release_all_dataframes,
+    release_dataframe,
+)
 
 
 def get_db_manager(config: dict) -> "DatabaseManager":
@@ -63,7 +66,7 @@ def cmd_load(
         result = load_from_memory(store=store, name=name, sql=sql)
     else:
         if datasource is None:
-            raise Exception("datasource not setted.")
+            raise ValueError("datasource not setted.")
         
         db_manager = get_db_manager(config)
         result = load_dataframe(
@@ -149,7 +152,7 @@ def cmd_explore(config: dict, dataframes: list[str] | None = None) -> None:
 def cmd_visualize(config: dict, relations_file: str) -> None:
     """可视化关系"""
     try:
-        with open(relations_file, "r", encoding="utf-8") as f:
+        with open(relations_file, encoding="utf-8") as f:
             relations = json.load(f)
     except FileNotFoundError:
         print(json.dumps({"success": False, "error": f"关系文件不存在: {relations_file}"}))
@@ -356,7 +359,7 @@ def observe():
             cols = [c.strip() for c in args.join_columns.split(",")]
             cmd_compare(config, args.source, args.target, cols)
         case "explore":
-            cmd_explore(config, args.dataframes if args.dataframes else None)
+            cmd_explore(config, args.dataframes or None)
         case "visualize-relations":
             cmd_visualize(config, args.relations_file)
         case "chart":

@@ -34,7 +34,7 @@ class GraphFactory:
             gml_path = config["networkx"]["gml_path"]
             return NetworkXGraph(gml_path)
 
-        elif backend == "falkordb":
+        if backend == "falkordb":
             if "falkordb" not in config:
                 raise ValueError("FalkorDB backend 需要 'falkordb' 配置")
 
@@ -50,7 +50,7 @@ class GraphFactory:
                 port=falkordb_config.get("port", 6379),
             )
 
-        elif backend == "ladybug":
+        if backend == "ladybug":
             if "ladybug" not in config:
                 raise ValueError("Ladybug backend 需要 'ladybug' 配置")
             ladybug_config = config["ladybug"]
@@ -67,5 +67,4 @@ class GraphFactory:
                 ),
             )
 
-        else:
-            raise ValueError(f"不支持的 backend: {backend}")
+        raise ValueError(f"不支持的 backend: {backend}")

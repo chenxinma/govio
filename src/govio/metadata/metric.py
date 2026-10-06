@@ -46,7 +46,7 @@ class MetricLoader:
         if not self.metric_file.exists():
             raise FileNotFoundError(f"指标定义文件不存在: {self.metric_file}")
 
-        with open(self.metric_file, "r", encoding="utf-8") as f:
+        with open(self.metric_file, encoding="utf-8") as f:
             self._data = json.load(f)
 
         self._validate_schema()
@@ -55,7 +55,7 @@ class MetricLoader:
 
     def _validate_schema(self):
         """使用 JSON Schema 校验文件结构"""
-        with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
+        with open(SCHEMA_PATH, encoding="utf-8") as f:
             schema = json.load(f)
 
         jsonschema.validate(instance=self._data, schema=schema)
@@ -63,7 +63,7 @@ class MetricLoader:
     def _validate_semantics(self):
         """校验语义约束：source_tables 引用、derived_from 引用、DAG 无环"""
         if not self._data or "metrics" not in self._data:
-            raise Exception("No metric loaded.")
+            raise ValueError("No metric loaded.")
 
         metrics = self._data["metrics"]
         metric_codes = {m["code"] for m in metrics}
@@ -126,14 +126,13 @@ class MetricLoader:
             return False
 
         for code in adj:
-            if code not in visited:
-                if dfs(code):
-                    raise ValueError("指标 derived_from 关系存在循环依赖")
+            if code not in visited and dfs(code):
+                raise ValueError("指标 derived_from 关系存在循环依赖")
 
     def _build_dataframes(self):
         """从校验后的数据构建所有 DataFrame"""
         if not self._data or "metrics" not in self._data:
-            raise Exception("No metric loaded.")
+            raise ValueError("No metric loaded.")
 
         metrics = self._data["metrics"]
         shared_dims = self._data.get("shared_dimensions", [])

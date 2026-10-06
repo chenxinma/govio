@@ -1,5 +1,6 @@
 """DataFrame 图表生成"""
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,6 @@ matplotlib.use("Agg")  # 非交互后端,无 DISPLAY 也能出图
 
 import matplotlib.pyplot as plt
 
-
 _FONT_FALLBACK = [
     "Noto Sans CJK SC",
     "WenQuanYi Zen Hei",
@@ -19,17 +19,11 @@ _FONT_FALLBACK = [
     "Arial Unicode MS",
 ]
 
-_font_configured = False
-
-
+@lru_cache(maxsize=1)
 def _setup_font() -> None:
-    """配置中文字体回退链和负号显示,模块级只执行一次"""
-    global _font_configured
-    if _font_configured:
-        return
+    """配置中文字体回退链和负号显示,模块级只执行一次（lru_cache 缓存保证）"""
     plt.rcParams["font.sans-serif"] = _FONT_FALLBACK
     plt.rcParams["axes.unicode_minus"] = False
-    _font_configured = True
 
 
 def render_chart(

@@ -49,7 +49,7 @@ class RelationshipLoader:
 
     def load_json(self) -> dict[str, Any]:
         """加载JSON文件"""
-        with open(self.json_path, "r", encoding="utf-8") as f:
+        with open(self.json_path, encoding="utf-8") as f:
             data = json.load(f)
 
         if "version" not in data:
@@ -67,7 +67,7 @@ class RelationshipLoader:
 
     def _validate_schema(self, data: dict[str, Any]) -> None:
         """使用 JSON Schema 校验关系定义结构"""
-        with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
+        with open(SCHEMA_PATH, encoding="utf-8") as f:
             schema = json.load(f)
         jsonschema.validate(instance=data, schema=schema)
 

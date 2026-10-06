@@ -1,7 +1,8 @@
 import shutil
-import yaml
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from govio.crypto import encrypt_value, parse_password_from_url
 
@@ -26,7 +27,7 @@ class ConfigManager:
         if not self.exists():
             raise FileNotFoundError(f"配置文件不存在: {self.config_path}")
 
-        with open(self.config_path, "r", encoding="utf-8") as f:
+        with open(self.config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f) or {}
 
         if self._has_plaintext_passwords(config):
@@ -62,7 +63,7 @@ class ConfigManager:
         shutil.copy2(self.config_path, backup_path)
 
         datasources = config.get("datasources", {})
-        for name, ds_data in datasources.items():
+        for ds_data in datasources.values():
             if not isinstance(ds_data, dict):
                 continue
             url = ds_data.get("url", "")

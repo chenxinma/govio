@@ -83,7 +83,7 @@ def decrypt_value(ciphertext: str, key_path: Path | None = None) -> str:
     try:
         return f.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
     except InvalidToken:
-        raise ValueError("解密失败：密文无效或密钥不匹配")
+        raise ValueError("解密失败：密文无效或密钥不匹配") from None
 
 
 def parse_password_from_url(url: str) -> tuple[str, str | None]:

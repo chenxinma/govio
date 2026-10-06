@@ -4,8 +4,8 @@ from typing import Any
 
 import duckdb
 
-from ..core.observe_store import ObserveStore
 from ..core.database import DatabaseManager
+from ..core.observe_store import ObserveStore
 
 
 def load_dataframe(
@@ -30,8 +30,7 @@ def load_dataframe(
     try:
         df = db_manager.execute_sql(datasource, sql)
         info = store.store(name, df, datasource, sql)
-
-        return {
+        result = {
             "success": True,
             "name": info.name,
             "rows": info.rows,
@@ -41,7 +40,8 @@ def load_dataframe(
     except ValueError as e:
         return {"success": False, "error": str(e)}
     except Exception as e:
-        return {"success": False, "error": f"SQL 执行错误: {str(e)}"}
+        return {"success": False, "error": f"SQL 执行错误: {e!s}"}
+    return result
 
 
 def load_from_memory(
@@ -92,4 +92,4 @@ def load_from_memory(
             "source_tables": list(df_dict.keys()),
         }
     except Exception as e:
-        return {"success": False, "error": f"SQL 执行错误: {str(e)}"}
+        return {"success": False, "error": f"SQL 执行错误: {e!s}"}

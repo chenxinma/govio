@@ -1,6 +1,9 @@
 import textwrap
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
+
 from falkordb import FalkorDB
+
 
 class FalkorDBGraph:
     def __init__(self, graph="ontology", host='localhost', port=6379) -> None:
@@ -10,7 +13,7 @@ class FalkorDBGraph:
         self._schema:str = ""
         self.refresh_schema()
     
-    def _get_labels(self) ->  Generator[str, Any, None]:
+    def _get_labels(self) ->  Generator[str, Any]:
         result = self._g.query("CALL db.labels()").result_set
         for label in result:
             yield label[0]
@@ -50,7 +53,7 @@ class FalkorDBGraph:
     
     def _wrap_name(self, name: str) -> str:
         """Wrap name with backticks."""
-        if name in ['Column']:
+        if name == 'Column':
             return f"`{name}`"
         return name
     
@@ -73,7 +76,7 @@ class FalkorDBGraph:
         rels = self._get_relateships()
         for r in rels:
             relationships.append(
-                "(:%s)-[:%s]->(:%s)" % (self._wrap_name(r["start"]), r["type"], self._wrap_name(r["end"]))
+                "(:{})-[:{}]->(:{})".format(self._wrap_name(r["start"]), r["type"], self._wrap_name(r["end"]))
             )
 
         rel_properties = [ { 'label': rp['types'], 'properties': rp['keys'] }  for rp in self._get_rel_properties() ]
@@ -90,11 +93,14 @@ class FalkorDBGraph:
         """Returns the schema of the Graph"""
         return self._schema
     
-    def query(self, query: str, params: dict = {}) -> list[dict[str, Any]]:
+    def query(self, query: str, params: dict | None = None) -> list[dict[str, Any]]:
         """Query FalkorDB database."""
 
+        if params is None:
+            params = {}
         try:
             data = self._g.ro_query(query, params)
-            return data.result_set
+            rows = data.result_set
         except Exception as e:
-            raise ValueError(f"Generated Cypher Statement is not valid\n{e}")
+            raise ValueError(f"Generated Cypher Statement is not valid\n{e}") from e
+        return rows

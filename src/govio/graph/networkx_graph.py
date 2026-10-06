@@ -4,7 +4,9 @@ govio.graph.networkx_graph
 """
 import os
 from os import PathLike
+
 import networkx as nx
+
 
 class NetworkXGraph:
     def __init__(self, graph: str| PathLike ="ontology.gml") -> None:
@@ -23,7 +25,7 @@ class NetworkXGraph:
         }
 
         # 1. Inspect Nodes
-        for node, data in self._g.nodes(data=True):            
+        for _node, data in self._g.nodes(data=True):            
             node_type = data["node_type"]
 
             if node_type not in schema["node_types"]:
@@ -54,9 +56,9 @@ class NetworkXGraph:
     
         self._schema = (
             "## NetworkX schema:\n"
-            f"node_types：{ {k: sorted(list(v)) for k, v in schema['node_types'].items()} }\n"
+            f"node_types：{ {k: sorted(v) for k, v in schema['node_types'].items()} }\n"
             f"edge_types: {list(edge_types)}\n"
-            f"edge_relationships: { {k: sorted(list(v)) for k, v in schema['edge_relationships'].items()} }\n"
+            f"edge_relationships: { {k: sorted(v) for k, v in schema['edge_relationships'].items()} }\n"
         )
 
     

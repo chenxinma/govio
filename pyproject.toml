@@ -49,3 +49,50 @@ exclude = [
 
 [project.scripts]
 govio-cli = "govio.cli:main"
+
+# Ruff lint 政策：显式固定规则集，避免不同 ruff 版本默认集漂移（0.15 默认仅 E/F，
+# 0.16 默认扩展到 415 条规则）。`uv run ruff check` 与 `uvx ruff check` 结果一致。
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9", "F",  # pycodestyle 错误级 + pyflakes
+    "I",                    # import 排序（AGENTS.md 分组规范）
+    "UP",                   # pyupgrade（Python 3.13 现代语法）
+    "B",                    # bugbear（真实缺陷，如可变默认参）
+    "SIM",                  # simplify
+    "C4",                   # comprehensions
+    "PIE",
+    "RET",
+    "PERF",
+    "PLW",
+    "FURB",
+    "PYI",
+    "RUF",
+    "S",                    # bandit 安全
+    "BLE",
+    "TRY",
+    "DTZ",
+]
+ignore = [
+    # 中文代码库：中文字符属于正常内容，非“可疑 unicode”
+    "RUF001", "RUF002", "RUF003",
+    # 测试断言；中文长错误消息为项目错误提示惯例
+    "S101", "TRY003",
+    # 意图性设计：CLI 边界宽捕获转友好报错、清理路径有意静默、validate 统一抛 ValueError、
+    # 初始化失败统一 RuntimeError 包装（含边界内的主动 raise）
+    "BLE001", "S110", "TRY004", "TRY301",
+    # SQL 拼接是元数据加载 / SQL 组装的核心设计（参数化在各自 loader 内约束）
+    "S608",
+    # subprocess.run 均为固定 argv 列表（无 shell），无注入面
+    "S603",
+    # 循环体含副作用/日志时，可读性优先于推导式
+    "PERF401",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# query.py 的 exec() 是文档化设计（网图查询 DSL）；查询日志文件名用本地日期
+"src/govio/cli/query.py" = ["S102", "DTZ005"]
+# 测试夹具中的假口令与路径字面量
+"tests/**" = ["S105", "S106", "S108"]

@@ -74,6 +74,8 @@ uv run ruff format src/ tests/
 uv run ruff check --fix src/ tests/
 ```
 
+Lint 规则集固定在 `pyproject.toml` 的 `[tool.ruff.lint]`（`uvx ruff check` 与 `uv run ruff check` 结果一致）；中文内容、测试断言、错误边界宽捕获等意图性排除见该配置内注释。
+
 ### Build
 
 ```bash

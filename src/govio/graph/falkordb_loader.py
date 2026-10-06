@@ -76,7 +76,9 @@ def import_csv_to_falkordb(
     print(f"\n正在执行: {' '.join(cmd)}")
 
     env = {**os.environ, "PYTHONUTF8": "1"}
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, env=env, check=False
+    )
 
     if result.returncode != 0:
         raise RuntimeError(f"falkordb-bulk-insert 失败: {result.stderr}")

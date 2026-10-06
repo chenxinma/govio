@@ -1,6 +1,6 @@
-from pathlib import Path
 import tempfile
-from unittest.mock import patch, MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -73,6 +73,7 @@ def test_validate_csv_directory():
 
 def test_onboard_networkx_workflow(monkeypatch, tmp_path):
     import importlib
+
     from govio.cli.config import ConfigManager
 
     onboard_module = importlib.import_module("govio.cli.onboard")
@@ -107,6 +108,7 @@ def test_onboard_networkx_workflow(monkeypatch, tmp_path):
 
 def test_onboard_falkordb_workflow(monkeypatch, tmp_path):
     import importlib
+
     from govio.cli.config import ConfigManager
 
     onboard_module = importlib.import_module("govio.cli.onboard")
@@ -139,6 +141,7 @@ def test_onboard_falkordb_workflow(monkeypatch, tmp_path):
 def test_onboard_skip_backend_when_existing(monkeypatch, tmp_path):
     """测试已有配置时跳过图后端配置，仅配置数据源"""
     import importlib
+
     from govio.cli.config import ConfigManager
 
     onboard_module = importlib.import_module("govio.cli.onboard")
@@ -244,8 +247,8 @@ class TestCliDatasource:
     @pytest.fixture
     def cm(self, monkeypatch, tmp_path):
         """隔离配置文件与加密密钥"""
-        from govio.cli.config import ConfigManager
         import govio.cli.onboard as onboard_module
+        from govio.cli.config import ConfigManager
 
         config_path = tmp_path / ".govio" / "config.yaml"
         monkeypatch.setattr(

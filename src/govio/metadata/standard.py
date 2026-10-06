@@ -1,8 +1,10 @@
 import textwrap
+
 import pandas as pd
 from sqlalchemy import create_engine
 
 from .datasource import qualify, resolve_datasource
+
 
 class StandardLoader:
     def __init__(self, db: str, workspace_uuid: str,
@@ -78,7 +80,7 @@ class StandardLoader:
         """
         ftn_list = []
         col_list = []
-        for ftn, col_name in zip(df_std_col["full_table_name"], df_std_col["column_name"]):
+        for ftn, col_name in zip(df_std_col["full_table_name"], df_std_col["column_name"], strict=False):
             raw_col = f"{ftn}.{col_name}"
             if self.datasource_map is None:
                 ftn_list.append(ftn)
@@ -135,11 +137,10 @@ class StandardLoader:
                 order by 1,2
                 """)
         df_standards_kv = pd.read_sql(sql, self.engine)
-        df_standard = df_standards_kv.pivot(index=["standard_id", "name"], 
+        return df_standards_kv.pivot(index=["standard_id", "name"], 
                                             columns="attrbute", 
                                             values="value") \
                                     .reset_index().rename(columns={"code": "ref_code_define"})
-        return df_standard
 
     @property
     def Standard(self):

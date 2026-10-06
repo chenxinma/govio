@@ -39,11 +39,8 @@ class RelationExplorer:
 
         for col in source_df.columns:
             col_lower = col.lower()
-            if col_lower.endswith("_id") or col_lower.endswith("id"):
-                if col_lower.endswith("_id"):
-                    base = col_lower[:-3]
-                else:
-                    base = col_lower[:-2]
+            if col_lower.endswith(("_id", "id")):
+                base = col_lower[:-3] if col_lower.endswith("_id") else col_lower[:-2]
                 inferred_target = base + "_id"
 
                 target_col = None

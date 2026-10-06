@@ -15,7 +15,7 @@ def list_datasources(db_manager: DatabaseManager) -> list[dict[str, Any]]:
         数据源清单
     """
     datasources = []
-    for name in db_manager._datasources.keys():
+    for name in db_manager._datasources:
         config = db_manager._datasources[name]
         url = config.url
         driver = url.split(":")[0] if ":" in url else "unknown"

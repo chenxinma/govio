@@ -31,12 +31,13 @@ govio.metadata.gen_networkx
 
 import argparse
 import os
+import re
 import sys
+from pathlib import Path
 from typing import Any
+
 import networkx as nx
 import pandas as pd
-import re
-from pathlib import Path
 from tqdm import tqdm
 
 

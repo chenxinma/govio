@@ -11,6 +11,7 @@ def _run(code: str) -> subprocess.CompletedProcess[str]:
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
+        check=False,
     )
 
 

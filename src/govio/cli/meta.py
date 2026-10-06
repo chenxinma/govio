@@ -16,9 +16,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import ConfigManager
-from govio.core.graph_factory import GraphFactory
 from govio.core.assets_generator import AssetsGenerator
+from govio.core.graph_factory import GraphFactory
 from govio.graph.falkordb_loader import import_csv_to_falkordb, upsert_csv_to_falkordb
 from govio.graph.ladybug_loader import import_csv_to_ladybug, upsert_csv_to_ladybug
 from govio.metadata.database import TDSLoader
@@ -33,6 +32,8 @@ from govio.metadata.metric import MetricLoader
 from govio.metadata.node_id import assign_node_ids, write_node_csv
 from govio.metadata.relationship import load_relationships
 from govio.metadata.standard import StandardLoader
+
+from .config import ConfigManager
 
 DEFAULT_ASSETS_DIR = Path(".agents/skills/govio/assets")
 
@@ -347,7 +348,7 @@ def step_meta_export(
             [ds_def.to_row()],
             columns=["datasource_name", "comment", "source_type", "filter"],
         )
-        ds_map = {s: datasource_name for s in ds_def.schemas}
+        ds_map = dict.fromkeys(ds_def.schemas, datasource_name)
 
     # 空结果守卫：schema 写错或源库为空时直接失败，不写任何 CSV
     if df_tables.empty:
@@ -654,10 +655,10 @@ def step_metric_export(
         print(
             f"✓ 指标数据已导出: {len(df_metrics)} 个指标, {len(df_dimensions)} 个维度"
         )
-        return True
     except Exception as e:
         print(f"❌ 无法加载指标定义文件: {e}", file=sys.stderr)
         return False
+    return True
 
 
 # ---------------------------------------------------------------------------

@@ -7,8 +7,8 @@ __all__ = [
     "FalkorDBGraph",
     "LadybugGraph",
     "NetworkXGraph",
-    "main",
     "build_metric_sql",
+    "main",
 ]
 
 _LAZY_ATTRS = {

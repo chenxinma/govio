@@ -72,7 +72,7 @@ class AssetsGenerator:
         {"id": "node_id", "name": "节点名称", "node_type": "Datasource"}
         """
         if type(self.graph) is not NetworkXGraph:
-            return None
+            return
 
         g = self.graph.G
 
@@ -91,8 +91,7 @@ class AssetsGenerator:
         if nodes:
             file_path = names_dir / "node_names.md"
             with open(file_path, "w", encoding="utf-8") as f:
-                for node in nodes:
-                    f.write(json.dumps(node, ensure_ascii=False) + "\n")
+                f.writelines(json.dumps(node, ensure_ascii=False) + "\n" for node in nodes)
 
     def _generate_names_cypher(self, names_dir: Path) -> None:
         """为 Cypher 后端（FalkorDB / Ladybug）生成名称索引
@@ -100,7 +99,7 @@ class AssetsGenerator:
         有 Datasource 节点时按数据源分组；无数据源节点时按 database/schema 聚合。
         """
         if not isinstance(self.graph, (FalkorDBGraph, LadybugGraph)):
-            return None
+            return
 
         # 查询所有数据源（Datasource 节点可能不存在）
         try:

@@ -99,7 +99,7 @@ def build_metric_sql(
             where_parts = _build_where_conditions(filters, table_metrics)
 
             sql = f"{cte_name} AS (\n"
-            sql += f"  SELECT\n"
+            sql += "  SELECT\n"
             sql += ",\n".join(select_parts)
             sql += f"\n  FROM {table}"
 
@@ -130,7 +130,7 @@ def build_metric_sql(
             source_cte = _find_source_cte(formula, atomic_metrics, tables if atomic_metrics else {})
 
             sql = f"{cte_name} AS (\n"
-            sql += f"  SELECT\n"
+            sql += "  SELECT\n"
             sql += ",\n".join(select_parts)
             sql += f"\n  FROM {source_cte}"
             sql += "\n)"
@@ -246,5 +246,4 @@ def _get_cte_name(
     if metric["type"] == "原子":
         table = metric.get("source_table", "")
         return f"atomic_{table.split('.')[-1]}"
-    else:
-        return f"derived_{metric['code']}"
+    return f"derived_{metric['code']}"

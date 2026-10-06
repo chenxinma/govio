@@ -29,10 +29,10 @@ def duck_db(tmp_path):
 
 
 def _args(**kw) -> argparse.Namespace:
-    base = dict(
-        source="duckdb", db=None, schemas=None, datasource=None,
-        datasources_file=None, kundb=None, workspace_uuid=None, output=None,
-    )
+    base = {
+        "source": "duckdb", "db": None, "schemas": None, "datasource": None,
+        "datasources_file": None, "kundb": None, "workspace_uuid": None, "output": None,
+    }
     base.update(kw)
     return argparse.Namespace(**base)
 

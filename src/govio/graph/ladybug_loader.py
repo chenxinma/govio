@@ -13,6 +13,7 @@ Ladybug 严格类型且不可忽略类型转换错误，故所有属性列统一
 与 falkordb_loader 的 dtype=str 处理一致。
 """
 
+import contextlib
 from os import PathLike
 from pathlib import Path
 
@@ -121,10 +122,8 @@ def _drop_all_tables(conn: lb.Connection) -> None:
         elif t == "NODE":
             nodes.append(name)
     for name in rels + nodes:
-        try:
+        with contextlib.suppress(Exception):
             conn.execute(f"DROP TABLE {_bt(name)}")
-        except Exception:
-            pass
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +148,7 @@ def import_csv_to_ladybug(
         _drop_all_tables(conn)
 
         # 节点
-        for filename, _ in _NODE_CSVS.items():
+        for filename in _NODE_CSVS:
             filepath = csv_path / filename
             if not filepath.exists():
                 continue
@@ -235,7 +234,7 @@ def upsert_csv_to_ladybug(
     conn = _connect(db_path, buffer_pool_size, max_db_size)
     try:
         # 节点
-        for filename, _ in _NODE_CSVS.items():
+        for filename in _NODE_CSVS:
             filepath = csv_path / filename
             if not filepath.exists():
                 continue

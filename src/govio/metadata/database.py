@@ -57,7 +57,7 @@ class TDSLoader(MetadataLoader):
             str: 转换后的标准数据类型字符串
         """
         # 非Oracle列直接返回原始类型
-        if "ORACLE_COLUMN" != row['data_entity_type']:
+        if row['data_entity_type'] != "ORACLE_COLUMN":
             return row['dtype']  # pyright: ignore[reportReturnType]
         
         _dtype = row['dtype']
@@ -129,7 +129,7 @@ class TDSLoader(MetadataLoader):
             return
         ftn_list = []
         col_list = []
-        for ftn, col in zip(df_columns["full_table_name"], df_columns["column"]):
+        for ftn, col in zip(df_columns["full_table_name"], df_columns["column"], strict=False):
             schema = str(ftn).split(".", 1)[0]
             ds_name = resolve_datasource(schema, self.datasource_map)
             ftn_list.append(qualify(ds_name, str(ftn)))
@@ -174,7 +174,7 @@ class TDSLoader(MetadataLoader):
                     resolve_datasource(str(schema), self.datasource_map),
                     str(ftn),
                 )
-                for schema, ftn in zip(df_tables["schema"], df_tables["full_table_name"])
+                for schema, ftn in zip(df_tables["schema"], df_tables["full_table_name"], strict=False)
             ]
 
         return df_tables
