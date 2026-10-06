@@ -56,7 +56,7 @@ generate_all() -> None           # Calls all three
 {"id": "...", "name": "...", "node_type": "..."}
 ```
 
-**FalkorDB / Ladybug**: for each Application, queries tables and columns, writes `names/{name}_{app_name_en}.md`:
+**FalkorDB / Ladybug**: for each Datasource (`OWNS` edge), queries tables and columns, writes `names/{name}_{datasource_name}.md`（name 含非法文件名字符时替换为 `_`；无 Datasource 节点时兜底按 database/schema 分组为 `names/{database_name}_{schema}_names.md`）:
 ```markdown
 # full_table_name table_name
 - column_name col_name

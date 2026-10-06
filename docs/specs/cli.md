@@ -138,7 +138,7 @@ Exception: `import-schema` reads `config.datasources` to resolve the DuckDB file
 |---|---|
 | `meta meta` | Import TDS/DuckDB metadata (Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS) |
 | `meta std` | Import data standards (Standard nodes, TDS only) |
-| `meta compliance` | Export existing standard-column associations (COMPLIES_WITH, TDS only) |
+| `meta compliance` | Export existing standard-column associations (COMPLIES_WITH, TDS only; `--datasources-file` 必填) |
 | `meta rel` | Import table relationships (RELATES_TO edges) |
 | `meta metric` | Import metric/dimension definitions (Metric, Dimension + 5 edge types) |
 | `meta graph` | Graph database management (update/rebuild/clear + assets) |

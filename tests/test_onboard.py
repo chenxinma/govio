@@ -23,9 +23,9 @@ col1,字段1,COL1,SCHEMA.TABLE1
         encoding="utf-8",
     )
 
-    (csv_dir / "Application.csv").write_text(
-        """:ID(Application),name,app_name_en
-app1,应用1,APP1
+    (csv_dir / "Datasource.csv").write_text(
+        """:ID(Datasource),datasource_name,name,source_type,filter
+ds1,DS1,数据源1,mysql,{}
 """,
         encoding="utf-8",
     )
@@ -44,9 +44,9 @@ table1,col1
         encoding="utf-8",
     )
 
-    (csv_dir / "USE.csv").write_text(
-        """:START_ID(Application),:END_ID(PhysicalTable)
-app1,table1
+    (csv_dir / "OWNS.csv").write_text(
+        """:START_ID(Datasource),:END_ID(PhysicalTable)
+ds1,table1
 """,
         encoding="utf-8",
     )

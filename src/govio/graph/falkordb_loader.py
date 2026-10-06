@@ -34,7 +34,7 @@ def import_csv_to_falkordb(
     node_files = [
         ("PhysicalTable", csv_path / "PhysicalTable.csv"),
         ("Col", csv_path / "Col.csv"),
-        ("Application", csv_path / "Application.csv"),
+        ("Datasource", csv_path / "Datasource.csv"),
         ("Standard", csv_path / "Standard.csv"),
         ("Metric", csv_path / "Metric.csv"),
         ("Dimension", csv_path / "Dimension.csv"),
@@ -42,7 +42,7 @@ def import_csv_to_falkordb(
 
     relation_files = [
         ("HAS_COLUMN", csv_path / "HAS_COLUMN.csv"),
-        ("USE", csv_path / "USE.csv"),
+        ("OWNS", csv_path / "OWNS.csv"),
     ]
 
     extra_rel_file = csv_path / "RELATES_TO.csv"
@@ -92,7 +92,7 @@ _BATCH_SIZE = 500
 _NODE_CSVS = {
     "PhysicalTable.csv": "PhysicalTable",
     "Col.csv": "Col",
-    "Application.csv": "Application",
+    "Datasource.csv": "Datasource",
     "Standard.csv": "Standard",
     "Metric.csv": "Metric",
     "Dimension.csv": "Dimension",
@@ -100,7 +100,7 @@ _NODE_CSVS = {
 
 _EDGE_CSVS = {
     "HAS_COLUMN.csv": "HAS_COLUMN",
-    "USE.csv": "USE",
+    "OWNS.csv": "OWNS",
     "COMPLIES_WITH.csv": "COMPLIES_WITH",
     "RELATES_TO.csv": "RELATES_TO",
     "USES_TABLE.csv": "USES_TABLE",

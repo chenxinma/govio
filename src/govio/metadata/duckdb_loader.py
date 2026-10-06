@@ -2,6 +2,7 @@ import duckdb
 import pandas as pd
 
 from .database import MetadataLoader
+from .datasource import qualify
 
 
 class DuckDBLoader(MetadataLoader):
@@ -13,9 +14,12 @@ class DuckDBLoader(MetadataLoader):
     ``DUCKDB_COLUMN`` as ``data_entity_type``.
     """
 
-    def __init__(self, db_path: str, schemas: list[str]) -> None:
+    def __init__(
+        self, db_path: str, schemas: list[str], datasource_name: str = ""
+    ) -> None:
         self.db_path = db_path
         self.schemas = schemas
+        self.datasource_name = datasource_name
 
     def list_schemas(self) -> list[tuple[str, int]]:
         """列出文件中可导入的 schema 及其表数量（只读）。
@@ -64,6 +68,10 @@ class DuckDBLoader(MetadataLoader):
             ).fetchdf()
         finally:
             conn.close()
+        if self.datasource_name:
+            df["full_table_name"] = [
+                qualify(self.datasource_name, ftn) for ftn in df["full_table_name"]
+            ]
         return df
 
     def load_columns(self) -> pd.DataFrame:
@@ -94,4 +102,11 @@ class DuckDBLoader(MetadataLoader):
             ).fetchdf()
         finally:
             conn.close()
+        if self.datasource_name:
+            df["full_table_name"] = [
+                qualify(self.datasource_name, ftn) for ftn in df["full_table_name"]
+            ]
+            df["column"] = [
+                qualify(self.datasource_name, col) for col in df["column"]
+            ]
         return df

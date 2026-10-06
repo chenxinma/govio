@@ -27,7 +27,7 @@ _BATCH_SIZE = 500
 _NODE_CSVS = {
     "PhysicalTable.csv": "PhysicalTable",
     "Col.csv": "Col",
-    "Application.csv": "Application",
+    "Datasource.csv": "Datasource",
     "Standard.csv": "Standard",
     "Metric.csv": "Metric",
     "Dimension.csv": "Dimension",
@@ -36,7 +36,7 @@ _NODE_CSVS = {
 # 与 falkordb_loader 一致的 CSV -> 关系类型映射
 _EDGE_CSVS = {
     "HAS_COLUMN.csv": "HAS_COLUMN",
-    "USE.csv": "USE",
+    "OWNS.csv": "OWNS",
     "COMPLIES_WITH.csv": "COMPLIES_WITH",
     "RELATES_TO.csv": "RELATES_TO",
     "USES_TABLE.csv": "USES_TABLE",

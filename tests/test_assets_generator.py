@@ -15,14 +15,14 @@ def create_test_gml(gml_path: Path):
     """创建测试用的 GML 文件"""
     G = nx.DiGraph()
 
-    G.add_node("app1", name="应用1", node_type="Application", app_name_en="APP1")
+    G.add_node("ds1", name="数据源1", node_type="Datasource", datasource_name="DS1")
     G.add_node(
         "table1", name="表1", node_type="PhysicalTable", full_table_name="SCHEMA.TABLE1"
     )
     G.add_node("col1", name="字段1", node_type="Col", column_name="COL1")
     G.add_node("col2", name="字段2", node_type="Col", column_name="COL2")
 
-    G.add_edge("app1", "table1", edge_type="USE")
+    G.add_edge("ds1", "table1", edge_type="OWNS")
     G.add_edge("table1", "col1", edge_type="HAS_COLUMN")
     G.add_edge("table1", "col2", edge_type="HAS_COLUMN")
 
@@ -105,7 +105,7 @@ def test_assets_generator_falkordb_names():
 
         mock_graph.query = MagicMock()
         mock_graph.query.side_effect = [
-            [["APP1", "应用1"]],
+            [["数据源1", "DS1"]],
             [["SCHEMA.TABLE1", "表1"]],
             [["COL1", "字段1"]],
         ]
@@ -116,12 +116,12 @@ def test_assets_generator_falkordb_names():
         assert (output_dir / "schema.md").exists()
         names_dir = output_dir / "names"
         assert names_dir.exists()
-        app_file = names_dir / "应用1_APP1.md"
-        assert app_file.exists()
+        ds_file = names_dir / "数据源1_DS1.md"
+        assert ds_file.exists()
 
 
-def test_assets_generator_falkordb_names_without_app():
-    """无 Application 节点时，按 database/schema 聚合生成名称索引。"""
+def test_assets_generator_falkordb_names_without_datasource():
+    """无 Datasource 节点时，按 database/schema 聚合生成名称索引。"""
     with tempfile.TemporaryDirectory() as tmpdir:
         output_dir = Path(tmpdir) / "assets"
         output_dir.mkdir()
@@ -131,7 +131,7 @@ def test_assets_generator_falkordb_names_without_app():
 
         mock_graph.query = MagicMock()
         mock_graph.query.side_effect = [
-            [],  # 无 Application 节点
+            [],  # 无 Datasource 节点
             [["", "dbo"]],  # database_name / schema 列表
             [["dbo.T1", "T1"]],  # 表列表
             [["id", "ID"]],  # 字段列表
@@ -180,9 +180,9 @@ def test_assets_generator_ladybug_names():
             [["CO1", "id", "ID", "db.dbo.T1", "1"]],
         )
         _write(
-            "Application.csv",
-            [":ID(Application)", "app_id", "name", "app_name_en"],
-            [["AP1", "app1", "销售系统", "AEP"]],
+            "Datasource.csv",
+            [":ID(Datasource)", "datasource_name", "name"],
+            [["DS1", "AEP", "销售系统"]],
         )
         _write(
             "HAS_COLUMN.csv",
@@ -190,9 +190,9 @@ def test_assets_generator_ladybug_names():
             [["PT1", "CO1"]],
         )
         _write(
-            "USE.csv",
-            [":START_ID(Application)", ":END_ID(PhysicalTable)"],
-            [["AP1", "PT1"]],
+            "OWNS.csv",
+            [":START_ID(Datasource)", ":END_ID(PhysicalTable)"],
+            [["DS1", "PT1"]],
         )
 
         import_csv_to_ladybug(csv_dir, db_path)

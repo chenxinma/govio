@@ -2,10 +2,14 @@ import textwrap
 import pandas as pd
 from sqlalchemy import create_engine
 
+from .datasource import qualify, resolve_datasource
+
 class StandardLoader:
-    def __init__(self, db: str, workspace_uuid: str) -> None:
+    def __init__(self, db: str, workspace_uuid: str,
+                       datasource_map: dict[str, str] | None = None) -> None:
         self.engine = create_engine(db)
         self.workspace_uuid = workspace_uuid
+        self.datasource_map = datasource_map
     
     def load_standard_connects(self) -> pd.DataFrame:
         """从数据库加载数据标准关联的元数据列
@@ -64,7 +68,28 @@ class StandardLoader:
                                  dtype={"size":"int", 
                                         "precision":"int", 
                                         "scale":"int"})
+        self._qualify_columns(df_std_col)
         return df_std_col
+
+    def _qualify_columns(self, df_std_col: pd.DataFrame) -> None:
+        """就地生成全限定 column 标识，并同步改写 full_table_name
+
+        未提供 datasource_map 时保持 `schema.table[.column]` 原始标识。
+        """
+        ftn_list = []
+        col_list = []
+        for ftn, col_name in zip(df_std_col["full_table_name"], df_std_col["column_name"]):
+            raw_col = f"{ftn}.{col_name}"
+            if self.datasource_map is None:
+                ftn_list.append(ftn)
+                col_list.append(raw_col)
+                continue
+            schema = str(ftn).split(".", 1)[0]
+            ds_name = resolve_datasource(schema, self.datasource_map)
+            ftn_list.append(qualify(ds_name, str(ftn)))
+            col_list.append(qualify(ds_name, raw_col))
+        df_std_col["full_table_name"] = ftn_list
+        df_std_col["column"] = col_list
 
     def load_standards(self) -> pd.DataFrame:
         """从数据库加载数据标准

@@ -117,7 +117,7 @@ datasources:
 
 - `filter.schemas` 决定 TDS 导入的抽取范围；同一 schema 不得归属多个 datasource
 - `include_tables` / `exclude_tables` 为 `fnmatch` glob，大小写不敏感，exclude 优先
-- 首版初始数据可由 `data/app_map.json` 转换：按 `name` 分组聚合 `schema` 为 `filter.schemas`，`datasource_name` 取 `name`（后续可换英文标识），`source_type` 需人工补充
+- 首版初始数据已由 `data/app_map.json` 转换生成 `data/datasource.json`：按 `name` 分组聚合 `schema` 为 `filter.schemas`，`datasource_name` 取 `name`（后续可换英文标识），**`source_type` 需人工补全（初始值 `TBD`）**
 
 ## Relationship JSON Format
 

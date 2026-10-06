@@ -36,7 +36,7 @@ def test_make_id_all_prefixes():
     """6 种节点类型前缀正确。"""
     assert make_id("PhysicalTable", "k").startswith("PT")
     assert make_id("Col", "k").startswith("CO")
-    assert make_id("Application", "k").startswith("AP")
+    assert make_id("Datasource", "k").startswith("DS")
     assert make_id("Standard", "k").startswith("ST")
     assert make_id("Metric", "k").startswith("ME")
     assert make_id("Dimension", "k").startswith("DI")

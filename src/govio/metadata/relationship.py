@@ -1,6 +1,7 @@
 """
 govio.metadata.relationship
-读取 schema_of_relationships.json 文件，生成物理表之间的关系边数据
+读取表关系定义 JSON 文件（结构由 relationship_schema.json 定义），
+生成物理表之间的关系边数据
 """
 
 import json
@@ -8,10 +9,12 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import jsonschema
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+SCHEMA_PATH = Path(__file__).parent / "relationship_schema.json"
 
 VALID_RELATIONSHIP_TYPES = {"one_to_one", "one_to_many", "many_to_one", "many_to_many"}
 
@@ -55,7 +58,18 @@ class RelationshipLoader:
         if "relationships" not in data:
             raise ValueError("JSON 缺少 relationships 字段")
 
+        self._validate_schema(data)
         return data
+
+    def validate(self) -> None:
+        """使用 JSON Schema 校验文件结构（relationship_schema.json）"""
+        self.load_json()
+
+    def _validate_schema(self, data: dict[str, Any]) -> None:
+        """使用 JSON Schema 校验关系定义结构"""
+        with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
+            schema = json.load(f)
+        jsonschema.validate(instance=data, schema=schema)
 
     def validate_relationship(self, rel: dict[str, Any], index: int) -> bool:
         """

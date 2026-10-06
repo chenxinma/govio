@@ -7,7 +7,7 @@ govio.metadata.gen_networkx
 
 - PhysicalTable.csv
 - Col.csv
-- Application.csv
+- Datasource.csv
 - Standard.csv
 - Metric.csv
 - Dimension.csv
@@ -18,7 +18,7 @@ govio.metadata.gen_networkx
 ## Edges
 
 - HAS_COLUMN.csv     | PhysicalTable与Col的关系，物理表所包含的列
-- USE.csv            | Application与PhysicalTable的关系，应用用到的物理表
+- OWNS.csv            | Datasource与PhysicalTable的关系，数据源治理归属的物理表
 - COMPLIES_WITH.csv  | Col与Standard的关系，列贯标的数据标准
 - USES_TABLE.csv     | Metric与PhysicalTable的关系，指标数据来源表
 - REFERS_COLUMN.csv  | Metric与Col的关系，指标引用的列
@@ -41,7 +41,7 @@ from tqdm import tqdm
 
 
 def load_nodes(csv_dir: str) -> list[dict[str, Any]]:
-    node_files = ["PhysicalTable.csv", "Col.csv", "Application.csv", "Standard.csv", "Metric.csv", "Dimension.csv"]
+    node_files = ["PhysicalTable.csv", "Col.csv", "Datasource.csv", "Standard.csv", "Metric.csv", "Dimension.csv"]
     nodes_list = []
     for filename in node_files:
         filepath = Path(csv_dir) / filename
@@ -62,7 +62,7 @@ def load_nodes(csv_dir: str) -> list[dict[str, Any]]:
 
 
 def load_edges(csv_dir: str) -> pd.DataFrame:
-    edge_files = ["HAS_COLUMN.csv", "USE.csv", "COMPLIES_WITH.csv", "RELATES_TO.csv",
+    edge_files = ["HAS_COLUMN.csv", "OWNS.csv", "COMPLIES_WITH.csv", "RELATES_TO.csv",
                    "USES_TABLE.csv", "REFERS_COLUMN.csv", "DERIVED_FROM.csv",
                    "DIMENSION_USED.csv", "SUPERSEDES.csv"]
     edges_list = []

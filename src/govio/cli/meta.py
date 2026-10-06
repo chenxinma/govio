@@ -1,15 +1,16 @@
 """meta 命令组 — 知识图库维护
 
-提供元数据导入、数据标准推荐等功能。
+提供元数据导入、JSON Schema 输出、数据标准推荐等功能。
 
-各导入子命令（meta / app / std / compliance / rel / metric）完全独立运行，
+各导入子命令（meta / std / compliance / rel / metric）完全独立运行，
 所有输入通过 CLI 参数显式传入，不依赖配置文件。通过 output 目录的 CSV 文件
 作为共享状态，支持增量合并（幂等）。
 
-推荐执行顺序：meta → app → std → compliance → rel → metric → graph
+推荐执行顺序：meta → std → compliance → rel → metric → graph
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -21,12 +22,17 @@ from govio.core.assets_generator import AssetsGenerator
 from govio.graph.falkordb_loader import import_csv_to_falkordb, upsert_csv_to_falkordb
 from govio.graph.ladybug_loader import import_csv_to_ladybug, upsert_csv_to_ladybug
 from govio.metadata.database import TDSLoader
-from govio.metadata.application import AppInfoLoader
-from govio.metadata.standard import StandardLoader
+from govio.metadata.datasource import (
+    DatasourceLoader,
+    build_owns_edges,
+    filter_frames,
+    make_datasource_def,
+)
 from govio.metadata.duckdb_loader import DuckDBLoader
-from govio.metadata.relationship import load_relationships
 from govio.metadata.metric import MetricLoader
 from govio.metadata.node_id import assign_node_ids, write_node_csv
+from govio.metadata.relationship import load_relationships
+from govio.metadata.standard import StandardLoader
 
 DEFAULT_ASSETS_DIR = Path(".agents/skills/govio/assets")
 
@@ -272,80 +278,106 @@ def step_meta_export(
     source: str,
     db_path: str = "",
     schemas: list[str] | None = None,
-    db_name: str | None = None,
+    datasource_name: str = "",
+    datasource_file: str = "",
     kundb: str = "",
     workspace_uuid: str = "",
 ) -> tuple[pd.DataFrame, pd.DataFrame] | None:
-    """步骤：导出元数据（PhysicalTable, Col, HAS_COLUMN）。
+    """步骤：导出元数据（Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS）。
+
+    单次运行覆盖一种信息来源（TDS 或一个实际数据源）。
 
     Returns:
         (df_tables, df_columns) 或 None（出错时）
     """
     output.mkdir(parents=True, exist_ok=True)
 
-    if source in ("duckdb", "both") and not db_path:
-        print("错误: DuckDB 模式需要指定 --db 路径", file=sys.stderr)
-        return None
-
-    if source == "tds" and not kundb:
-        print("错误: TDS 模式需要指定 --kundb", file=sys.stderr)
-        return None
-
     # 加载元数据
     if source == "tds":
+        if not kundb:
+            print("错误: TDS 模式需要指定 --kundb", file=sys.stderr)
+            return None
         print("从 TDS 读取元数据...")
-        tds_schemas = schemas if schemas else None
-        tds_loader = TDSLoader(kundb, workspace_uuid, tds_schemas)
+        try:
+            ds_loader = DatasourceLoader(datasource_file)
+        except Exception as e:
+            print(f"❌ 无法加载数据源声明文件: {e}", file=sys.stderr)
+            return None
+        ds_map = ds_loader.datasource_map()
+        tds_loader = TDSLoader(
+            kundb, workspace_uuid, ds_loader.all_schemas(), ds_map
+        )
         df_tables = tds_loader.PhysicalTable
         df_columns = tds_loader.Col
-    elif source == "duckdb":
+        df_tables, df_columns = filter_frames(
+            df_tables, df_columns, ds_loader.matches_table
+        )
+        df_datasources = ds_loader.Datasource
+    else:
+        if not db_path:
+            print("错误: DuckDB 模式需要指定 --db 路径", file=sys.stderr)
+            return None
+        if not datasource_name:
+            print("错误: DuckDB 模式需要指定 --datasource", file=sys.stderr)
+            return None
         print("从 DuckDB 读取元数据...")
-        duck_loader = DuckDBLoader(db_path, schemas or [])
+        declared = None
+        if datasource_file:
+            try:
+                ds_loader = DatasourceLoader(datasource_file)
+                declared = ds_loader.get(datasource_name)
+            except KeyError:
+                print(
+                    f"⚠ 声明文件中不存在 datasource '{datasource_name}'，"
+                    "按 CLI 参数自动声明"
+                )
+            except Exception as e:
+                print(f"❌ 无法加载数据源声明文件: {e}", file=sys.stderr)
+                return None
+        ds_def = make_datasource_def(
+            datasource_name, "duckdb", schemas or [], declared
+        )
+        duck_loader = DuckDBLoader(db_path, schemas or [], datasource_name)
         df_tables = duck_loader.PhysicalTable
         df_columns = duck_loader.Col
-    else:
-        print("从 TDS + DuckDB 合并读取元数据...")
-        tds_schemas = schemas if schemas else None
-        tds_loader = TDSLoader(kundb, workspace_uuid, tds_schemas)
-        tds_tables = tds_loader.PhysicalTable
-        tds_columns = tds_loader.Col
-        duck_loader = DuckDBLoader(db_path, schemas or [])
-        duck_tables = duck_loader.PhysicalTable
-        duck_columns = duck_loader.Col
-
-        # TDS full + DuckDB incremental, DuckDB wins on conflict
-        df_tables = pd.concat([tds_tables, duck_tables], ignore_index=True)
-        df_tables = df_tables.drop_duplicates(
-            subset=["full_table_name"], keep="last"
-        ).reset_index(drop=True)
-        df_columns = pd.concat([tds_columns, duck_columns], ignore_index=True)
-        df_columns = df_columns.drop_duplicates(
-            subset=["column"], keep="last"
-        ).reset_index(drop=True)
+        df_tables, df_columns = filter_frames(
+            df_tables, df_columns, ds_def.matches_table
+        )
+        df_datasources = pd.DataFrame(
+            [ds_def.to_row()],
+            columns=["datasource_name", "name", "source_type", "filter"],
+        )
+        ds_map = {s: datasource_name for s in ds_def.schemas}
 
     # 空结果守卫：schema 写错或源库为空时直接失败，不写任何 CSV
     if df_tables.empty:
         schema_desc = ", ".join(schemas) if schemas else "（未指定）"
         msg = f"❌ 未发现任何表: schema [{schema_desc}] 在元数据源中不存在或为空（未写入任何 CSV）"
-        if source in ("duckdb", "both") and db_path:
+        if source == "duckdb" and db_path:
             msg += (
                 f"\n   {db_path} 可导入的 schema: {_describe_duckdb_schemas(db_path)}"
             )
-        msg += "\n   请确认 --schemas 后重试"
+            msg += "\n   请确认 --schemas 后重试"
         print(msg, file=sys.stderr)
         return None
 
     # Assign IDs
     df_tables = df_tables.reset_index(drop=True)
     df_columns = df_columns.reset_index(drop=True)
+    df_datasources = df_datasources.reset_index(drop=True)
     assign_node_ids(df_tables, "PhysicalTable", "full_table_name")
     assign_node_ids(df_columns, "Col", "column")
+    assign_node_ids(df_datasources, "Datasource", "datasource_name")
 
     # Merge + write node CSVs
     pt_path = output / "PhysicalTable.csv"
     col_path = output / "Col.csv"
+    ds_path = output / "Datasource.csv"
     df_tables = merge_node_csv(df_tables, pt_path, "PhysicalTable", "full_table_name")
     df_columns = merge_node_csv(df_columns, col_path, "Col", "column")
+    df_datasources = merge_node_csv(
+        df_datasources, ds_path, "Datasource", "datasource_name"
+    )
 
     # HAS_COLUMN edge
     df_has_column = pd.merge(
@@ -362,60 +394,19 @@ def step_meta_export(
     hc_path = output / "HAS_COLUMN.csv"
     merge_edge_csv(df_has_column, hc_path, [":START_ID(PhysicalTable)", ":END_ID(Col)"])
 
-    print(f"✓ 元数据已导出: {len(df_tables)} 张表, {len(df_columns)} 个字段")
-    return df_tables, df_columns
-
-
-def step_app_export(
-    output: Path,
-    app_list_file: str,
-    app_map_file: str,
-    db_name: str | None = None,
-) -> None:
-    """步骤：导出应用清单（Application）和 USE 边。"""
-    output.mkdir(parents=True, exist_ok=True)
-
-    df_app_db_map = pd.read_json(app_map_file, orient="records")
-    app_names = [db_name] if db_name else df_app_db_map["name"].to_list()
-    app_loader = AppInfoLoader(app_list_file, app_names)
-    df_apps = app_loader.Application.reset_index(drop=True)
-    assign_node_ids(df_apps, "Application", "app_id")
-
-    # Merge Application node CSV
-    app_path = output / "Application.csv"
-    df_apps = merge_node_csv(df_apps, app_path, "Application", "app_id")
-
-    # USE edge — 需要 PhysicalTable.csv 已存在
-    pt_path = output / "PhysicalTable.csv"
-    if not pt_path.exists():
-        print("⚠ PhysicalTable.csv 不存在，跳过 USE 边生成。请先运行 meta meta")
-        return
-
-    df_tables = _load_csv_with_node_ids(pt_path, "PhysicalTable", "full_table_name")
-
-    df_app_table = pd.merge(
-        df_app_db_map,
-        df_tables[["schema", "node_id"]].rename(
-            columns={"node_id": ":END_ID(PhysicalTable)"}
-        ),
-        on="schema",
-        how="inner",
-    )
-    df_use = pd.merge(
-        df_apps[["name", "node_id"]].rename(
-            columns={"node_id": ":START_ID(Application)"}
-        ),
-        df_app_table,
-        on="name",
-        how="inner",
-    )[[":START_ID(Application)", ":END_ID(PhysicalTable)"]]
-
-    use_path = output / "USE.csv"
+    # OWNS edge
+    df_owns = build_owns_edges(df_datasources, df_tables, ds_map)
     merge_edge_csv(
-        df_use, use_path, [":START_ID(Application)", ":END_ID(PhysicalTable)"]
+        df_owns,
+        output / "OWNS.csv",
+        [":START_ID(Datasource)", ":END_ID(PhysicalTable)"],
     )
 
-    print(f"✓ 应用数据已导出: {len(df_apps)} 个应用, {len(df_use)} 条 USE 边")
+    print(
+        f"✓ 元数据已导出: {len(df_datasources)} 个数据源, "
+        f"{len(df_tables)} 张表, {len(df_columns)} 个字段"
+    )
+    return df_tables, df_columns
 
 
 def step_rel_export(
@@ -488,6 +479,7 @@ def step_compliance_export(
     output: Path,
     kundb: str,
     workspace_uuid: str,
+    datasource_file: str,
 ) -> None:
     """步骤：从 TDS 导出已有标准-字段关联（COMPLIES_WITH 边）。"""
     output.mkdir(parents=True, exist_ok=True)
@@ -504,17 +496,20 @@ def step_compliance_export(
     df_columns = _load_csv_with_node_ids(col_path, "Col", "column")
     df_stds = _load_csv_with_node_ids(std_path, "Standard", "standard_id")
 
-    std_loader = StandardLoader(kundb, workspace_uuid)
+    try:
+        ds_loader = DatasourceLoader(datasource_file)
+    except Exception as e:
+        print(f"❌ 无法加载数据源声明文件: {e}", file=sys.stderr)
+        return
+
+    std_loader = StandardLoader(kundb, workspace_uuid, ds_loader.datasource_map())
     df_compliance = std_loader.StdCompliance  # 已贯标列
 
     if df_compliance.empty:
         print("✓ TDS 中无已有标准关联数据")
         return
 
-    # 构造 column 字段（full_table_name.column_name）以匹配 Col.csv
-    df_compliance["column"] = (
-        df_compliance["full_table_name"] + "." + df_compliance["column_name"]
-    )
+    # column 字段已由 StandardLoader 生成（全限定标识），直接匹配 Col.csv
 
     # 将 column 字段映射为 node_id
     col_id_map = df_columns.set_index("column")["node_id"].to_dict()
@@ -671,7 +666,7 @@ def step_metric_export(
 
 
 def cmd_meta(args: argparse.Namespace) -> None:
-    """meta meta — 导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）"""
+    """meta meta — 导入 TDS/DuckDB 元数据（Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS）"""
     source = args.source
     db_path = args.db or ""
     schemas = [s.strip() for s in args.schemas.split(",")] if args.schemas else []
@@ -679,61 +674,51 @@ def cmd_meta(args: argparse.Namespace) -> None:
     output = Path(args.output) if args.output else Path("./output")
     kundb = args.kundb or ""
     workspace_uuid = args.workspace_uuid or ""
+    datasource_name = args.datasource or ""
+    datasource_file = args.datasources_file or ""
 
-    # --schemas 对所有来源均必填：省略会导致 DuckDB 模式静默导出 0 张表
-    if not schemas:
-        print(
-            "❌ 需要指定 --schemas（源库 schema 名，逗号分隔；DuckDB 文件默认 schema 为 main）",
-            file=sys.stderr,
-        )
-
-        # 尝试列出可用 schema，帮助用户选择
-        if source in ("duckdb", "both") and db_path:
-            print(f"\n📖 {db_path} 中可导入的 schema:", file=sys.stderr)
-            print(f"   {_describe_duckdb_schemas(db_path)}", file=sys.stderr)
-        elif source == "tds":
-            print("\n提示: TDS 模式下请直接指定 --schemas 参数", file=sys.stderr)
-        else:
-            print("\n提示: 请指定 --db 参数后可列出可用 schema", file=sys.stderr)
-
-        sys.exit(1)
-
-    # TDS/both 模式校验必填参数
-    if source in ("tds", "both"):
+    if source == "tds":
+        # TDS 抽取范围由声明文件 filter.schemas 决定，不接受 --schemas
         missing = []
         if not kundb:
             missing.append("--kundb")
         if not workspace_uuid:
             missing.append("--workspace-uuid")
+        if not datasource_file:
+            missing.append("--datasources-file")
         if missing:
             print(f"❌ TDS 模式需要指定: {', '.join(missing)}", file=sys.stderr)
             sys.exit(1)
-
-    # DuckDB 模式校验
-    if source in ("duckdb", "both") and not db_path:
-        print("❌ DuckDB 模式需要指定 --db", file=sys.stderr)
-        sys.exit(1)
+    else:
+        # DuckDB 过滤由 CLI --schemas 执行：省略会静默导出 0 张表
+        if not db_path:
+            print("❌ DuckDB 模式需要指定 --db", file=sys.stderr)
+            sys.exit(1)
+        if not datasource_name:
+            print("❌ DuckDB 模式需要指定 --datasource", file=sys.stderr)
+            sys.exit(1)
+        if not schemas:
+            print(
+                "❌ 需要指定 --schemas（源库 schema 名，逗号分隔；"
+                "DuckDB 文件默认 schema 为 main）",
+                file=sys.stderr,
+            )
+            print(f"\n📖 {db_path} 中可导入的 schema:", file=sys.stderr)
+            print(f"   {_describe_duckdb_schemas(db_path)}", file=sys.stderr)
+            sys.exit(1)
 
     result = step_meta_export(
         output,
         source=source,
         db_path=db_path,
         schemas=schemas,
+        datasource_name=datasource_name,
+        datasource_file=datasource_file,
         kundb=kundb,
         workspace_uuid=workspace_uuid,
     )
     if result is None:
         sys.exit(1)
-
-
-def cmd_app(args: argparse.Namespace) -> None:
-    """meta app — 导入应用清单（Application 节点 + USE 边）"""
-    if not args.app_list or not args.app_map:
-        print("❌ 需要指定 --app-list 和 --app-map", file=sys.stderr)
-        sys.exit(1)
-
-    output = Path(args.output) if args.output else Path("./output")
-    step_app_export(output, args.app_list, args.app_map, args.db_name)
 
 
 def cmd_rel(args: argparse.Namespace) -> None:
@@ -763,7 +748,9 @@ def cmd_compliance(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     output = Path(args.output) if args.output else Path("./output")
-    step_compliance_export(output, args.kundb, args.workspace_uuid)
+    step_compliance_export(
+        output, args.kundb, args.workspace_uuid, args.datasources_file
+    )
 
 
 def cmd_metric(args: argparse.Namespace) -> None:
@@ -798,6 +785,26 @@ def cmd_graph(args: argparse.Namespace) -> None:
     print("\n✅ graph 更新完成！")
 
 
+def _resolve_datasource_schemas(
+    datasource_name: str, datasource_file: str, csv_dir: Path
+) -> list[str]:
+    """解析 --datasource 的 filter.schemas：声明文件优先，其次 csv-dir/Datasource.csv"""
+    if datasource_file:
+        try:
+            return DatasourceLoader(datasource_file).schemas_for(datasource_name)
+        except Exception as e:
+            print(f"❌ 无法加载数据源声明文件: {e}", file=sys.stderr)
+            return []
+    csv_path = csv_dir / "Datasource.csv"
+    if csv_path.exists():
+        df = pd.read_csv(csv_path)
+        rows = df[df["datasource_name"] == datasource_name]
+        if not rows.empty:
+            flt = json.loads(rows.iloc[0].get("filter") or "{}")
+            return [s for s in flt.get("schemas", []) if s]
+    return []
+
+
 def cmd_recommend(args: argparse.Namespace) -> None:
     """meta recommend — 数据标准推荐"""
     from .std_recommend import std_recommend
@@ -805,20 +812,51 @@ def cmd_recommend(args: argparse.Namespace) -> None:
     if not args.kundb:
         print("❌ 需要指定 --kundb", file=sys.stderr)
         sys.exit(1)
-    if not args.app_map:
-        print("❌ 需要指定 --app-map", file=sys.stderr)
+    if not args.datasource:
+        print("❌ 需要指定 --datasource", file=sys.stderr)
         sys.exit(1)
 
     output_dir = Path(args.output_dir) if args.output_dir else Path("./output")
     csv_dir = Path(args.csv_dir) if args.csv_dir else output_dir
 
+    schemas = _resolve_datasource_schemas(
+        args.datasource, args.datasources_file or "", csv_dir
+    )
+    if not schemas:
+        print(
+            f"❌ 无法解析数据源 '{args.datasource}' 的 filter.schemas："
+            "请提供 --datasources-file，或先运行 meta meta 生成 Datasource.csv",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     std_recommend(
         output_dir=output_dir,
         kundb=args.kundb,
         workspace_uuid=args.workspace_uuid,
-        app_map=args.app_map,
+        datasource_name=args.datasource,
+        schemas=schemas,
         csv_dir=csv_dir,
     )
+
+
+def cmd_schema(args: argparse.Namespace) -> None:
+    """meta schema — 输出标准 JSON Schema（供外部 agent 生成标准数据）"""
+    from govio.metadata.datasource import SCHEMA_PATH as DATASOURCE_SCHEMA_PATH
+    from govio.metadata.metric import SCHEMA_PATH as METRIC_SCHEMA_PATH
+    from govio.metadata.relationship import SCHEMA_PATH as RELATIONSHIP_SCHEMA_PATH
+
+    schema_files = {
+        "metric": METRIC_SCHEMA_PATH,
+        "relationship": RELATIONSHIP_SCHEMA_PATH,
+        "datasource": DATASOURCE_SCHEMA_PATH,
+    }
+    text = schema_files[args.schema_name].read_text(encoding="utf-8")
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8")
+        print(f"✓ Schema 已写入: {args.output}")
+    else:
+        print(text, end="")
 
 
 def cmd_import_schema(args: argparse.Namespace) -> None:
@@ -849,7 +887,11 @@ def cmd_import_schema(args: argparse.Namespace) -> None:
     assets_dir = Path(args.assets_dir) if args.assets_dir else DEFAULT_ASSETS_DIR
 
     result = step_meta_export(
-        output, source="duckdb", db_path=db_path, schemas=schemas
+        output,
+        source="duckdb",
+        db_path=db_path,
+        schemas=schemas,
+        datasource_name=ds_name,
     )
     if result is None:
         sys.exit(1)
@@ -886,37 +928,36 @@ def meta():
 
     # meta meta — 元数据导入
     p_meta = sub.add_parser(
-        "meta", help="导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN）"
+        "meta",
+        help="导入 TDS/DuckDB 元数据（Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS）",
     )
     p_meta.add_argument(
-        "--source", choices=["tds", "duckdb", "both"], required=True, help="数据来源"
+        "--source", choices=["tds", "duckdb"], required=True, help="信息来源"
     )
     p_meta.add_argument("--db", type=str, help="DuckDB 数据库文件路径")
     p_meta.add_argument(
         "--schemas",
         type=str,
-        help="要导出的 schema 列表，逗号分隔（必填；DuckDB 文件默认 schema 为 main）",
+        help="要导出的 schema 列表，逗号分隔（DuckDB 模式必填；文件默认 schema 为 main）",
     )
     p_meta.add_argument(
-        "--kundb", type=str, help="TDS 元数据库 URL（TDS/both 模式必须）"
+        "--datasource",
+        type=str,
+        help="数据源名（DuckDB 模式必填，生成 Datasource 节点与 OWNS 归属）",
     )
     p_meta.add_argument(
-        "--workspace-uuid", type=str, help="工作区 UUID（TDS/both 模式必须）"
+        "--datasources-file",
+        type=str,
+        help="数据源声明 JSON（TDS 模式必填，抽取范围取 filter.schemas）",
+    )
+    p_meta.add_argument(
+        "--kundb", type=str, help="TDS 元数据库 URL（TDS 模式必须）"
+    )
+    p_meta.add_argument(
+        "--workspace-uuid", type=str, help="工作区 UUID（TDS 模式必须）"
     )
     p_meta.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
     p_meta.set_defaults(func=cmd_meta)
-
-    # meta app — 应用清单导入
-    p_app = sub.add_parser("app", help="导入应用清单（Application 节点 + USE 边）")
-    p_app.add_argument(
-        "--app-list", type=str, required=True, help="应用清单 Excel 文件路径"
-    )
-    p_app.add_argument(
-        "--app-map", type=str, required=True, help="应用数据库映射 JSON 文件路径"
-    )
-    p_app.add_argument("--db-name", type=str, help="单库模式：仅导出指定应用")
-    p_app.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
-    p_app.set_defaults(func=cmd_app)
 
     # meta std — 数据标准导入
     p_std = sub.add_parser(
@@ -930,6 +971,12 @@ def meta():
         "compliance",
         help="从 TDS 导出已有标准-字段关联（COMPLIES_WITH 边）",
         parents=[tds_args],
+    )
+    p_comp.add_argument(
+        "--datasources-file",
+        type=str,
+        required=True,
+        help="数据源声明 JSON（schema 归属，用于生成全限定列标识）",
     )
     p_comp.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
     p_comp.set_defaults(func=cmd_compliance)
@@ -949,6 +996,21 @@ def meta():
     )
     p_metric.add_argument("--output", type=str, help="CSV 输出目录（默认 ./output）")
     p_metric.set_defaults(func=cmd_metric)
+
+    # --- JSON Schema 输出 ---
+
+    p_schema = sub.add_parser(
+        "schema", help="输出标准 JSON Schema（供外部 agent 生成标准数据）"
+    )
+    p_schema.add_argument(
+        "schema_name",
+        choices=["metric", "relationship", "datasource"],
+        help="schema 名称",
+    )
+    p_schema.add_argument(
+        "-o", "--output", type=str, help="输出文件路径（缺省打印到 stdout）"
+    )
+    p_schema.set_defaults(func=cmd_schema)
 
     # --- 图更新 ---
 
@@ -980,7 +1042,15 @@ def meta():
         help="工作区 UUID",
     )
     p_recommend.add_argument(
-        "--app-map", type=str, required=True, help="应用数据库映射 JSON 文件路径"
+        "--datasource",
+        type=str,
+        required=True,
+        help="数据源名（分析范围取其 filter.schemas）",
+    )
+    p_recommend.add_argument(
+        "--datasources-file",
+        type=str,
+        help="数据源声明 JSON（缺省时从 --csv-dir 的 Datasource.csv 解析）",
     )
     p_recommend.add_argument(
         "--csv-dir", type=str, help="已导入的 CSV 目录（默认同 --output-dir）"

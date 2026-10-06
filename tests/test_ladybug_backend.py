@@ -14,7 +14,7 @@ from govio.graph.ladybug_loader import (
 )
 
 
-def _write_csvs(csv_dir, tables=None, cols=None, apps=None, has_column=None, use=None):
+def _write_csvs(csv_dir, tables=None, cols=None, datasources=None, has_column=None, owns=None):
     """按 FalkorDB 批量导入约定写入节点/边 CSV。"""
     csv_dir = Path(csv_dir)
     csv_dir.mkdir(parents=True, exist_ok=True)
@@ -37,11 +37,11 @@ def _write_csvs(csv_dir, tables=None, cols=None, apps=None, has_column=None, use
             [":ID(Col)", "column_name", "name", "full_table_name", "order_no"],
             cols,
         )
-    if apps is not None:
+    if datasources is not None:
         _write(
-            "Application.csv",
-            [":ID(Application)", "app_id", "name", "app_name_en"],
-            apps,
+            "Datasource.csv",
+            [":ID(Datasource)", "datasource_name", "name"],
+            datasources,
         )
     if has_column is not None:
         _write(
@@ -49,11 +49,11 @@ def _write_csvs(csv_dir, tables=None, cols=None, apps=None, has_column=None, use
             [":START_ID(PhysicalTable)", ":END_ID(Col)"],
             has_column,
         )
-    if use is not None:
+    if owns is not None:
         _write(
-            "USE.csv",
-            [":START_ID(Application)", ":END_ID(PhysicalTable)"],
-            use,
+            "OWNS.csv",
+            [":START_ID(Datasource)", ":END_ID(PhysicalTable)"],
+            owns,
         )
 
 
@@ -65,9 +65,9 @@ def test_ladybug_rebuild_and_query(tmp_path):
         csv_dir,
         tables=[["PT1", "db.dbo.T1", "T1"], ["PT2", "db.dbo.T2", "T2"]],
         cols=[["CO1", "id", "ID", "db.dbo.T1", "1"]],
-        apps=[["AP1", "app1", "销售系统", "AEP"]],
+        datasources=[["DS1", "AEP", "销售系统"]],
         has_column=[["PT1", "CO1"]],
-        use=[["AP1", "PT1"]],
+        owns=[["DS1", "PT1"]],
     )
 
     import_csv_to_ladybug(csv_dir, db_path)
@@ -76,16 +76,16 @@ def test_ladybug_rebuild_and_query(tmp_path):
 
     # schema 包含节点标签与关系签名
     assert "PhysicalTable" in g.schema
-    assert "Application" in g.schema
-    assert "(:Application)-[:USE]->(:PhysicalTable)" in g.schema
+    assert "Datasource" in g.schema
+    assert "(:Datasource)-[:OWNS]->(:PhysicalTable)" in g.schema
 
     # 查询所有物理表
     rows = g.query("MATCH (t:PhysicalTable) RETURN t.id, t.name ORDER BY t.name")
     assert rows == [["PT1", "T1"], ["PT2", "T2"]]
 
-    # 带参数查询：AEP 使用的表
+    # 带参数查询：AEP 拥有的表
     rows = g.query(
-        "MATCH (app:Application {app_name_en: $code})-[:USE]->(t:PhysicalTable) "
+        "MATCH (ds:Datasource {datasource_name: $code})-[:OWNS]->(t:PhysicalTable) "
         "RETURN t.full_table_name",
         {"code": "AEP"},
     )

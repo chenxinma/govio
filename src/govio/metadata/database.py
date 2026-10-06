@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 import pandas as pd
 from sqlalchemy import create_engine
 
+from .datasource import qualify, resolve_datasource
+
 
 class MetadataLoader(ABC):
     """Abstract base class for metadata loaders.
@@ -32,15 +34,13 @@ class MetadataLoader(ABC):
 class TDSLoader(MetadataLoader):
     def __init__(self, db: str, workspace_uuid: str,
                        schema_limits: list[str] | None = None,
-                       app_names: list[str] | None = None) -> None:
+                       datasource_map: dict[str, str] | None = None) -> None:
         self.engine = create_engine(db)
         self.workspace_uuid = workspace_uuid
-        self.app_names_map = None
+        self.datasource_map = datasource_map
 
         if schema_limits:
             self.schema_str = "'" +  "','".join(schema_limits) + "'"
-            if app_names and len(schema_limits) == len(app_names):
-                self.app_names_map = dict(zip(schema_limits, app_names))
         else:
             self.schema_str = None
         
@@ -119,8 +119,23 @@ class TDSLoader(MetadataLoader):
                         .astype(dtype={'size': 'int', 'precision': 'int', 'scale': 'int', 'order_no': 'int'})
         # 转换数据类型
         df_columns['data_type'] = df_columns.apply(self._convert_data_type, axis=1)
-        
+
+        self._qualify_columns(df_columns)
         return df_columns
+
+    def _qualify_columns(self, df_columns: pd.DataFrame) -> None:
+        """就地把 column / full_table_name 改为带数据源前缀的全限定标识"""
+        if self.datasource_map is None:
+            return
+        ftn_list = []
+        col_list = []
+        for ftn, col in zip(df_columns["full_table_name"], df_columns["column"]):
+            schema = str(ftn).split(".", 1)[0]
+            ds_name = resolve_datasource(schema, self.datasource_map)
+            ftn_list.append(qualify(ds_name, str(ftn)))
+            col_list.append(qualify(ds_name, str(col)))
+        df_columns["full_table_name"] = ftn_list
+        df_columns["column"] = col_list
     
     def load_tables(self) -> pd.DataFrame:
         """从数据库加载表元数据
@@ -152,7 +167,16 @@ class TDSLoader(MetadataLoader):
                 and d2.workspace_uuid ='{self.workspace_uuid}'
             """)
         df_tables = pd.read_sql(sql, self.engine)
-        
+
+        if self.datasource_map is not None:
+            df_tables["full_table_name"] = [
+                qualify(
+                    resolve_datasource(str(schema), self.datasource_map),
+                    str(ftn),
+                )
+                for schema, ftn in zip(df_tables["schema"], df_tables["full_table_name"])
+            ]
+
         return df_tables
 
 

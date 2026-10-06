@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from .application import AppInfoLoader
 from .database import TDSLoader
+from .datasource import DatasourceLoader, build_owns_edges, filter_frames
 from .standard import StandardLoader
 from .recommender import create_recommender
 from .relationship import load_relationships
@@ -15,27 +15,30 @@ def make_csv(
     output: Path,
     db: str,
     workspace_uuid: str,
-    app_list_file: str,
-    df_app_db_map: pd.DataFrame,
+    datasource_file: str,
     relationship_file: str | None = None,
     metric_file: str | None = None,
 ):
-    db_loader = TDSLoader(db, workspace_uuid, df_app_db_map["schema"].to_list())
-    app_loader = AppInfoLoader(app_list_file, df_app_db_map["name"].to_list())
-    std_loader = StandardLoader(db, workspace_uuid)
+    ds_loader = DatasourceLoader(datasource_file)
+    ds_map = ds_loader.datasource_map()
+    db_loader = TDSLoader(db, workspace_uuid, ds_loader.all_schemas(), ds_map)
+    std_loader = StandardLoader(db, workspace_uuid, ds_map)
 
     df_tables = db_loader.PhysicalTable
     df_columns = db_loader.Col
-    df_apps = app_loader.Application
+    df_tables, df_columns = filter_frames(
+        df_tables, df_columns, ds_loader.matches_table
+    )
+    df_datasources = ds_loader.Datasource
     df_stds = std_loader.Standard
 
     df_tables = df_tables.reset_index(drop=True)
     df_columns = df_columns.reset_index(drop=True)
-    df_apps = df_apps.reset_index(drop=True)
+    df_datasources = df_datasources.reset_index(drop=True)
     df_stds = df_stds.reset_index(drop=True)
     assign_node_ids(df_tables, "PhysicalTable", "full_table_name")
     assign_node_ids(df_columns, "Col", "column")
-    assign_node_ids(df_apps, "Application", "app_id")
+    assign_node_ids(df_datasources, "Datasource", "datasource_name")
     assign_node_ids(df_stds, "Standard", "standard_id")
 
     files = []
@@ -46,8 +49,8 @@ def make_csv(
     write_node_csv(df_columns, output / "Col.csv", "Col")
     files.append("-n " + str(output / "Col.csv"))
 
-    write_node_csv(df_apps, output / "Application.csv", "Application")
-    files.append("-n " + str(output / "Application.csv"))
+    write_node_csv(df_datasources, output / "Datasource.csv", "Datasource")
+    files.append("-n " + str(output / "Datasource.csv"))
 
     write_node_csv(df_stds, output / "Standard.csv", "Standard")
     files.append("-n " + str(output / "Standard.csv"))
@@ -65,25 +68,9 @@ def make_csv(
     df_has_column.to_csv(output / "HAS_COLUMN.csv", index=False)
     files.append("-r " + str(output / "HAS_COLUMN.csv"))
 
-    df_app_table = pd.merge(
-        df_app_db_map,
-        df_tables[["schema", "node_id"]].rename(
-            columns={"node_id": ":END_ID(PhysicalTable)"}
-        ),
-        on="schema",
-        how="inner",
-    )
-    df_use = pd.merge(
-        df_apps[["name", "node_id"]].rename(
-            columns={"node_id": ":START_ID(Application)"}
-        ),
-        df_app_table,
-        on="name",
-        how="inner",
-    )[[":START_ID(Application)", ":END_ID(PhysicalTable)"]]
-
-    df_use.to_csv(output / "USE.csv", index=False)
-    files.append("-r " + str(output / "USE.csv"))
+    df_owns = build_owns_edges(df_datasources, df_tables, ds_map)
+    df_owns.to_csv(output / "OWNS.csv", index=False)
+    files.append("-r " + str(output / "OWNS.csv"))
 
     if relationship_file:
         try:
@@ -201,9 +188,27 @@ def make_csv(
 
 
 def data_standard_recommend(
-    output: Path, db: str, workspace_uuid: str, df_app_db_map: pd.DataFrame
+    output: Path,
+    db: str,
+    workspace_uuid: str,
+    schemas: list[str],
+    datasource_name: str,
+    csv_dir: Path | None = None,
 ):
-    std_loader = StandardLoader(db, workspace_uuid)
+    """数据标准推荐：按 schema 圈定分析范围，产出 COMPLIES_WITH.csv
+
+    Args:
+        output: 推荐结果输出目录
+        db: TDS 元数据库 URL
+        workspace_uuid: 工作区 UUID
+        schemas: 分析范围（来自 Datasource.filter.schemas）
+        datasource_name: 数据源名（全限定标识前缀）
+        csv_dir: 已导入的 CSV 目录（读取 Col.csv / Standard.csv），缺省取 output
+    """
+    csv_dir = csv_dir or output
+    ds_map = {schema: datasource_name for schema in schemas}
+
+    std_loader = StandardLoader(db, workspace_uuid, ds_map)
     # 加载数据
     std_compliance = std_loader.StdCompliance  # 已贯标列
 
@@ -224,8 +229,8 @@ def data_standard_recommend(
 
     df = pd.DataFrame()
 
-    for schema in df_app_db_map["schema"].to_list():
-        db_loader = TDSLoader(db, workspace_uuid, [schema])
+    for schema in schemas:
+        db_loader = TDSLoader(db, workspace_uuid, [schema], ds_map)
         all_columns = db_loader.Col  # 所有列
         print("Schema=", schema, " columns=", all_columns.shape[0])
 
@@ -240,10 +245,10 @@ def data_standard_recommend(
         # 保存结果
         # _recommendations_confirm.to_csv(output / f'_recommendations_{schema}.csv', index=False)
 
-    if (output / "Col.csv").exists() and (output / "Standard.csv").exists():
+    if (csv_dir / "Col.csv").exists() and (csv_dir / "Standard.csv").exists():
         df = df[["column", "recommended_standard_id"]]
-        df_col = pd.read_csv(output / "Col.csv")[[":ID(Col)", "column"]]
-        df_std = pd.read_csv(output / "Standard.csv")[[":ID(Standard)", "standard_id"]]
+        df_col = pd.read_csv(csv_dir / "Col.csv")[[":ID(Col)", "column"]]
+        df_std = pd.read_csv(csv_dir / "Standard.csv")[[":ID(Standard)", "standard_id"]]
 
         df_colStdId = pd.merge(df, df_col, on="column", how="inner")
         df_complies_with = pd.merge(

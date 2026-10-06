@@ -61,14 +61,6 @@ def _mock_duck_columns():
     })
 
 
-def _mock_apps():
-    return pd.DataFrame({
-        "app_id": ["app_billing"],
-        "name": ["billing"],
-        "description": ["Billing app"],
-    })
-
-
 def _mock_stds():
     return pd.DataFrame({
         "standard_id": ["std_amount"],
@@ -77,8 +69,22 @@ def _mock_stds():
     })
 
 
-def _mock_app_db_map():
-    return pd.DataFrame({"name": ["billing"], "schema": ["dm"]})
+def _write_datasources_file(tmp_path, name="billing", schemas=("dm",)):
+    """构造 datasource 声明文件（TDS 模式与 make_csv 路径需要）。"""
+    data = {
+        "version": "1.0",
+        "datasources": [
+            {
+                "datasource_name": name,
+                "name": name,
+                "source_type": "mysql",
+                "filter": {"schemas": list(schemas)},
+            }
+        ],
+    }
+    path = tmp_path / "datasource.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return str(path)
 
 
 def _run_steps(
@@ -86,33 +92,31 @@ def _run_steps(
     source="duckdb",
     db_path="ignored",
     schemas=None,
-    db_name=None,
+    datasource_name="billing",
+    datasource_file="",
     kundb="mysql://x",
     workspace_uuid="ws",
-    app_list_file="app.json",
-    app_map_file="app_map.json",
     relationship_file=None,
     metric_file=None,
 ):
     """测试辅助：按顺序执行 step 函数。"""
     from govio.cli.meta import (
-        step_meta_export, step_app_export, step_std_export,
+        step_meta_export, step_std_export,
         step_compliance_export, step_rel_export, step_metric_export,
     )
 
     result = step_meta_export(
         output, source=source, db_path=db_path,
-        schemas=schemas, db_name=db_name,
+        schemas=schemas, datasource_name=datasource_name,
+        datasource_file=datasource_file,
         kundb=kundb, workspace_uuid=workspace_uuid,
     )
     if result is None:
         return
 
-    step_app_export(output, app_list_file, app_map_file, db_name)
-
     if source != "duckdb":
         step_std_export(output, kundb, workspace_uuid)
-        step_compliance_export(output, kundb, workspace_uuid)
+        step_compliance_export(output, kundb, workspace_uuid, datasource_file)
 
     if relationship_file:
         step_rel_export(output, relationship_file)
@@ -126,31 +130,33 @@ def _run_steps(
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def _patched_loaders():
-    """Patch all loaders so step functions run without DB/config."""
+def _patched_loaders(tmp_path):
+    """Patch all loaders so step functions run without DB/config.
+
+    Yields:
+        str: datasource 声明文件路径（TDS 模式需要）
+    """
     with patch("govio.cli.meta.TDSLoader") as tds_m, \
          patch("govio.cli.meta.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.AppInfoLoader") as app_m, \
-         patch("govio.cli.meta.StandardLoader") as std_m, \
-         patch("govio.cli.meta.pd.read_json") as read_json_m:
+         patch("govio.cli.meta.StandardLoader") as std_m:
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = _mock_duck_tables()
         duck_m.return_value.Col = _mock_duck_columns()
-        app_m.return_value.Application = _mock_apps()
         std_m.return_value.Standard = _mock_stds()
         std_m.return_value.StdCompliance = pd.DataFrame(columns=["column", "standard_id"])
-        read_json_m.return_value = _mock_app_db_map()
-        yield
+        yield _write_datasources_file(tmp_path)
 
 
 def test_node_csvs_have_string_ids(_patched_loaders, tmp_path):
-    _run_steps(output=tmp_path, source="tds", schemas=["dm"])
+    _run_steps(
+        output=tmp_path, source="tds", datasource_file=_patched_loaders,
+    )
 
     for fname, prefix, label in [
         ("PhysicalTable.csv", "PT", "PhysicalTable"),
         ("Col.csv", "CO", "Col"),
-        ("Application.csv", "AP", "Application"),
+        ("Datasource.csv", "DS", "Datasource"),
         ("Standard.csv", "ST", "Standard"),
     ]:
         df = pd.read_csv(tmp_path / fname)
@@ -162,14 +168,16 @@ def test_node_csvs_have_string_ids(_patched_loaders, tmp_path):
 
 
 def test_edge_csvs_reference_valid_node_ids(_patched_loaders, tmp_path):
-    _run_steps(output=tmp_path, source="tds", schemas=["dm"])
+    _run_steps(
+        output=tmp_path, source="tds", datasource_file=_patched_loaders,
+    )
 
     # 收集所有节点 ID
     node_ids: set[str] = set()
     for fname, label in [
         ("PhysicalTable.csv", "PhysicalTable"),
         ("Col.csv", "Col"),
-        ("Application.csv", "Application"),
+        ("Datasource.csv", "Datasource"),
         ("Standard.csv", "Standard"),
     ]:
         df = pd.read_csv(tmp_path / fname)
@@ -184,15 +192,15 @@ def test_edge_csvs_reference_valid_node_ids(_patched_loaders, tmp_path):
     for v in has_col[":END_ID(Col)"]:
         assert str(v) in node_ids
 
-    # USE
-    use = pd.read_csv(tmp_path / "USE.csv")
-    for v in use[":START_ID(Application)"]:
+    # OWNS
+    owns = pd.read_csv(tmp_path / "OWNS.csv")
+    for v in owns[":START_ID(Datasource)"]:
         assert str(v) in node_ids
-    for v in use[":END_ID(PhysicalTable)"]:
+    for v in owns[":END_ID(PhysicalTable)"]:
         assert str(v) in node_ids
 
     assert len(has_col) == 3
-    assert len(use) == 2
+    assert len(owns) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -229,17 +237,13 @@ def test_metric_edges_use_string_ids(tmp_path):
 
     with patch("govio.cli.meta.TDSLoader") as tds_m, \
          patch("govio.cli.meta.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.AppInfoLoader") as app_m, \
-         patch("govio.cli.meta.StandardLoader") as std_m, \
-         patch("govio.cli.meta.pd.read_json") as read_json_m:
+         patch("govio.cli.meta.StandardLoader") as std_m:
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = _mock_duck_tables()
         duck_m.return_value.Col = _mock_duck_columns()
-        app_m.return_value.Application = _mock_apps()
         std_m.return_value.Standard = _mock_stds()
         std_m.return_value.StdCompliance = pd.DataFrame(columns=["column", "standard_id"])
-        read_json_m.return_value = _mock_app_db_map()
 
         out = tmp_path / "out"
         _run_steps(
@@ -257,7 +261,7 @@ def test_metric_edges_use_string_ids(tmp_path):
     node_ids = set()
     for fname, label in [
         ("PhysicalTable.csv", "PhysicalTable"), ("Col.csv", "Col"),
-        ("Application.csv", "Application"),
+        ("Datasource.csv", "Datasource"),
         ("Metric.csv", "Metric"), ("Dimension.csv", "Dimension"),
     ]:
         d = pd.read_csv(out / fname)
@@ -286,20 +290,17 @@ def test_metric_edges_use_string_ids(tmp_path):
 
 def test_make_csv_utility_path_uses_string_ids(tmp_path, monkeypatch):
     """老路径 utility.make_csv 也应产出 string ID 节点 CSV。"""
-    from unittest.mock import MagicMock
     from govio.metadata import utility
 
     monkeypatch.setattr(utility, "TDSLoader", lambda *a, **k: MagicMock(
         PhysicalTable=_mock_tds_tables(), Col=_mock_tds_columns()))
-    monkeypatch.setattr(utility, "AppInfoLoader", lambda *a, **k: MagicMock(
-        Application=_mock_apps()))
     monkeypatch.setattr(utility, "StandardLoader", lambda *a, **k: MagicMock(
         Standard=_mock_stds()))
 
-    app_map = _mock_app_db_map()
+    ds_file = _write_datasources_file(tmp_path)
     utility.make_csv(
         output=tmp_path, db="mysql://x", workspace_uuid="ws",
-        app_list_file="app.json", df_app_db_map=app_map,
+        datasource_file=ds_file,
     )
 
     df = pd.read_csv(tmp_path / "PhysicalTable.csv")
@@ -312,6 +313,16 @@ def test_make_csv_utility_path_uses_string_ids(tmp_path, monkeypatch):
     node_ids = set(df[":ID(PhysicalTable)"].astype(str))
     for v in has_col[":START_ID(PhysicalTable)"]:
         assert str(v) in node_ids
+
+    ds_df = pd.read_csv(tmp_path / "Datasource.csv")
+    assert ds_df[":ID(Datasource)"].iloc[0].startswith("DS")
+    assert ds_df["datasource_name"].iloc[0] == "billing"
+
+    owns = pd.read_csv(tmp_path / "OWNS.csv")
+    assert len(owns) == 2
+    ds_ids = set(ds_df[":ID(Datasource)"].astype(str))
+    for v in owns[":START_ID(Datasource)"]:
+        assert str(v) in ds_ids
 
 
 # ---------------------------------------------------------------------------
@@ -348,12 +359,10 @@ def test_meta_duckdb_requires_db(tmp_path, monkeypatch, capsys):
 # ---------------------------------------------------------------------------
 
 def test_duckdb_skips_tds_and_std(tmp_path):
-    """DuckDB 模式不调用 TDSLoader 和 StandardLoader。"""
+    """DuckDB 模式不调用 TDSLoader 和 StandardLoader，自动声明 Datasource。"""
     with patch("govio.cli.meta.TDSLoader") as tds_m, \
          patch("govio.cli.meta.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.AppInfoLoader") as app_m, \
-         patch("govio.cli.meta.StandardLoader") as std_m, \
-         patch("govio.cli.meta.pd.read_json") as read_json_m:
+         patch("govio.cli.meta.StandardLoader") as std_m:
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = pd.DataFrame({
@@ -371,10 +380,8 @@ def test_duckdb_skips_tds_and_std(tmp_path):
             "precision": [0, 10], "scale": [0, 2], "order_no": [1, 2],
             "data_type": ["int", "decimal(10,2)"],
         })
-        app_m.return_value.Application = _mock_apps()
         std_m.return_value.Standard = _mock_stds()
         std_m.return_value.StdCompliance = pd.DataFrame(columns=["column", "standard_id"])
-        read_json_m.return_value = _mock_app_db_map()
 
         out = tmp_path / "out"
         _run_steps(
@@ -391,9 +398,16 @@ def test_duckdb_skips_tds_and_std(tmp_path):
     tables = pd.read_csv(out / "PhysicalTable.csv")
     assert set(tables["full_table_name"]) == {"dm.orders"}
 
-    # Application 正常导出
-    apps = pd.read_csv(out / "Application.csv")
-    assert len(apps) == 1
+    # Datasource 自动声明（filter.schemas 取 --schemas）
+    ds_df = pd.read_csv(out / "Datasource.csv")
+    assert len(ds_df) == 1
+    assert ds_df["datasource_name"].iloc[0] == "billing"
+    assert ds_df["source_type"].iloc[0] == "duckdb"
+    assert json.loads(ds_df["filter"].iloc[0]) == {"schemas": ["dm"]}
+
+    # OWNS 边生成
+    owns = pd.read_csv(out / "OWNS.csv")
+    assert len(owns) == 1
 
     # Standard.csv 不应存在（duckdb 模式跳过）
     assert not (out / "Standard.csv").exists()

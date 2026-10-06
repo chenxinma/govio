@@ -48,10 +48,10 @@ Loads metadata from a local DuckDB file using the duckdb Python library directly
 ### Constructor
 
 ```python
-DuckDBLoader(db_path: str, schemas: list[str], datasource_name: str)
+DuckDBLoader(db_path: str, schemas: list[str], datasource_name: str = "")
 ```
 
-`datasource_name` 用于生成全限定标识，并在导出时生成 `Datasource` / `OWNS` 归属；`schemas` 为非 TDS 导入路径的实际过滤参数（由 CLI `--schemas` 指定）。
+`datasource_name` 用于生成全限定标识，并在导出时生成 `Datasource` / `OWNS` 归属；`schemas` 为非 TDS 导入路径的实际过滤参数（由 CLI `--schemas` 指定）。缺省空串表示不加前缀，仅供 `list_schemas()` 等只读探测场景。
 
 ### Properties
 
@@ -78,7 +78,7 @@ list_schemas() -> list[tuple[str, int]]  # Read-only (schema 名, 表数量)，�
 
 `trino_loader.py`
 
-Loads metadata from a Trino database connector. 与 `DuckDBLoader` 相同，接收 `datasource_name` 生成全限定标识与 `Datasource` / `OWNS` 归属。
+Loads metadata from a Trino database connector. 与 `DuckDBLoader` 相同，构造参数末尾可传 `datasource_name: str = ""` 生成全限定标识与 `Datasource` / `OWNS` 归属。
 
 ---
 
@@ -91,17 +91,18 @@ Loads metadata from a Trino database connector. 与 `DuckDBLoader` 相同，接�
 ### Constructor
 
 ```python
-DatasourceLoader(datasource_file: str | Path)
+DatasourceLoader(datasource_file: str | Path)  # 加载并完成 JSON Schema + 语义校验
 ```
 
 ### Methods
 
 ```python
-load() -> dict                                  # Parse JSON, requires version + datasources
-validate() -> None                              # jsonschema 校验 datasource_schema.json
-schemas_for(datasource_name: str) -> list[str]  # 该数据源 filter.schemas
+get(datasource_name: str) -> DatasourceDef        # 按名取声明（缺失抛 KeyError）
+schemas_for(datasource_name: str) -> list[str]    # 该数据源 filter.schemas
 datasource_for_schema(schema: str) -> str | None  # schema -> datasource_name 反查
-all_schemas() -> list[str]                      # filter.schemas 并集（TDS 抽取范围）
+all_schemas() -> list[str]                        # filter.schemas 并集（TDS 抽取范围）
+datasource_map() -> dict[str, str]                # schema -> datasource_name 映射
+matches_table(schema: str, table_name: str) -> bool  # filter 执行（按归属数据源）
 ```
 
 ### Properties
@@ -109,6 +110,9 @@ all_schemas() -> list[str]                      # filter.schemas 并集（TDS �
 | Property | Type | Columns |
 |---|---|---|
 | `Datasource` | Node DataFrame | `datasource_name`, `name`, `source_type`, `filter` |
+| `defs` | `list[DatasourceDef]` | 全部数据源声明 |
+
+`DatasourceDef`（`datasource_name` / `source_type` / `name` / `filter`）提供 `schemas`、`filter_json`、`matches_table()`、`to_row()`；模块级工具函数：`qualify()`（加数据源前缀）、`resolve_datasource()`（schema 反查，未归属抛 ValueError）、`make_datasource_def()`（非 TDS 自动声明）、`filter_frames()`（按 filter 过滤表/列）、`build_owns_edges()`（OWNS 边）。
 
 语义约束：
 
@@ -116,8 +120,6 @@ all_schemas() -> list[str]                      # filter.schemas 并集（TDS �
 - `name` 缺省取 `datasource_name`
 - 同一 schema 不得出现在多个条目的 `filter.schemas` 中（归属唯一）
 - 非 TDS 导入且未提供声明文件时，由 CLI 参数构造等价定义：`source_type` 取导入源类型，`filter.schemas` 取 `--schemas`
-
----
 
 ---
 
@@ -130,15 +132,17 @@ Loads data standards and compliance info from governance DB.
 ### Constructor
 
 ```python
-StandardLoader(db: str, workspace_uuid: str)
+StandardLoader(db: str, workspace_uuid: str, datasource_map: dict[str, str] | None = None)
 ```
+
+提供 `datasource_map` 时，`StdCompliance` 的 `full_table_name` / `column` 为全限定标识（与 Col.csv 一致，供 COMPLIES_WITH 匹配）；缺省保持 `schema.table[.column]` 原始标识。
 
 ### Properties
 
 | Property | Columns |
 |---|---|
 | `Standard` | `standard_id`, `name`, plus dynamically pivoted attribute columns |
-| `StdCompliance` | `standard_id`, `standard_name`, `database_name`, `full_table_name`, `column_name`, `name`, `data_entity_type`, `dtype`, `size`, `precision`, `scale` |
+| `StdCompliance` | `standard_id`, `standard_name`, `database_name`, `full_table_name`, `column`, `column_name`, `name`, `data_entity_type`, `dtype`, `size`, `precision`, `scale` |
 
 ### Methods
 
@@ -397,9 +401,10 @@ CLI orchestration functions.
 reorder_index(dfs: list[pd.DataFrame], start: int = 1) -> None
 make_csv(output, db, workspace_uuid, datasource_file,
          relationship_file=None, metric_file=None) -> None
-data_standard_recommend(output, db, workspace_uuid, schemas: list[str]) -> None
+data_standard_recommend(output, db, workspace_uuid, schemas: list[str],
+                        datasource_name: str, csv_dir: Path | None = None) -> None
 ```
 
-`make_csv` 产出 `PhysicalTable.csv`、`Col.csv`、`HAS_COLUMN.csv`、`Datasource.csv`、`OWNS.csv`，可选追加 `RELATES_TO.csv` 与指标相关 CSV；TDS 抽取范围来自 `datasource_file` 各条目 `filter.schemas` 的并集。`schemas` 参数由调用方从 `Datasource.filter.schemas` 解析后传入。
+`make_csv` 产出 `PhysicalTable.csv`、`Col.csv`、`HAS_COLUMN.csv`、`Datasource.csv`、`OWNS.csv`，可选追加 `RELATES_TO.csv` 与指标相关 CSV；TDS 抽取范围来自 `datasource_file` 各条目 `filter.schemas` 的并集。`schemas` 由调用方从 `Datasource.filter.schemas` 解析后传入；`csv_dir` 为已导入 CSV 目录（读取 `Col.csv` / `Standard.csv`，缺省取 `output`）。
 
 `data_standard_recommend` uses custom weights: `table=0.25, name=0.35, comment=0.25, type=0.05, numeric=0.10`.

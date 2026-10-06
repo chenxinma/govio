@@ -8,6 +8,13 @@ from pathlib import Path
 
 from ..graph import FalkorDBGraph, LadybugGraph, NetworkXGraph
 
+_FILENAME_UNSAFE = '\\/:*?"<>|'
+
+
+def _safe_filename(name: str) -> str:
+    """替换文件名中的非法字符（Windows 路径友好）"""
+    return "".join("_" if ch in _FILENAME_UNSAFE else ch for ch in name).strip()
+
 
 class AssetsGenerator:
     """资产文件生成器
@@ -57,7 +64,7 @@ class AssetsGenerator:
         """为 NetworkX 生成名称索引
 
         格式: JSON Lines，每行一个节点
-        {"id": "node_id", "name": "节点名称", "node_type": "Application"}
+        {"id": "node_id", "name": "节点名称", "node_type": "Datasource"}
         """
         if type(self.graph) is not NetworkXGraph:
             return None
@@ -94,55 +101,58 @@ class AssetsGenerator:
     def _generate_names_cypher(self, names_dir: Path) -> None:
         """为 Cypher 后端（FalkorDB / Ladybug）生成名称索引
 
-        有 Application 节点时按应用分组；无应用节点时按 database/schema 聚合。
+        有 Datasource 节点时按数据源分组；无数据源节点时按 database/schema 聚合。
         """
         if not isinstance(self.graph, (FalkorDBGraph, LadybugGraph)):
             return None
 
-        # 查询所有应用（Application 节点可能不存在）
+        # 查询所有数据源（Datasource 节点可能不存在）
         try:
-            apps_query = """
-            MATCH (app:Application)
-            RETURN app.app_name_en AS app_name_en, app.name AS name
-            ORDER BY app.app_name_en
+            ds_query = """
+            MATCH (ds:Datasource)
+            RETURN ds.name AS name, ds.datasource_name AS datasource_name
+            ORDER BY ds.datasource_name
             """
-            apps = self.graph.query(apps_query)
+            datasources = self.graph.query(ds_query)
         except Exception:
-            apps = []
+            datasources = []
 
-        if apps:
-            self._generate_names_by_app(names_dir, apps)
+        if datasources:
+            self._generate_names_by_datasource(names_dir, datasources)
         else:
-            # DuckDB 等纯元数据导入场景：没有 Application，按 schema 聚合
+            # 无 Datasource 节点的场景：按 database/schema 聚合
             self._generate_names_by_schema(names_dir)
 
-    def _generate_names_by_app(self, names_dir: Path, apps: list) -> None:
-        """按应用分组生成名称索引
+    def _generate_names_by_datasource(self, names_dir: Path, datasources: list) -> None:
+        """按数据源分组生成名称索引
 
-        格式: {name}_{app_name_en}.md
+        格式: {name}_{datasource_name}.md
         """
-        for app_row in apps:
-            app_name_en, name = app_row
+        for ds_row in datasources:
+            name, datasource_name = ds_row
 
-            # 查询该应用使用的所有物理表
+            # 查询该数据源治理归属的所有物理表
             # 注意：变量名不能用 table，TABLE 是 Ladybug 的保留字，会触发解析错误。
             tables_query = """
-            MATCH (app:Application {app_name_en: $app_name_en})-[:USE]->(t:PhysicalTable)
+            MATCH (ds:Datasource {datasource_name: $datasource_name})-[:OWNS]->(t:PhysicalTable)
             RETURN t.full_table_name AS full_table_name, t.name AS table_name
             ORDER BY t.full_table_name
             """
-            tables = self.graph.query(tables_query, {"app_name_en": app_name_en})
+            tables = self.graph.query(
+                tables_query, {"datasource_name": datasource_name}
+            )
 
             md_content = self._build_table_section(tables)
 
             # 写入文件
             if md_content:
-                file_path = names_dir / f"{name}_{app_name_en}.md"
+                safe_name = _safe_filename(str(name or datasource_name))
+                file_path = names_dir / f"{safe_name}_{datasource_name}.md"
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write("\n".join(md_content))
 
     def _generate_names_by_schema(self, names_dir: Path) -> None:
-        """无 Application 节点时，按 database/schema 聚合生成名称索引
+        """无 Datasource 节点时，按 database/schema 聚合生成名称索引
 
         格式: {database_name}_{schema}_names.md（空值用 default 兜底）
         """
