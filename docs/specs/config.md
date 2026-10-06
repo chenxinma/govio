@@ -63,6 +63,14 @@ datasources:
 | `graph.ladybug.db_path` | If backend=ladybug | -- |
 | `datasources.*` | No | Each entry must have `url` key |
 
+## Graph Model Alignment
+
+在新模型下，`datasources` 配置与图模型中的 `Datasource` 节点对齐：
+
+- `datasources` 中已配置的名称应优先映射为 `Datasource` 节点，且 `accessible=true`, `virtual=false`
+- 未在 `datasources` 中配置、但由 `meta meta` 显式指定的数据源名称，应生成 `accessible=false`, `virtual=true` 的 `Datasource` 节点
+- 该映射用于治理范围表达，不要求 `filter` 字段与 `--schemas` 参数完全自动一致
+
 ## Datasource URL Formats
 
 | Type | URL Pattern | Notes |

@@ -73,6 +73,25 @@ Interactive setup wizard + non-interactive datasource management.
 | Flag | Description |
 |---|---|
 | `--add-datasource NAME` | Add datasource (requires `--url`) |
+
+### JSON Schema 输出（新能力）
+
+建议新增 `meta schema` 子命令，用于输出外部 agent 可消费的输入 schema：
+
+```bash
+govio-cli meta schema metric
+govio-cli meta schema relationship
+```
+
+行为：
+- 输出标准 JSON Schema（UTF-8）
+- 默认输出到 stdout
+- 支持 `--output FILE` 写入文件
+- `metric` 输出应与 `metric_schema.json` 保持一致
+- `relationship` 输出应覆盖 `{version, relationships}` 结构与字段约束
+
+用途：
+- 让外部 agent 基于 schema 生成标准 JSON，再由 `govio-cli meta metric` / `govio-cli meta rel` 导入图数据库
 | `--remove-datasource NAME` | Delete datasource |
 | `--url URL` | Connection URL, e.g. `mysql+pymysql://user:pass@host:3306/db` (password auto-masked + Fernet-encrypted) |
 | `--password P` | Password provided separately, injected into a password-less `scheme://user@host` URL |
@@ -137,7 +156,7 @@ Exception: `import-schema` reads `config.datasources` to resolve the DuckDB file
 | Subcommand | Description |
 |---|---|
 | `meta meta` | Import TDS/DuckDB metadata (PhysicalTable, Col, HAS_COLUMN) |
-| `meta app` | Import application list (Application + USE edges) |
+| `meta app` | Import application list (Application + USE edges)（旧模型，已废弃） |
 | `meta std` | Import data standards (Standard nodes, TDS only) |
 | `meta compliance` | Export existing standard-column associations (COMPLIES_WITH, TDS only) |
 | `meta rel` | Import table relationships (RELATES_TO edges) |
@@ -146,7 +165,9 @@ Exception: `import-schema` reads `config.datasources` to resolve the DuckDB file
 | `meta recommend` | Data standard recommendation |
 | `meta import-schema` | Import metadata from a configured DuckDB datasource to graph (shortcut for meta + graph) |
 
-Recommended order: `meta` → `app` → `std` → `compliance` → `rel` → `metric` → `graph`
+Recommended order:
+- 旧流程：`meta` → `app` → `std` → `compliance` → `rel` → `metric` → `graph`
+- 新流程：`meta` → `std` → `compliance` → `rel` → `metric` → `graph`
 
 ### Data Sources
 

@@ -80,11 +80,42 @@ Loads metadata from a Trino database connector.
 
 ---
 
-## AppInfoLoader
+## DatasourceModel（新模型）
+
+在新模型中，元数据导入结果统一归属于 `Datasource` 节点，不再通过 `Application` 做 map。
+
+### Datasource 节点属性
+
+| Attribute | Type | Description |
+|---|---|---|
+| `datasource_name` | `string` | business key；来自 `config.datasources` 名称或导入时显式指定的数据源名 |
+| `name` | `string` | 显示名，默认与 `datasource_name` 相同 |
+| `source_type` | `string` | 数据源类型，例如 `duckdb`, `tds`, `mysql`, `postgres`, `hive`, `trino` |
+| `accessible` | `boolean` | 当前环境是否可访问（通常表示 observe / config 中已配置） |
+| `virtual` | `boolean` | 是否为虚拟数据源（未在 observe 中配置时为 `true`） |
+| `filter` | `object?` | 声明型过滤定义，用于描述该 datasource 管辖范围 |
+
+### filter 定义（最小可用）
+
+```json
+{
+  "schemas": ["main", "dw"]
+}
+```
+
+当前版本 `filter` 仅作为声明型约束保存到图模型中，实际导入过滤仍由 CLI 参数与 loader 执行。
+
+### OWNS 边
+
+新模型使用 `Datasource -[:OWNS]-> PhysicalTable` 表示数据归属关系，替代原有 `Application -[:USE]-> PhysicalTable`。
+
+---
+
+## AppInfoLoader（旧模型，已废弃）
 
 `application.py`
 
-Loads application metadata from Excel.
+原用于从 Excel 加载应用元数据，配合 `Application` 节点与 `USE` 边。新模型中该能力不再作为主链路依赖。
 
 ### Constructor
 
@@ -181,6 +212,16 @@ load_relationships(json_path, df_tables, df_columns) -> pd.DataFrame
   ]
 }
 ```
+
+### Relationship Schema（新模型增强）
+
+为支持外部 agent 消费，建议新增 `relationship_schema.json`，用于描述 `schema_of_relationships.json` 的标准结构。当前 spec 默认该 schema 包含：
+
+- root: `version`（常量 `1.0`）、`relationships`（数组，`minItems 1`）
+- relationship: 必须包含 `source`, `target`, `relationship_type`
+- `relationship_type`: `one_to_one | one_to_many | many_to_one | many_to_many`
+- `source/target`: 必须包含 `PhysicalTable`, `Cols`
+- `Cols`: 字符串数组，至少 1 项
 
 ---
 
@@ -337,6 +378,8 @@ When `incremental=True`, merges new CSV data into existing GML graph instead of 
 Supported node CSVs: PhysicalTable, Col, Application, Standard, Metric, Dimension
 Supported edge CSVs: HAS_COLUMN, USE, COMPLIES_WITH, RELATES_TO, USES_TABLE, REFERS_COLUMN, DERIVED_FROM, DIMENSION_USED, SUPERSEDES
 
+在新模型下，`gen_networkx` 应额外支持加载 `Datasource.csv` 与 `OWNS.csv`；`Application.csv` / `USE.csv` 保留为旧模型兼容项。
+
 ---
 
 ## utility.py
@@ -347,6 +390,8 @@ CLI orchestration functions.
 reorder_index(dfs: list[pd.DataFrame], start: int = 1) -> None
 make_csv(output, db, workspace_uuid, app_list_file, df_app_db_map,
          relationship_file=None, metric_file=None) -> None
+
+在新模型下，`make_csv` 需支持生成 `Datasource.csv` 与 `OWNS.csv`，并根据导入来源填写 `source_type`、`accessible`、`virtual`、`filter` 等属性。
 data_standard_recommend(output, db, workspace_uuid, df_app_db_map) -> None
 ```
 
