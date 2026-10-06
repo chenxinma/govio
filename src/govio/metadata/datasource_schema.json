@@ -59,12 +59,11 @@
         "datasource_name": {
           "type": "string",
           "minLength": 1,
-          "description": "数据源唯一名（business key）"
+          "description": "数据源英文唯一名（business key），与 observe 的 config.datasources key 一致"
         },
-        "name": {
+        "comment": {
           "type": "string",
-          "minLength": 1,
-          "description": "显示名，缺省取 datasource_name"
+          "description": "中文备注（可选）"
         },
         "source_type": {
           "type": "string",

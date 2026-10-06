@@ -345,7 +345,7 @@ def step_meta_export(
         )
         df_datasources = pd.DataFrame(
             [ds_def.to_row()],
-            columns=["datasource_name", "name", "source_type", "filter"],
+            columns=["datasource_name", "comment", "source_type", "filter"],
         )
         ds_map = {s: datasource_name for s in ds_def.schemas}
 

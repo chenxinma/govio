@@ -109,15 +109,15 @@ matches_table(schema: str, table_name: str) -> bool  # filter 执行（按归属
 
 | Property | Type | Columns |
 |---|---|---|
-| `Datasource` | Node DataFrame | `datasource_name`, `name`, `source_type`, `filter` |
+| `Datasource` | Node DataFrame | `datasource_name`, `comment`, `source_type`, `filter` |
 | `defs` | `list[DatasourceDef]` | 全部数据源声明 |
 
 `DatasourceDef`（`datasource_name` / `source_type` / `name` / `filter`）提供 `schemas`、`filter_json`、`matches_table()`、`to_row()`；模块级工具函数：`qualify()`（加数据源前缀）、`resolve_datasource()`（schema 反查，未归属抛 ValueError）、`make_datasource_def()`（非 TDS 自动声明）、`filter_frames()`（按 filter 过滤表/列）、`build_owns_edges()`（OWNS 边）。
 
 语义约束：
 
-- `datasource_name` 全局唯一，重复即报错
-- `name` 缺省取 `datasource_name`
+- `datasource_name` 全局唯一（英文，与 observe 的 `config.datasources` key 一致），重复即报错
+- `comment` 为中文备注，可选
 - 同一 schema 不得出现在多个条目的 `filter.schemas` 中（归属唯一）
 - 非 TDS 导入且未提供声明文件时，由 CLI 参数构造等价定义：`source_type` 取导入源类型，`filter.schemas` 取 `--schemas`
 
@@ -367,7 +367,8 @@ JSON Schema (draft-07) for datasource declaration files（文件路径 `src/govi
 
 - **Root**: `version` (must be `"1.0"`), `datasources` (array, minItems 1)，`additionalProperties: false`
 - **datasource**: requires `datasource_name`, `source_type`
-  - optional `name`: 显示名，缺省取 `datasource_name`
+  - optional `comment`: 中文备注
+  - `datasource_name`: 英文唯一名，与 observe 的 `config.datasources` key 一致
   - `source_type`: 开放字符串，已知取值 `duckdb` / `tds` / `mysql` / `postgres` / `oracle` / `hive` / `trino`
   - optional `filter`: requires `schemas` (array, minItems 1)；optional `include_tables` / `exclude_tables`（glob 数组）
 - **语义校验**（超出 JSON Schema，由 `DatasourceLoader` 执行）：`datasource_name` 唯一、schema 归属唯一

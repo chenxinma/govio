@@ -16,6 +16,11 @@ def _safe_filename(name: str) -> str:
     return "".join("_" if ch in _FILENAME_UNSAFE else ch for ch in name).strip()
 
 
+def _display_name(attrs: dict) -> object:
+    """节点展示名：name > code > datasource_name"""
+    return attrs.get("name") or attrs.get("code") or attrs.get("datasource_name") or ""
+
+
 class AssetsGenerator:
     """资产文件生成器
 
@@ -74,22 +79,13 @@ class AssetsGenerator:
         nodes = [
             {
                 "id": node_id,
-                "name": g.nodes[node_id].get("name") or g.nodes[node_id].get("code", ""),
+                "name": _display_name(g.nodes[node_id]),
                 "node_type": g.nodes[node_id]["node_type"],
             }
             for node_id in g.nodes()
-            if (
-                g.nodes[node_id].get("name") or g.nodes[node_id].get("code")
-            )
-            and (
-                g.nodes[node_id].get("name") != "0"
-                if g.nodes[node_id].get("name")
-                else True
-            )
-            and isinstance(
-                g.nodes[node_id].get("name") or g.nodes[node_id].get("code", ""),
-                str,
-            )
+            if _display_name(g.nodes[node_id])
+            and g.nodes[node_id].get("name") != "0"
+            and isinstance(_display_name(g.nodes[node_id]), str)
         ]
 
         if nodes:
@@ -110,7 +106,7 @@ class AssetsGenerator:
         try:
             ds_query = """
             MATCH (ds:Datasource)
-            RETURN ds.name AS name, ds.datasource_name AS datasource_name
+            RETURN ds.comment AS comment, ds.datasource_name AS datasource_name
             ORDER BY ds.datasource_name
             """
             datasources = self.graph.query(ds_query)
@@ -126,10 +122,9 @@ class AssetsGenerator:
     def _generate_names_by_datasource(self, names_dir: Path, datasources: list) -> None:
         """按数据源分组生成名称索引
 
-        格式: {name}_{datasource_name}.md
+        格式: {comment}_{datasource_name}.md（无 comment 时为 {datasource_name}.md）
         """
-        for ds_row in datasources:
-            name, datasource_name = ds_row
+        for comment, datasource_name in datasources:
 
             # 查询该数据源治理归属的所有物理表
             # 注意：变量名不能用 table，TABLE 是 Ladybug 的保留字，会触发解析错误。
@@ -146,8 +141,12 @@ class AssetsGenerator:
 
             # 写入文件
             if md_content:
-                safe_name = _safe_filename(str(name or datasource_name))
-                file_path = names_dir / f"{safe_name}_{datasource_name}.md"
+                if comment:
+                    safe_comment = _safe_filename(str(comment))
+                    file_name = f"{safe_comment}_{datasource_name}.md"
+                else:
+                    file_name = f"{datasource_name}.md"
+                file_path = names_dir / file_name
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write("\n".join(md_content))
 

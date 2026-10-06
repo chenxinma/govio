@@ -76,7 +76,7 @@ def _write_datasources_file(tmp_path, name="billing", schemas=("dm",)):
         "datasources": [
             {
                 "datasource_name": name,
-                "name": name,
+                "comment": f"{name}（测试）",
                 "source_type": "mysql",
                 "filter": {"schemas": list(schemas)},
             }

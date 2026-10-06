@@ -103,7 +103,7 @@ datasources:
   "datasources": [
     {
       "datasource_name": "hr_prod",
-      "name": "人力资源生产库",
+      "comment": "人力资源生产库",
       "source_type": "oracle",
       "filter": {
         "schemas": ["ihrodb", "IHRO_BILL"],
@@ -117,7 +117,7 @@ datasources:
 
 - `filter.schemas` 决定 TDS 导入的抽取范围；同一 schema 不得归属多个 datasource
 - `include_tables` / `exclude_tables` 为 `fnmatch` glob，大小写不敏感，exclude 优先
-- 首版初始数据已由 `data/app_map.json` 转换生成 `data/datasource.json`：按 `name` 分组聚合 `schema` 为 `filter.schemas`，`datasource_name` 取 `name`（后续可换英文标识），**`source_type` 需人工补全（初始值 `TBD`）**
+- 首版初始数据已由 `data/app_map.json` 转换生成 `data/datasource.json`：按系统分组聚合 `schema` 为 `filter.schemas`；`datasource_name` 为英文标识（与 observe 的 `config.datasources` key 对齐），`comment` 保留中文系统名，`source_type` 已人工标注
 
 ## Relationship JSON Format
 

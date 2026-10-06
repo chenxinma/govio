@@ -40,7 +40,7 @@ def _write_csvs(csv_dir, tables=None, cols=None, datasources=None, has_column=No
     if datasources is not None:
         _write(
             "Datasource.csv",
-            [":ID(Datasource)", "datasource_name", "name"],
+            [":ID(Datasource)", "datasource_name", "comment"],
             datasources,
         )
     if has_column is not None:

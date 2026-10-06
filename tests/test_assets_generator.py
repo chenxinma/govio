@@ -181,7 +181,7 @@ def test_assets_generator_ladybug_names():
         )
         _write(
             "Datasource.csv",
-            [":ID(Datasource)", "datasource_name", "name"],
+            [":ID(Datasource)", "datasource_name", "comment"],
             [["DS1", "AEP", "销售系统"]],
         )
         _write(

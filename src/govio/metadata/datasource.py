@@ -58,20 +58,17 @@ class DatasourceDef:
     """单个数据源声明
 
     Attributes:
-        datasource_name: 数据源唯一名（business key）
+        datasource_name: 数据源英文唯一名（business key，与 observe 的
+            config.datasources key 一致）
         source_type: 数据源类型（duckdb/mysql/postgres/oracle/hive/trino/...）
-        name: 显示名，缺省取 datasource_name
+        comment: 中文备注（可选）
         filter: 治理范围声明（schemas / include_tables / exclude_tables）
     """
 
     datasource_name: str
     source_type: str
-    name: str = ""
+    comment: str = ""
     filter: dict[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if not self.name:
-            self.name = self.datasource_name
 
     @property
     def schemas(self) -> list[str]:
@@ -109,7 +106,7 @@ class DatasourceDef:
         """Datasource 节点行（CSV 列序）"""
         return {
             "datasource_name": self.datasource_name,
-            "name": self.name,
+            "comment": self.comment,
             "source_type": self.source_type,
             "filter": self.filter_json,
         }
@@ -144,7 +141,7 @@ def make_datasource_def(
     return DatasourceDef(
         datasource_name=datasource_name,
         source_type=declared.source_type,
-        name=declared.name,
+        comment=declared.comment,
         filter={
             "schemas": list(schemas),
             "include_tables": declared.filter.get("include_tables")
@@ -233,7 +230,7 @@ class DatasourceLoader:
             ds_def = DatasourceDef(
                 datasource_name=item["datasource_name"],
                 source_type=item["source_type"],
-                name=item.get("name", ""),
+                comment=item.get("comment", ""),
                 filter=item.get("filter", {}),
             )
             if ds_def.datasource_name in self._defs:
@@ -265,7 +262,7 @@ class DatasourceLoader:
         """Datasource 节点 DataFrame"""
         return pd.DataFrame(
             [d.to_row() for d in self._defs.values()],
-            columns=["datasource_name", "name", "source_type", "filter"],
+            columns=["datasource_name", "comment", "source_type", "filter"],
         )
 
     def get(self, datasource_name: str) -> DatasourceDef:
