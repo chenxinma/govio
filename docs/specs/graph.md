@@ -138,6 +138,8 @@ query(query: str, params: dict | None = None) -> list[list[Any]]
 
 ## CSV Loaders
 
+Node/edge 文件清单与命名约定见 [data-model.md](data-model.md#csv-conventions)（节点：`Datasource`、`PhysicalTable`、`Col`、`Standard`、`Metric`、`Dimension`）。
+
 ### FalkorDB Bulk Loader
 
 `falkordb_loader.py`

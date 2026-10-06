@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Govio Datasource Definition",
+  "description": "数据源声明文件 schema，用于校验 govio Datasource 元数据（治理侧信息记录，不含连接配置）",
+  "type": "object",
+  "required": ["version", "datasources"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "datasources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/datasource"
+      },
+      "minItems": 1
+    }
+  },
+  "definitions": {
+    "filter": {
+      "type": "object",
+      "required": ["schemas"],
+      "additionalProperties": false,
+      "properties": {
+        "schemas": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "description": "纳入治理范围的 schema 列表"
+        },
+        "include_tables": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "表名白名单 glob（fnmatch），缺省 [\"*\"]"
+        },
+        "exclude_tables": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "表名黑名单 glob（fnmatch），优先级高于 include_tables"
+        }
+      }
+    },
+    "datasource": {
+      "type": "object",
+      "required": ["datasource_name", "source_type"],
+      "additionalProperties": false,
+      "properties": {
+        "datasource_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "数据源唯一名（business key）"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "显示名，缺省取 datasource_name"
+        },
+        "source_type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "数据源类型，已知取值 duckdb/tds/mysql/postgres/oracle/hive/trino，开放扩展"
+        },
+        "filter": {
+          "$ref": "#/definitions/filter"
+        }
+      }
+    }
+  }
+}

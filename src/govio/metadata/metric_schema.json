@@ -68,7 +68,8 @@
       "properties": {
         "full_table_name": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "全限定表标识 <datasource_name>.<schema>.<table>"
         },
         "columns": {
           "type": "array",
