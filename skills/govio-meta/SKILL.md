@@ -1,6 +1,6 @@
 ---
 name: govio-meta
-description: 知识图谱维护命令组。当需要导入元数据、推荐数据标准、或管理图数据库时触发。包含独立的导入子命令（meta/app/std/compliance/rel/metric）、graph（图数据库更新/清空）、recommend（数据标准推荐）。
+description: 知识图谱维护命令组。当需要导入元数据、推荐数据标准、或管理图数据库时触发。包含独立的导入子命令（meta/std/compliance/rel/metric/schema）、graph（图数据库更新/清空）、recommend（数据标准推荐）、import-schema（已配置 DuckDB 数据源一步导入）。
 ---
 
 # Govio Meta 知识图谱维护
@@ -36,9 +36,8 @@ description: 知识图谱维护命令组。当需要导入元数据、推荐数�
 
 | 本次新增的输入 | 跑哪条 | 产出 CSV |
 |---|---|---|
-| 元数据库（TDS）/ DuckDB 文件 | `meta meta` | PhysicalTable, Col, HAS_COLUMN |
-| 已配置的 DuckDB 数据源 | `meta import-schema` | PhysicalTable, Col, HAS_COLUMN（一步完成 meta + graph） |
-| 应用清单 Excel + app_map JSON | `meta app` | Application, USE |
+| 元数据库（TDS）/ DuckDB 文件 | `meta meta` | Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS |
+| 已配置的 DuckDB 数据源 | `meta import-schema` | Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS（一步完成 meta + graph） |
 | 数据标准（仅 TDS） | `meta std` | Standard |
 | 已有贯标关系（仅 TDS） | `meta compliance` | COMPLIES_WITH |
 | 表关系 JSON | `meta rel` | RELATES_TO |
@@ -51,7 +50,7 @@ description: 知识图谱维护命令组。当需要导入元数据、推荐数�
 
 ```bash
 tmp=$(mktemp -d)
-govio-cli meta meta --source duckdb --db /path/to/meta.duckdb --schemas main --output "$tmp"
+govio-cli meta meta --source duckdb --db /path/to/meta.duckdb --schemas main --datasource mydb --output "$tmp"
 govio-cli meta graph --output "$tmp" --mode update
 rm -rf "$tmp"
 ```
@@ -60,10 +59,17 @@ rm -rf "$tmp"
 - 作业（meta + graph）成功完成后删除临时目录；失败时先保留供排查，处理完再删
 - 后续还要补导增量的场景不要用临时目录，`--output` 仍指向持久 CSV 目录
 
+## Datasource 归属（每次导入都产生 Datasource 节点）
+
+- 任何一次 `meta meta` / `meta import-schema` 都会生成 `Datasource.csv` 与 `OWNS.csv`（Datasource → PhysicalTable 归属边），随 `meta graph` 一并写入图库
+- **duckdb（非 TDS 单数据源）**：`--datasource <名>` **必填**，一次运行对应一个 Datasource 节点（`source_type=duckdb`，`filter.schemas` 取 `--schemas`）；另给 `--datasources-file` 时按声明文件校验/合并定义
+- **tds**：`--datasources-file` **必填**，一次运行可产出声明文件里全部条目的多个 Datasource 节点；抽取范围 = 各条目 `filter.schemas` 的并集（**不接受 `--schemas`**）
+- 声明文件格式可用 `govio-cli meta schema datasource` 查看标准 JSON Schema
+
 ## 命名语义（节点名从哪来）
 
-- `full_table_name = <schema>.<table>`；节点名与 node_id 都由它决定（node_id = 类型前缀 + SHA256(业务键) 前 8 位，自动生成，无需干预）
-- `--schemas` **必填**，必须写源库里真实存在的 schema 名；DuckDB 文件的默认 schema 是 `main`
+- `full_table_name = <datasource_name>.<schema>.<table>`；节点名与 node_id 都由它决定（node_id = 类型前缀 + SHA256(业务键) 前 8 位，自动生成，无需干预）
+- DuckDB 模式 `--schemas` **必填**，必须写源库里真实存在的 schema 名；DuckDB 文件的默认 schema 是 `main`
 - 用户给的名字与源库真实 schema 不一致时（如源库 schema 是 `main` 但用户给了 `orders`）：**告知并停止**，请用户确认按哪个 schema 导入。当前版本不支持改名导入，**不得为此改动源库**
 - schema 写错或源库为空时，CLI 会失败并列出该库可导入的 schema，直接转告用户即可
 
@@ -71,12 +77,12 @@ rm -rf "$tmp"
 
 | 子命令 | 用途 |
 |--------|------|
-| `meta meta` | 导入 TDS/DuckDB 元数据（PhysicalTable, Col, HAS_COLUMN） |
-| `meta app` | 导入应用清单（Application 节点 + USE 边） |
+| `meta meta` | 导入 TDS/DuckDB 元数据（Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS） |
 | `meta std` | 导入数据标准（Standard 节点，仅 TDS） |
 | `meta compliance` | 导出已有标准关联（COMPLIES_WITH 边，仅 TDS） |
 | `meta rel` | 导入表关系（RELATES_TO 边） |
 | `meta metric` | 导入指标维度（Metric, Dimension + 5 种边） |
+| `meta schema` | 输出标准 JSON Schema（metric / relationship / datasource） |
 | `meta graph` | 更新/重建/清空图数据库 + 生成 assets |
 | `meta recommend` | 为非标字段推荐匹配的数据标准 |
 | `meta import-schema` | 从已配置的 DuckDB 数据源导入元数据到图库（meta + graph 一步完成） |
@@ -89,23 +95,18 @@ rm -rf "$tmp"
 ## 命令速查（最小可运行）
 
 ```bash
-# 元数据：DuckDB（--schemas 必填，DuckDB 默认 schema 为 main）
-govio-cli meta meta --source duckdb --db /path/to/meta.duckdb --schemas main --output ./data/meta
+# 元数据：DuckDB 单数据源（--db/--schemas/--datasource 均必填，同时生成 Datasource 节点与 OWNS 归属）
+govio-cli meta meta --source duckdb --db /path/to/meta.duckdb --schemas main \
+  --datasource mydb --output ./data/meta
 
-# 元数据：TDS
+# 元数据：TDS（--datasources-file 必填，抽取范围取其 filter.schemas，不接受 --schemas）
 govio-cli meta meta --source tds --kundb "mysql+pymysql://user:pass@host:port/catalog" \
-  --workspace-uuid <uuid> --schemas "schema_a,schema_b" --output ./data/meta
-
-# 元数据：TDS + DuckDB 合并（DuckDB 覆盖同名 TDS 数据）
-govio-cli meta meta --source both --kundb "mysql+pymysql://..." --workspace-uuid <uuid> \
-  --db /path/to/meta.duckdb --schemas schema_a --output ./data/meta
-
-# 应用清单
-govio-cli meta app --app-list ./ref/app_list.xlsx --app-map ./ref/app_map.json --output ./data/meta
+  --workspace-uuid <uuid> --datasources-file ./ref/datasources.json --output ./data/meta
 
 # 数据标准 / 已有贯标关系（仅 TDS；compliance 需 Col.csv 与 Standard.csv 已存在）
 govio-cli meta std --kundb "mysql+pymysql://..." --workspace-uuid <uuid> --output ./data/meta
-govio-cli meta compliance --kundb "mysql+pymysql://..." --workspace-uuid <uuid> --output ./data/meta
+govio-cli meta compliance --kundb "mysql+pymysql://..." --workspace-uuid <uuid> \
+  --datasources-file ./ref/datasources.json --output ./data/meta
 
 # 表关系 / 指标维度（需 PhysicalTable.csv 与 Col.csv 已存在）
 govio-cli meta rel --file ./ref/relationships.json --output ./data/meta
@@ -117,9 +118,12 @@ govio-cli meta graph --output ./data/meta --mode update
 # 指定 assets 输出目录
 govio-cli meta graph --output ./data/meta --assets-dir ./my/assets --mode update
 
-# 数据标准推荐
-govio-cli meta recommend --kundb "mysql+pymysql://..." --app-map ./ref/app_map.json \
+# 数据标准推荐（分析范围取 --datasource 的 filter.schemas）
+govio-cli meta recommend --kundb "mysql+pymysql://..." --datasource mydb \
   --csv-dir ./data/meta --output-dir ./data/meta
+
+# 输出输入文件的标准 JSON Schema（metric / relationship / datasource）
+govio-cli meta schema datasource
 
 # 从已配置的 DuckDB 数据源导入元数据到图库（一步完成 meta + graph）
 govio-cli meta import-schema --datasource mydb --schemas main --output ./data/meta
@@ -132,13 +136,12 @@ govio-cli meta import-schema --datasource mydb --schemas main --output ./data/me
 各子命令相互独立，首次建库按依赖顺序执行一遍即可（`meta` 必须最先跑）：
 
 ```
-meta → app → std → compliance → rel → metric → graph
+meta → std → compliance → rel → metric → graph
 ```
 
 | 步骤 | 依赖 |
 |------|------|
 | `meta` | 无 |
-| `app` | PhysicalTable.csv |
 | `std` | 无 |
 | `compliance` | Col.csv, Standard.csv |
 | `rel` / `metric` | PhysicalTable.csv, Col.csv |
@@ -148,7 +151,7 @@ meta → app → std → compliance → rel → metric → graph
 
 以 CLI 输出为准，向用户汇报以下几项，不做额外验证：
 
-- `meta meta` 等子命令：`✓ 元数据已导出: N 张表, M 个字段` + CSV 目录
+- `meta meta` 等子命令：`✓ 元数据已导出: D 个数据源, N 张表, M 个字段` + CSV 目录
 - `meta graph`：各 CSV 导入行数、图后端与库文件路径
 - `meta graph` 末尾打印的 **assets 绝对路径**；若与应用读取的 assets 目录不一致，提示用户自行合并
 - 失败时：原样转述 `❌` 错误信息与其中的可用 schema 列表，然后停止
@@ -157,9 +160,9 @@ meta → app → std → compliance → rel → metric → graph
 
 ## 节点与边类型
 
-**节点**：`PhysicalTable`, `Col`, `Application`, `Standard`, `Metric`, `Dimension`
+**节点**：`PhysicalTable`, `Col`, `Datasource`, `Standard`, `Metric`, `Dimension`
 
-**边**：`HAS_COLUMN`, `USE`, `COMPLIES_WITH`, `RELATES_TO`, `USES_TABLE`, `REFERS_COLUMN`, `DERIVED_FROM`, `DIMENSION_USED`, `SUPERSEDES`
+**边**：`HAS_COLUMN`, `OWNS`, `COMPLIES_WITH`, `RELATES_TO`, `USES_TABLE`, `REFERS_COLUMN`, `DERIVED_FROM`, `DIMENSION_USED`, `SUPERSEDES`
 
 ## 与其他 Skill 的协作
 

@@ -182,7 +182,6 @@ $ govio-cli meta meta --source duckdb --db ./data/sales.duckdb --schemas sales -
 | 子命令 | 用途 | 产出 CSV |
 |--------|------|----------|
 | `govio-cli meta meta` | 导入 TDS/DuckDB 元数据 | PhysicalTable, Col, HAS_COLUMN |
-| `govio-cli meta app` | 导入应用清单 | Application, USE |
 | `govio-cli meta std` | 导入数据标准（仅 TDS） | Standard |
 | `govio-cli meta compliance` | 导出已有标准关联（仅 TDS） | COMPLIES_WITH |
 | `govio-cli meta rel` | 导入表关系 | RELATES_TO |
@@ -190,7 +189,7 @@ $ govio-cli meta meta --source duckdb --db ./data/sales.duckdb --schemas sales -
 | `govio-cli meta graph` | 更新/重建/清空图库 + 生成 assets | 图库 + assets |
 | `govio-cli meta recommend` | 数据标准推荐 | 推荐结果 |
 
-首次建库推荐顺序：`meta → app → std → compliance → rel → metric → graph`；零星补充时只跑有新输入的子命令 + `graph`。
+首次建库推荐顺序：`meta → std → compliance → rel → metric → graph`；零星补充时只跑有新输入的子命令 + `graph`。
 
 ```bash
 # DuckDB 元数据（--db / --schemas 必填）
@@ -200,8 +199,7 @@ govio-cli meta meta --source duckdb --db /path/to/meta.duckdb --schemas main --o
 govio-cli meta meta --source tds --kundb "mysql+pymysql://user:pass@host:port/catalog" \
   --workspace-uuid <uuid> --schemas dbo,public --output ./data/meta
 
-# 应用清单 / 表关系 / 指标定义
-govio-cli meta app --app-list ./data/app_list.xlsx --app-map ./data/app_map.json --output ./data/meta
+# 表关系 / 指标定义
 govio-cli meta rel --file ./data/relationships.json --output ./data/meta
 govio-cli meta metric --file ./data/metrics.json --output ./data/meta
 
@@ -291,14 +289,14 @@ skills/govio/
 **节点文件：**
 - `PhysicalTable.csv`: 物理表节点
 - `Col.csv`: 字段节点
-- `Application.csv`: 应用节点
+- `Datasource.csv`: 数据源节点
 - `Standard.csv`: 数据标准节点
 - `Metric.csv`: 指标节点（可选，由指标定义 JSON 生成）
 - `Dimension.csv`: 维度节点（可选，由指标定义 JSON 生成）
 
 **边文件：**
 - `HAS_COLUMN.csv`: 表包含字段的关系
-- `USE.csv`: 应用使用表的关系
+- `OWNS.csv`: 数据源治理归属物理表的关系
 - `COMPLIES_WITH.csv`: 字段贯标的关系（由 `meta compliance` 导出）
 - `RELATES_TO.csv`: 表间关系
 - `USES_TABLE.csv`: 指标数据来源表的关系（可选）
@@ -358,7 +356,7 @@ graph = FalkorDBGraph(host="localhost", port=6379, graph="ontology")
 print(graph.schema)
 
 # 使用 Cypher 查询
-result = graph.query("MATCH (n:Application) RETURN n.name LIMIT 10")
+result = graph.query("MATCH (n:PhysicalTable) RETURN n.name LIMIT 10")
 ```
 
 **Ladybug 模式（嵌入式，Cypher 与 FalkorDB 兼容）：**
@@ -373,21 +371,16 @@ graph = LadybugGraph("~/.govio/ontology.lbdb")
 print(graph.schema)
 
 # 使用 Cypher 查询
-result = graph.query("MATCH (n:Application) RETURN n.name LIMIT 10")
+result = graph.query("MATCH (n:PhysicalTable) RETURN n.name LIMIT 10")
 ```
 
 ### 加载元数据
 
 ```python
-from govio.metadata.application import AppInfoLoader
 from govio.metadata.database import TDSLoader
 from govio.metadata.standard import StandardLoader
 from govio.metadata.duckdb_loader import DuckDBLoader
 from govio.metadata.metric import MetricLoader
-
-# 加载应用信息
-app_loader = AppInfoLoader(app_list_file="path/to/app_list.xlsx")
-apps = app_loader.Application
 
 # 从 TDS（元数据库）加载表/字段元数据
 tds_loader = TDSLoader(
@@ -572,14 +565,14 @@ recommendations = recommender.batch_recommend(all_columns)
 
 ## 图模型
 
-**节点类型：** `PhysicalTable`、`Col`、`Application`、`Standard`、`Metric`、`Dimension`
+**节点类型：** `PhysicalTable`、`Col`、`Datasource`、`Standard`、`Metric`、`Dimension`
 
 **边类型：**
 
 | 边类型 | 方向 | 含义 |
 |--------|------|------|
 | `HAS_COLUMN` | table -> col | 表包含字段 |
-| `USE` | app -> table | 应用使用表 |
+| `OWNS` | datasource -> table | 数据源治理归属 |
 | `COMPLIES_WITH` | col -> standard | 字段贯标 |
 | `RELATES_TO` | table -> table | 表间关系 |
 | `USES_TABLE` | metric -> table | 指标数据来源表 |
