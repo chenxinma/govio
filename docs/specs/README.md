@@ -2,7 +2,7 @@
 
 Govio (Governance + IO) is a data governance knowledge graph platform. It extracts metadata from relational databases, builds graph structures, and provides data standard recommendation via collaborative filtering.
 
-- **Version**: 0.5.4
+- **Version**: 0.6.0
 - **Python**: >= 3.13
 - **Build**: hatchling
 - **CLI**: `govio-cli` -> `govio.cli:main`
