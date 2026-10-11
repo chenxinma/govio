@@ -139,9 +139,19 @@ class LadybugGraph:
 
         与 FalkorDBGraph.query 行为一致：返回 list[list]，错误包装为 ValueError。
         """
+        return self.query_with_columns(query, params)[1]
+
+    def query_with_columns(
+        self, query: str, params: dict | None = None
+    ) -> tuple[list[str], list[list[Any]]]:
+        """执行 Cypher 查询，返回 (列名列表, 数据行列表)。
+
+        列名取自 Ladybug 的 get_column_names()，即 RETURN 别名。
+        """
         try:
             result = self._conn.execute(query, params or {})
+            columns = result.get_column_names()
             rows = result.get_all()
         except Exception as e:
             raise ValueError(f"Generated Cypher Statement is not valid\n{e}") from e
-        return rows
+        return columns, rows

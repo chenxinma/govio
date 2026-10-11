@@ -9,8 +9,9 @@
 - 增量更新（upsert_csv_to_ladybug）：CREATE IF NOT EXISTS + 批量
   UNWIND $rows MERGE（dict 行，反引号字段访问，规避保留字）。
 
-Ladybug 严格类型且不可忽略类型转换错误，故所有属性列统一为 STRING，
-与 falkordb_loader 的 dtype=str 处理一致。
+Ladybug 严格类型且不可忽略类型转换错误，故属性列默认统一为 STRING
+（与 falkordb_loader 的 dtype=str 处理一致）；数值型属性
+（size/precision/scale/order_no）显式建成 INT64 并在读 CSV 时转数值。
 """
 
 import contextlib
@@ -19,6 +20,10 @@ from pathlib import Path
 
 import ladybug as lb
 import pandas as pd
+
+# 数值型属性列（TDS 导入的 Col/Standard 属性），入图保持 INT64，
+# 否则 ORDER BY / 数值比较按字符串语义（"10" < "2"）
+_NUMERIC_COLS = {"size", "precision", "scale", "order_no"}
 
 _DEFAULT_BUFFER_POOL = 256 * 1024 * 1024
 _DEFAULT_MAX_DB = 1 * 1024 * 1024 * 1024
@@ -80,6 +85,9 @@ def _node_spec(filepath: Path) -> tuple[str, list[str], pd.DataFrame]:
     label = cols[0].removeprefix(":ID(").removesuffix(")")
     prop_cols = cols[1:]
     df = df.rename(columns={cols[0]: "id"})
+    for col in prop_cols:
+        if col in _NUMERIC_COLS:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
     return label, prop_cols, df
 
 
@@ -99,7 +107,9 @@ def _edge_spec(filepath: Path) -> tuple[str, str, list[str], pd.DataFrame]:
 
 def _node_ddl(label: str, prop_cols: list[str]) -> str:
     cols = [_bt("id") + " STRING PRIMARY KEY"]
-    cols += [_bt(c) + " STRING" for c in prop_cols]
+    cols += [
+        _bt(c) + (" INT64" if c in _NUMERIC_COLS else " STRING") for c in prop_cols
+    ]
     return f"CREATE NODE TABLE IF NOT EXISTS {_bt(label)} ({', '.join(cols)})"
 
 

@@ -365,7 +365,7 @@ result = graph.query("MATCH (n:PhysicalTable) RETURN n.name LIMIT 10")
 from govio import LadybugGraph
 
 # 打开本地 .lbdb 文件（无需额外服务）
-graph = LadybugGraph("~/.govio/ontology.lbdb")
+graph = LadybugGraph("~/.govio/ontology.lbdb", read_only=True)
 
 # 查看图模式
 print(graph.schema)

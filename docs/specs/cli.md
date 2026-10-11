@@ -115,8 +115,16 @@ query(query_text) -> None    # Dispatches to networkx, falkordb, or ladybug
 cmd_networkx(code, gml_path) -> None     # exec() with graph in scope, expects `result` var
 cmd_falkordb(cypher, host, port, graph_name) -> None  # Validates MATCH, executes Cypher
 cmd_ladybug(cypher, db_path, ...) -> None  # Validates MATCH, executes Cypher via Ladybug
-output_result(data) -> None  # >20 rows -> JSON file, else stdout
+output_result(data, columns=None) -> None  # 输出契约见下
 ```
+
+**输出契约**（`output_result`）：
+
+- 结果永远写 `.govio/output-<时间戳含微秒>.json`：UTF-8、JSON Lines、records 带字段名（Cypher 后端字段名来自 RETURN 别名，经 `query_with_columns()` 透传；文件是权威结果）
+- stdout 摘要行：`Result output: <path> rows: N columns: [...]`，columns 经 `ensure_ascii` 转义，整行 ASCII 安全（防 bash/PowerShell 控制台编码差异破坏中文 JSON）
+- 行数 ≤ `INLINE_LIMIT`（50）时 stdout 额外内联一行 JSON records（`ensure_ascii=True`，同样编码安全）
+- 空结果只输出 `Data not found.`，不写文件
+- networkx 后端（Python exec 的 `result`）无列名元信息，位置键 `"0"`/`"1"` 兑底
 
 Logs to `~/.govio/logs/query_{YYYYMMDD}.log`.
 

@@ -72,7 +72,7 @@ def test_ladybug_rebuild_and_query(tmp_path):
 
     import_csv_to_ladybug(csv_dir, db_path)
 
-    g = LadybugGraph(db_path)
+    g = LadybugGraph(db_path, read_only=True)
 
     # schema 包含节点标签与关系签名
     assert "PhysicalTable" in g.schema
@@ -81,6 +81,13 @@ def test_ladybug_rebuild_and_query(tmp_path):
 
     # 查询所有物理表
     rows = g.query("MATCH (t:PhysicalTable) RETURN t.id, t.name ORDER BY t.name")
+    assert rows == [["PT1", "T1"], ["PT2", "T2"]]
+
+    # query_with_columns 额外返回 RETURN 别名
+    cols, rows = g.query_with_columns(
+        "MATCH (t:PhysicalTable) RETURN t.id AS tid, t.name AS tname ORDER BY t.name"
+    )
+    assert cols == ["tid", "tname"]
     assert rows == [["PT1", "T1"], ["PT2", "T2"]]
 
     # 带参数查询：AEP 拥有的表
@@ -117,6 +124,31 @@ def test_ladybug_upsert(tmp_path):
     rows = g.query("MATCH (t:PhysicalTable) RETURN t.id, t.name ORDER BY t.name")
     # PT1 属性被更新，PT2 新增
     assert rows == [["PT1", "T1_renamed"], ["PT2", "T2"]]
+
+
+def test_ladybug_numeric_props(tmp_path):
+    """size/precision/scale/order_no 以 INT64 入图，排序与取值为数值语义。"""
+    csv_dir = tmp_path / "csv"
+    db_path = str(tmp_path / "numeric.lbdb")
+
+    _write_csvs(
+        csv_dir,
+        cols=[
+            ["CO1", "a", "A", "db.dbo.T1", "2"],
+            ["CO2", "b", "B", "db.dbo.T1", "10"],
+            ["CO3", "c", "C", "db.dbo.T1", ""],  # 缺失值兑底为 0
+        ],
+    )
+    import_csv_to_ladybug(csv_dir, db_path)
+
+    # 增量 upsert 同样保持数值类型（未开图连接，避免 .lbdb 文件锁冲突）
+    _write_csvs(csv_dir, cols=[["CO1", "a", "A", "db.dbo.T1", "3"]])
+    upsert_csv_to_ladybug(csv_dir, db_path)
+
+    g = LadybugGraph(db_path)
+    rows = g.query("MATCH (c:Col) RETURN c.order_no ORDER BY c.order_no")
+    assert rows == [[0], [3], [10]]  # 数值排序（非 "10" < "2"），缺失值兑底 0
+    assert all(isinstance(v, int) for row in rows for v in row)
 
 
 def test_graph_factory_ladybug(tmp_path):

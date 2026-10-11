@@ -8,42 +8,11 @@ FalkorDBGraph 是用于连接和查询 FalkorDB 图数据库的 Python 类，提
 - 自动构建图模式信息
 - 返回查询结果
 
-## 初始化连接
-
-```python
-from govio import FalkorDBGraph
-
-g = FalkorDBGraph(graph='ontology', host='localhost', port=6379)
-```
-
-## 核心属性
-
-### `schema` 属性
-获取图的模式信息：
-```python
-print(g.schema)
-```
-
-### `query()` 方法
-执行 Cypher 查询：
-```python
-data = g.query("MATCH (n) RETURN n LIMIT 10")
-```
 
 ## 图结构
 
-根据 `assets/schema.md`，图数据库包含以下节点和关系：
+根据 `assets/schema.md`
 
-**节点类型**：
-- `PhysicalTable`：物理表，包含 full_table_name, schema, table_name, name, data_entity_type, database_name
-- `Col`：列/字段，包含 column, column_name, name, full_table_name, data_entity_type, dtype, size, precision, scale, order_no, data_type
-- `Application`：应用，包含 app_id, name, app_name_en, app_type, business_domain, manager, network_area, maintenance_level, external_vendor
-- `Standard`：数据标准，包含 standard_id, name, adaptability, alias, basis, core_system, data_category, data_expression, data_length, data_type, definition, name_en, source, standard_status, ref_code_define, business_rule
-
-**关系类型**：
-- `HAS_COLUMN`：表包含列 `(:PhysicalTable)-[:HAS_COLUMN]->(:Col)`
-- `RELATES_TO`：表间关联 `(:PhysicalTable)-[:RELATES_TO]->(:PhysicalTable)`
-- `USE`：应用使用表 `(:Application)-[:USE]->(:PhysicalTable)`
 
 ## 执行案例
 

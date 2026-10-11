@@ -8,150 +8,87 @@ LadybugGraph 用于连接和查询 Ladybug 嵌入式图数据库（本地 `.lbdb
 - 自动构建图模式信息
 - 返回查询结果
 
-与 FalkorDB 相比，Ladybug 无需独立服务进程，数据持久化在单个 `.lbdb` 文件中，适合本地/单机场景。
 
-## 初始化连接
+## Cypher 方言坑（生成/手写查询必看）
 
-```python
-from govio import LadybugGraph
+1. **`column` 是保留字 + 存全限定名**（双重坑）：`column` 属性必须反引号，否则 Parser exception；
+   且它的值是 `<datasource>.<schema>.<table>.<column>` 全限定名，按列名过滤请用 `column_name`：
 
-g = LadybugGraph("/path/to/ontology.lbdb")
-```
+​```cypher
+MATCH (c:Col) WHERE c.`column` = 'ITS.ITS_USER.T_INVOICE.INV_NO' RETURN c.column_name  // ✓
+MATCH (c:Col) WHERE c.column_name = 'INV_NO' RETURN c.name                               // ✓
+MATCH (c:Col) WHERE c.column = 'INV_NO' RETURN c.name                                    // ✗ 两重都错
+​```
 
-配置文件中的对应字段：
+2. **`WITH ... ORDER BY` 必须跟 `SKIP`/`LIMIT`**，否则 Binder exception：
 
-```yaml
-graph:
-  backend: ladybug
-  ladybug:
-    db_path: /home/user/.govio/ontology.lbdb
-    # 可选，默认值如下（字节）
-    buffer_pool_size: 268435456   # 256 MiB
-    max_db_size: 1073741824       # 1 GiB
-```
+​```cypher
+MATCH (t:PhysicalTable)-[:HAS_COLUMN]->(c:Col)
+WITH t, c ORDER BY c.order_no LIMIT 10     // ✓ 补 LIMIT
+​```
 
-> `max_db_size` 必须显式设置：Ladybug 默认按 8TB 预留 mmap 地址空间，在多数环境会失败，故内置默认 1GiB。元数据图谱足够；数据量极大时可在配置中调大。
+3. **无窗口函数**：`sum(cnt) OVER ()`、`count(*) OVER ()` 解析报错。需要"每组 + 总计"时：
 
-## 核心属性
+​```cypher
+MATCH (d:Datasource) WITH collect(d) AS ds UNWIND ds AS d
+RETURN d.datasource_name, size(ds) AS total   // ✓ collect/size 技巧
+​```
 
-### `schema` 属性
-获取图的模式信息：
-```python
-print(g.schema)
-```
+4. **`round(x, n)` 必须带小数位参数**：`round(x*100)/100.0` 这类手写四舍五入会报类型签名错误，
+   直接返回原值并由展示层取整，或用 `round(x, 2)`。
 
-### `query()` 方法
-执行 Cypher 查询，返回 `list[list]`（每行为一个列表）：
-```python
-data = g.query("MATCH (n) RETURN n LIMIT 10")
-```
+5. **聚合后变量出作用域**：`RETURN t.schema AS s, count(t) AS n` 之后不能再写 `ORDER BY t.table_name`，
+   要排序的表达式必须进分组键，或对别名/聚合结果排序。
 
-带参数查询（`$param` 语法，与 FalkorDB 一致）：
-```python
-data = g.query(
-    "MATCH (app:Application {app_name_en: $code})-[:USE]->(t:PhysicalTable) RETURN t.full_table_name",
-    {"code": "AEP"},
-)
-```
+6. **没有 `toFloat()`**（`Catalog exception: function TOFLOAT does not exist`）；要浮点除法写
+   `x * 1.0 / y`，整数除法会截断。
 
-## 图结构
-
-与 FalkorDB 后端共享同一套节点/关系模型（见 `assets/schema.md`）：
-
-**节点类型**：`PhysicalTable`、`Col`、`Application`、`Standard`、`Metric`、`Dimension`
-
-**关系类型**：`HAS_COLUMN`、`USE`、`COMPLIES_WITH`、`RELATES_TO`、`USES_TABLE`、`REFERS_COLUMN`、`DERIVED_FROM`、`DIMENSION_USED`、`SUPERSEDES`
-
-> Ladybug 严格类型，所有属性以 STRING 存储（与 falkordb_loader 的 `dtype=str` 策略一致）。
-
-## 与 FalkorDB 的差异
-
-| 项 | FalkorDB | Ladybug |
-|----|----------|---------|
-| 部署 | 独立 Redis 服务 | 本地 `.lbdb` 文件，无需服务 |
-| 标识符引用 | 反引号 `` ` `` | 反引号 `` ` ``（双引号 `"` 不可用） |
-| 类型系统 | 动态 | 严格类型，COPY 不可忽略类型转换错误 |
-| 列表下标 | 0-based | 1-based（建议用 struct 字段访问 `row.name` 规避） |
-| `type(r)` | 可用 | **不可用**，关系类型用 `label(r)` |
-| 查询入口 | `MATCH` | 必须以 `MATCH` 开头 |
+7. **变量/别名不能用保留字**：`WITH collect(d) AS all` 会 Parser exception，用 `all_nodes`、`ds_list`
+   这类非保留名。
 
 ## 执行案例
 
 ### 元数据查询
 
 #### 查询所有应用
-```bash
-uv run python -c "
-from govio import LadybugGraph
-g = LadybugGraph('/home/user/.govio/ontology.lbdb')
-cypher = '''
+
+​```cypher
 MATCH (app:Application)
 RETURN app.name, app.app_name_en, app.business_domain
 LIMIT 300
-'''
-print(g.query(cypher))
-"
-```
+​```
 
 #### 查询某应用使用的所有物理表
-```bash
-uv run python -c "
-from govio import LadybugGraph
-g = LadybugGraph('/home/user/.govio/ontology.lbdb')
-cypher = '''
+​```cypher
 MATCH (app:Application {name: 'AEP'})-[:USE]->(t:PhysicalTable)
 RETURN t.name AS table_name, t.full_table_name
 LIMIT 300
-'''
-print(g.query(cypher))
-"
-```
+​```
 
 #### 查询某表的所有字段
-```bash
-uv run python -c "
-from govio import LadybugGraph
-g = LadybugGraph('/home/user/.govio/ontology.lbdb')
-cypher = '''
+​```cypher
 MATCH (t:PhysicalTable {name: 'T_INVOICE'})-[:HAS_COLUMN]->(c:Col)
 RETURN c.column_name, c.data_type
 ORDER BY c.order_no
 LIMIT 300
-'''
-print(g.query(cypher))
-"
-```
+​```
 
 ### 聚合查询
 
 #### 统计每个应用使用的表数量
-```bash
-uv run python -c "
-from govio import LadybugGraph
-g = LadybugGraph('/home/user/.govio/ontology.lbdb')
-cypher = '''
+​```cypher
 MATCH (app:Application)-[:USE]->(t:PhysicalTable)
 RETURN app.name AS app_name, count(t) AS table_count
 ORDER BY table_count DESC
 LIMIT 300
-'''
-print(g.query(cypher))
-"
-```
+​```
 
 #### 统计每种节点类型的数量
-```bash
-uv run python -c "
-from govio import LadybugGraph
-g = LadybugGraph('/home/user/.govio/ontology.lbdb')
-cypher = '''
+​```cypher
 MATCH (n)
 RETURN label(n) AS node_type, count(n) AS count
 LIMIT 300
-'''
-print(g.query(cypher))
-"
-```
+​```
 
 ## 通过 CLI 查询
 

@@ -93,14 +93,26 @@ class FalkorDBGraph:
         """Returns the schema of the Graph"""
         return self._schema
     
-    def query(self, query: str, params: dict | None = None) -> list[dict[str, Any]]:
+    def query(self, query: str, params: dict | None = None) -> list[list[Any]]:
         """Query FalkorDB database."""
+        return self.query_with_columns(query, params)[1]
 
+    def query_with_columns(
+        self, query: str, params: dict | None = None
+    ) -> tuple[list[str], list[list[Any]]]:
+        """执行查询，返回 (列名列表, 数据行列表)。
+
+        列名取自 FalkorDB 的 result.header（[[name, type], ...]），即 RETURN 别名。
+        """
         if params is None:
             params = {}
         try:
             data = self._g.ro_query(query, params)
+            columns = [
+                str(col[0]) if isinstance(col, (list, tuple)) else str(col)
+                for col in data.header
+            ]
             rows = data.result_set
         except Exception as e:
             raise ValueError(f"Generated Cypher Statement is not valid\n{e}") from e
-        return rows
+        return columns, rows

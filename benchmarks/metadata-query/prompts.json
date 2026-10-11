@@ -1,0 +1,356 @@
+{
+  "version": "1.0",
+  "description": "元数据查询 benchmark 提示词集：基于 govio meta 导出的 CSV 数据集（19 数据源 / 2594 表 / 48807 字段），覆盖单跳查询、过滤、聚合、多跳路径、开放语义与负向边界六类问题。oracle_sql 为标准答案来源（对 metadata.sqlite 执行），checks 为确定性评分依据。",
+  "dataset": {
+    "csv_dir": "D:/work/python/govio-runtime/output",
+    "db": "data/metadata.sqlite",
+    "model": "datasource -[:OWNS]-> physical_table -[:HAS_COLUMN]-> col（ER 模式下展开为外键列）"
+  },
+  "check_types": {
+    "contains": "values 中全部字符串出现在回答里（大小写不敏感）",
+    "contains_any": "values 中至少一个出现",
+    "not_contains": "values 中任一出现即失败（用于抓编造）",
+    "regex": "pattern 能匹配回答（大小写不敏感），数字用 \\b 包裹避免子串误命中"
+  },
+  "categories": {
+    "lookup": "单跳固定查询：查实体、查属性",
+    "filter": "条件过滤/关键词模糊匹配",
+    "aggregate": "分组聚合、排序、统计",
+    "multi_hop": "跨实体多跳路径：字段→表→数据源",
+    "open_ended": "开放语义路径：从业务意图定位表",
+    "negative": "负向边界：数据不存在/元数据不含该信息"
+  },
+  "prompts": [
+    {
+      "id": "lookup-01",
+      "category": "lookup",
+      "difficulty": 1,
+      "question": "列出所有数据源：给出数据源名称和业务说明，并说明一共有多少个。",
+      "oracle_sql": "SELECT datasource_name, comment FROM datasource ORDER BY datasource_name",
+      "expected_summary": "19 个数据源，含 MDM(客户及供应商中心主数据系统)、SSOP(企业法定福利服务系统)、IHRO(外包项目管理系统)、CNTR(合同中心)、SQC(报价单中心) 等",
+      "checks": [
+        {"type": "regex", "pattern": "\\b19\\b", "desc": "数据源总数 19"},
+        {"type": "contains", "values": ["MDM", "SSOP", "CNTR"], "desc": "列出关键数据源名称"},
+        {"type": "contains_any", "values": ["外包项目管理系统", "合同中心", "企业法定福利服务系统"], "desc": "带出业务说明"}
+      ],
+      "notes": "最基础的全量列举题，测试数据源→说明的单跳查询与格式化输出"
+    },
+    {
+      "id": "lookup-02",
+      "category": "lookup",
+      "difficulty": 1,
+      "question": "MDM.MDM.CUST_CUSTOMER 是一张什么表？一共有多少个字段？按 order_no 排序列出前 10 个字段的 column_name（字段名）和 name（中文名）。",
+      "oracle_sql": "SELECT column_name, name FROM col WHERE table_id = (SELECT id FROM physical_table WHERE full_table_name = 'MDM.MDM.CUST_CUSTOMER') ORDER BY order_no LIMIT 10",
+      "expected_summary": "客户信息表（客户主数据），共 56 个字段；前 10 个：TENANT_CODE(租户编码), COMP_ID(客户主数据主键), COMP_NO(正式客户编号), BPEXT(潜在客户编码), COMP_NAME_CN(正式客户中文名称), COMP_NAME_EN(正式客户英文名称), COMP_SHORT_NAME(正式客户中文简称), UNI_SOC_CRET_CODE(统一社会信用代码), ORGAN_STRUCTURE_CODE(机构唯一识别码), COMP_TYPE(客户性质)",
+      "checks": [
+        {"type": "regex", "pattern": "\\b56\\b", "desc": "字段数 56"},
+        {"type": "contains_any", "values": ["客户信息表", "客户主数据"], "desc": "回答表的业务含义"},
+        {"type": "contains", "values": ["TENANT_CODE", "COMP_ID", "COMP_NO"], "desc": "前 10 字段按 order_no 起始正确"}
+      ],
+      "notes": "表描述来自 PhysicalTable.name，字段顺序来自 Col.order_no"
+    },
+    {
+      "id": "lookup-03",
+      "category": "lookup",
+      "difficulty": 1,
+      "question": "ITS.ITS_USER.T_INVOICE（发票表）有哪些字段？给出字段名、中文名和数据类型，一共多少个字段？",
+      "oracle_sql": "SELECT column_name, name, data_type FROM col WHERE table_id = (SELECT id FROM physical_table WHERE full_table_name = 'ITS.ITS_USER.T_INVOICE') ORDER BY order_no",
+      "expected_summary": "39 个字段，含 INV_NO(发票号码), BUYER_TAX_NO(购方税号), SELLER_TAX_NO(销方税号), INV_DATE(开票日期) 等",
+      "checks": [
+        {"type": "regex", "pattern": "\\b39\\b", "desc": "字段数 39"},
+        {"type": "contains", "values": ["INV_NO", "BUYER_TAX_NO", "SELLER_TAX_NO", "INV_DATE"], "desc": "关键字段齐全"},
+        {"type": "contains_any", "values": ["发票号码", "购方税号"], "desc": "带出中文名"}
+      ],
+      "notes": "验证 Col 节点取 column_name（物理名）而非 name（中文名）"
+    },
+    {
+      "id": "filter-01",
+      "category": "filter",
+      "difficulty": 2,
+      "question": "找出所有金额、价格、税费、费率相关的字段（字段名含 AMOUNT/PRICE/FEE/TAX/RATE/MONEY/CHARGE/COST 任一关键词），按数据源统计数量，返回数量最多的三个数据源（数据源名、数量两列）；另外说明这类字段一共有多少个。",
+      "oracle_sql": "SELECT substr(t.full_table_name, 1, instr(t.full_table_name, '.') - 1) AS datasource, COUNT(*) AS n FROM col c JOIN physical_table t ON t.id = c.table_id WHERE upper(c.column_name) LIKE '%AMOUNT%' OR upper(c.column_name) LIKE '%PRICE%' OR upper(c.column_name) LIKE '%FEE%' OR upper(c.column_name) LIKE '%TAX%' OR upper(c.column_name) LIKE '%RATE%' OR upper(c.column_name) LIKE '%MONEY%' OR upper(c.column_name) LIKE '%CHARGE%' OR upper(c.column_name) LIKE '%COST%' GROUP BY 1 ORDER BY n DESC LIMIT 3",
+      "expected_summary": "共 2084 个；前三：SSOP 822、IHRO 542、PAYPRO 161",
+      "checks": [
+        {"type": "regex", "pattern": "\\b2084\\b", "desc": "总数 2084"},
+        {"type": "regex", "pattern": "\\b822\\b", "desc": "SSOP 822"},
+        {"type": "regex", "pattern": "\\b542\\b", "desc": "IHRO 542"},
+        {"type": "regex", "pattern": "\\b161\\b", "desc": "PAYPRO 161"}
+      ],
+      "notes": "关键词过滤 + 分组聚合，OR 条件较多，测试查询翻译的准确度"
+    },
+    {
+      "id": "filter-02",
+      "category": "filter",
+      "difficulty": 2,
+      "question": "中文名称含『合同』的数据表分布在哪些数据源？各数据源各多少张？一共多少张？",
+      "oracle_sql": "SELECT substr(t.full_table_name, 1, instr(t.full_table_name, '.') - 1) AS datasource, COUNT(*) AS n FROM physical_table t WHERE t.name LIKE '%合同%' GROUP BY 1 ORDER BY n DESC",
+      "expected_summary": "共 41 张：NSRM 12、IHRO 8、IHRM 7、SQC 4、MDM 3、FSGHR 3、NHRS 3、PDM 1",
+      "checks": [
+        {"type": "regex", "pattern": "\\b41\\b", "desc": "总数 41"},
+        {"type": "regex", "pattern": "\\b12\\b", "desc": "NSRM 12"},
+        {"type": "regex", "pattern": "\\b8\\b", "desc": "IHRO 8"},
+        {"type": "regex", "pattern": "\\b7\\b", "desc": "IHRM 7"},
+        {"type": "contains", "values": ["NSRM", "IHRO", "IHRM"], "desc": "前三数据源正确"}
+      ],
+      "notes": "注意 IHRM/IHRO 名称相近、表数接近，容易张冠李戴"
+    },
+    {
+      "id": "filter-03",
+      "category": "filter",
+      "difficulty": 1,
+      "question": "表名以 _DRAFT 结尾（不区分大小写）的表有哪些？分别属于哪个数据源？（返回表全名 full_table_name 和中文名 name 两列）推测这些表是做什么用的？",
+      "oracle_sql": "SELECT full_table_name, name FROM physical_table WHERE table_name LIKE '%!_DRAFT' ESCAPE '!'",
+      "expected_summary": "16 张（大小写不敏感）：MDM 9 张（CUST_CONTRACT_ATTR_DRAFT、CUST_CUSTOMER_DRAFT、CUST_GROUP_CUSTOMER_DRAFT 等）+ FSGHR 7 张（flow_*_draft 工作流草稿表）；应推测为草稿/待生效数据",
+      "checks": [
+        {"type": "regex", "pattern": "\\b16\\b", "desc": "16 张（大小写不敏感）"},
+        {"type": "contains", "values": ["MDM"], "desc": "MDM 9 张"},
+        {"type": "contains_any", "values": ["FSGHR", "flow_node_setting_draft"], "desc": "FSGHR 7 张小写草稿表"},
+        {"type": "contains", "values": ["CUST_CUSTOMER_DRAFT", "CUST_CONTRACT_ATTR_DRAFT"], "desc": "表名正确"},
+        {"type": "contains_any", "values": ["草稿", "待生效", "未生效", "临时", "审核"], "desc": "语义推测合理"}
+      ],
+      "notes": "坑：SQL LIKE / 图库 ENDS WITH 的大小写语义不同，大小写不敏感时应为 16 张（含 FSGHR 小写 flow_*_draft）；包含一道轻量语义推测，关键词命中即可"
+    },
+    {
+      "id": "agg-01",
+      "category": "aggregate",
+      "difficulty": 1,
+      "question": "按数据表数量排名，前 5 个数据源是哪几个？各有多少张表？",
+      "oracle_sql": "SELECT d.datasource_name, COUNT(*) AS n FROM physical_table t JOIN datasource d ON d.id = t.datasource_id GROUP BY 1 ORDER BY n DESC LIMIT 5",
+      "expected_summary": "SSOP 791、IHRO 416、FSGHR 215、PAYPRO 204、SQC 139",
+      "checks": [
+        {"type": "regex", "pattern": "\\b791\\b", "desc": "SSOP 791"},
+        {"type": "regex", "pattern": "\\b416\\b", "desc": "IHRO 416"},
+        {"type": "regex", "pattern": "\\b215\\b", "desc": "FSGHR 215"},
+        {"type": "regex", "pattern": "\\b204\\b", "desc": "PAYPRO 204"},
+        {"type": "regex", "pattern": "\\b139\\b", "desc": "SQC 139"}
+      ],
+      "notes": "IHRO 含 ihrodb + IHRO_BILL 两个 schema，需按数据源聚合而非按 schema"
+    },
+    {
+      "id": "agg-02",
+      "category": "aggregate",
+      "difficulty": 2,
+      "question": "字段数最多的 5 张表是哪些？各有多少个字段？属于哪个数据源？",
+      "oracle_sql": "SELECT t.full_table_name, COUNT(*) AS n FROM col c JOIN physical_table t ON t.id = c.table_id GROUP BY 1 ORDER BY n DESC LIMIT 5",
+      "expected_summary": "CNTR.fsgcontract.km_agreement_apply 164、SSOP.SSOP_USER.V_TR_SI_EMPLOYEE 127、SSOP.SSOP_USER.V_TR_SI_WORK_EMPLOYEE 127、SSOP.SSOP_USER.V_SI_EMPLOYEE 124、PAYPRO.paypro.t_pay_tax_declare_salary 119",
+      "checks": [
+        {"type": "contains", "values": ["km_agreement_apply", "V_TR_SI_EMPLOYEE", "t_pay_tax_declare_salary"], "desc": "top5 表名正确"},
+        {"type": "regex", "pattern": "\\b164\\b", "desc": "164"},
+        {"type": "regex", "pattern": "\\b127\\b", "desc": "127"},
+        {"type": "regex", "pattern": "\\b124\\b", "desc": "124"},
+        {"type": "regex", "pattern": "\\b119\\b", "desc": "119"}
+      ],
+      "notes": "字段数需经 HAS_COLUMN 关联统计，是典型的一跳聚合"
+    },
+    {
+      "id": "agg-03",
+      "category": "aggregate",
+      "difficulty": 2,
+      "question": "全库平均每张表有多少个字段？返回一行三列：平均每表字段数（保留两位小数）、表总数、字段总数。",
+      "oracle_sql": "SELECT (SELECT COUNT(*) FROM col) * 1.0 / (SELECT COUNT(*) FROM physical_table), (SELECT COUNT(*) FROM physical_table), (SELECT COUNT(*) FROM col)",
+      "expected_summary": "48807 字段 / 2594 表 ≈ 18.82",
+      "checks": [
+        {"type": "regex", "pattern": "\\b18\\.8", "desc": "均值 ≈ 18.8"},
+        {"type": "regex", "pattern": "\\b2594\\b", "desc": "表数 2594"},
+        {"type": "regex", "pattern": "\\b48807\\b", "desc": "字段数 48807"}
+      ],
+      "notes": "全表规模统计，防止只按某个数据源估算"
+    },
+    {
+      "id": "agg-04",
+      "category": "aggregate",
+      "difficulty": 2,
+      "question": "dtype 为 VARCHAR2 的字段有多少个？主要分布在哪些数据源？",
+      "oracle_sql": "SELECT substr(t.full_table_name, 1, instr(t.full_table_name, '.') - 1) AS datasource, COUNT(*) AS n FROM col c JOIN physical_table t ON t.id = c.table_id WHERE upper(c.dtype) = 'VARCHAR2' GROUP BY 1 ORDER BY n DESC",
+      "expected_summary": "14571 个 VARCHAR2 字段（Oracle 类型），主要分布：SSOP 9775、MDM 2335、NHRS 677、AEP 606",
+      "checks": [
+        {"type": "regex", "pattern": "\\b14571\\b", "desc": "14571 个"},
+        {"type": "contains_any", "values": ["MDM", "SSOP", "IHRO"], "desc": "分布数据源命中"}
+      ],
+      "notes": "dtype 与 data_type 是两个不同属性，题目明确用 dtype"
+    },
+    {
+      "id": "hop-01",
+      "category": "multi_hop",
+      "difficulty": 2,
+      "question": "BANK_ACCOUNT（银行账号）字段出现在哪些数据源？每个数据源各有几个？一共多少个？",
+      "oracle_sql": "SELECT substr(t.full_table_name, 1, instr(t.full_table_name, '.') - 1) AS datasource, COUNT(*) AS n FROM col c JOIN physical_table t ON t.id = c.table_id WHERE upper(c.column_name) = 'BANK_ACCOUNT' GROUP BY 1 ORDER BY n DESC",
+      "expected_summary": "共 36 个：MDM 12、IHRO 7、AEP 7、SSOP 6、FSGHR 2、HPM 1、BILL 1",
+      "checks": [
+        {"type": "regex", "pattern": "\\b36\\b", "desc": "总数 36"},
+        {"type": "regex", "pattern": "\\b12\\b", "desc": "MDM 12"},
+        {"type": "contains", "values": ["MDM", "IHRO", "AEP", "SSOP"], "desc": "主要数据源正确"},
+        {"type": "regex", "pattern": "\\b7\\b", "desc": "IHRO/AEP 各 7"}
+      ],
+      "notes": "字段→表→数据源的两跳路径；大小写混合（BANK_ACCOUNT/bank_account）需归一"
+    },
+    {
+      "id": "hop-02",
+      "category": "multi_hop",
+      "difficulty": 2,
+      "question": "字段名（column_name）为 SELLER_TAX_NO 的字段存在于哪些表？这些表分别属于哪个数据源？（返回表全名 full_table_name 和表中文名 name 两列）",
+      "oracle_sql": "SELECT t.full_table_name, t.name FROM col c JOIN physical_table t ON t.id = c.table_id WHERE upper(c.column_name) = 'SELLER_TAX_NO' ORDER BY 1",
+      "expected_summary": "4 张表：ITS.ITS_USER.T_INVOICE、ITS.ITS_USER.T_INVOICE_REQUIRE、BILL.BILL_USER.CUST_INV_SELL_INFO、BILL.BILL_USER.CUST_INV_REQ（ITS 与 BILL 两个数据源）",
+      "checks": [
+        {"type": "contains", "values": ["T_INVOICE", "T_INVOICE_REQUIRE", "CUST_INV_SELL_INFO", "CUST_INV_REQ"], "desc": "4 张表齐全"},
+        {"type": "contains", "values": ["ITS", "BILL"], "desc": "归属数据源正确"},
+        {"type": "regex", "pattern": "\\b4\\b", "desc": "共 4 处"}
+      ],
+      "notes": "同一字段名跨数据源复用，测试归属判断"
+    },
+    {
+      "id": "hop-03",
+      "category": "multi_hop",
+      "difficulty": 2,
+      "question": "合同中心（CNTR）为什么只有 14 张表？它是如何采集表的？列出它采集的全部表名（full_table_name）。",
+      "oracle_sql": "SELECT t.full_table_name FROM physical_table t JOIN datasource d ON d.id = t.datasource_id WHERE d.datasource_name = 'CNTR' ORDER BY 1",
+      "expected_summary": "CNTR 的采集 filter 带 include_tables 白名单（仅采集 fsgcontract 下 14 张指定表，如 km_agreement_sign、km_sale_agreement 等）；表清单为 CNTR.fsgcontract.* 共 14 张",
+      "checks": [
+        {"type": "regex", "pattern": "\\b14\\b", "desc": "14 张表"},
+        {"type": "contains_any", "values": ["include_tables", "白名单", "过滤", "限定", "筛选"], "desc": "解释白名单过滤机制"},
+        {"type": "contains", "values": ["km_agreement_sign", "km_sale_agreement"], "desc": "表名正确"}
+      ],
+      "notes": "答案藏在 datasource.filter 属性里，需读属性而非只数表；是『为什么』型问题"
+    },
+    {
+      "id": "hop-04",
+      "category": "multi_hop",
+      "difficulty": 2,
+      "question": "IHRO（外包项目管理系统）包含哪些 schema？每个 schema 各有多少张表？",
+      "oracle_sql": "SELECT t.schema, COUNT(*) AS n FROM physical_table t JOIN datasource d ON d.id = t.datasource_id WHERE d.datasource_name = 'IHRO' GROUP BY 1 ORDER BY n DESC",
+      "expected_summary": "ihrodb 370 张、IHRO_BILL 46 张（合计 416）",
+      "checks": [
+        {"type": "contains", "values": ["ihrodb", "IHRO_BILL"], "desc": "两个 schema"},
+        {"type": "regex", "pattern": "\\b370\\b", "desc": "ihrodb 370"},
+        {"type": "regex", "pattern": "\\b46\\b", "desc": "IHRO_BILL 46"}
+      ],
+      "notes": "一个数据源跨多个 schema，测试分组维度选择"
+    },
+    {
+      "id": "hop-05",
+      "category": "multi_hop",
+      "difficulty": 3,
+      "question": "MDM（客户及供应商中心主数据系统）和 IHRO（外包项目管理系统）之间有哪些同名字段（column_name 相同）？返回三列：column_name、MDM 侧出现的表数、IHRO 侧出现的表数，按 column_name 升序。",
+      "oracle_sql": "SELECT m.column_name, m.n, h.n FROM (SELECT c.column_name, COUNT(*) AS n FROM col c JOIN physical_table t ON c.table_id = t.id JOIN datasource d ON t.datasource_id = d.id WHERE d.datasource_name = 'MDM' GROUP BY c.column_name) m JOIN (SELECT c.column_name, COUNT(*) AS n FROM col c JOIN physical_table t ON c.table_id = t.id JOIN datasource d ON t.datasource_id = d.id WHERE d.datasource_name = 'IHRO' GROUP BY c.column_name) h ON m.column_name = h.column_name ORDER BY m.column_name",
+      "expected_summary": "19 个同名字段：BATCH_NO(3/6)、CREATE_TIME(104/48)、CREATOR(104/48)、DESCRIPTION(2/1)、EMP_ID 等（两侧数字为各自出现的表数）",
+      "checks": [
+        {"type": "regex", "pattern": "\\b19\\b", "desc": "共 19 个同名字段"},
+        {"type": "contains", "values": ["CREATE_TIME", "CREATOR"], "desc": "高频同名字段"},
+        {"type": "regex", "pattern": "\\b104\\b", "desc": "CREATE_TIME/CREATOR 的 MDM 侧表数 104"}
+      ],
+      "notes": "多跳差异案例：字段→表→数据源双路径交叉等值连接。Cypher 双 MATCH 模式 + WHERE 等值；SQL 需两个按数据源过滤的子查询 JOIN（4 表路径自连接）"
+    },
+    {
+      "id": "hop-06",
+      "category": "multi_hop",
+      "difficulty": 3,
+      "question": "哪些 column_name 在至少 5 个不同数据源中出现过？返回两列：column_name、出现的数据源数，按数据源数降序、column_name 升序。",
+      "oracle_sql": "SELECT c.column_name, COUNT(DISTINCT d.id) AS systems FROM col c JOIN physical_table t ON c.table_id = t.id JOIN datasource d ON t.datasource_id = d.id GROUP BY c.column_name HAVING COUNT(DISTINCT d.id) >= 5 ORDER BY systems DESC, c.column_name",
+      "expected_summary": "250 个字段名跨 ≥5 个数据源；最多：ID(13)、DESCRIPTION(11)、CREATE_TIME(10)、STATUS(10)、id(10)、REMARK(9)、UPDATE_TIME(9)、code(9)",
+      "checks": [
+        {"type": "regex", "pattern": "\\b250\\b", "desc": "共 250 个"},
+        {"type": "contains_any", "values": ["DESCRIPTION", "CREATE_TIME", "STATUS"], "desc": "头部字段名"},
+        {"type": "regex", "pattern": "\\b13\\b", "desc": "ID 跨 13 个数据源"}
+      ],
+      "notes": "多跳差异案例：3 跳路径（字段→表→数据源）聚合后过滤。SQL 用 HAVING；Cypher 需 WITH 聚合后 WHERE（后置过滤写法不同）"
+    },
+    {
+      "id": "hop-07",
+      "category": "multi_hop",
+      "difficulty": 3,
+      "question": "与 MDM.MDM.CUST_CUSTOMER 共享至少 20 个同名字段（column_name 相同）的表有哪些？返回三列：表全名（full_table_name）、中文名（name）、共享字段数，按共享数降序、表全名升序。",
+      "oracle_sql": "SELECT t2.full_table_name, t2.name, COUNT(*) AS shared FROM col c1 JOIN physical_table t1 ON c1.table_id = t1.id JOIN col c2 ON c1.column_name = c2.column_name JOIN physical_table t2 ON c2.table_id = t2.id WHERE t1.full_table_name = 'MDM.MDM.CUST_CUSTOMER' AND t2.full_table_name <> 'MDM.MDM.CUST_CUSTOMER' GROUP BY t2.full_table_name, t2.name HAVING COUNT(*) >= 20 ORDER BY shared DESC, t2.full_table_name",
+      "expected_summary": "6 张：CUST_CUSTOMER_BACK(47)、CUST_CUSTOMER_DRAFT(46)、CUST_CUSTOMER_HISTORY(46)、PROSPECT_CLIENT(42)、PROSPECT_CLIENT_DRAFT(42)、PROSPECT_CLIENT_HISTORY(42)",
+      "checks": [
+        {"type": "contains", "values": ["CUST_CUSTOMER_DRAFT", "PROSPECT_CLIENT"], "desc": "相似表命中"},
+        {"type": "regex", "pattern": "\\b47\\b", "desc": "CUST_CUSTOMER_BACK 共享 47"},
+        {"type": "regex", "pattern": "\\b46\\b", "desc": "DRAFT/HISTORY 共享 46"},
+        {"type": "regex", "pattern": "\\b42\\b", "desc": "PROSPECT_CLIENT 系共享 42"}
+      ],
+      "notes": "多跳差异案例：锚定自连接（相似表发现）。Cypher 双 HAS_COLUMN 模式共享 c.column_name；SQL col-col 自连接 + 4 表 JOIN，是图查询最能拉开差距的形状"
+    },
+    {
+      "id": "open-01",
+      "category": "open_ended",
+      "difficulty": 3,
+      "question": "如果我要排查雇员的银行账户信息，应该重点看哪些表？（给出表全名和中文说明）",
+      "oracle_sql": "SELECT full_table_name, name FROM physical_table WHERE name LIKE '%雇员%银行%' OR upper(table_name) LIKE '%EMP_BANK%' ORDER BY full_table_name",
+      "expected_summary": "MDM.MDM.EMP_BANK（雇员银行信息）及 EMP_BANK_HISTORY/EMP_BANK_DEFAULT 等历史表、IHRM.ihrmdb.t_employee_account（薪酬雇员银行卡表）",
+      "checks": [
+        {"type": "contains", "values": ["EMP_BANK"], "desc": "MDM 雇员银行主表族"},
+        {"type": "contains_any", "values": ["t_employee_account", "employee_account"], "desc": "IHRM 银行卡表"},
+        {"type": "contains_any", "values": ["MDM", "IHRM"], "desc": "归属数据源正确"}
+      ],
+      "notes": "开放语义：从『雇员银行账户』业务意图定位表，答案不唯一，检查项只锚定核心表"
+    },
+    {
+      "id": "open-02",
+      "category": "open_ended",
+      "difficulty": 3,
+      "question": "表名以 CUST_CONTRACT 开头或中文名含『客户合同』的表有哪些？哪张最像主表？",
+      "oracle_sql": "SELECT full_table_name, name FROM physical_table WHERE table_name LIKE 'CUST_CONTRACT%' OR name LIKE '%客户合同%' ORDER BY full_table_name",
+      "expected_summary": "MDM.MDM.CUST_CONTRACT_ATTR（客户合同属性）+ _DRAFT/_HISTORY 变体共 3 张，主表为 CUST_CONTRACT_ATTR",
+      "checks": [
+        {"type": "contains", "values": ["CUST_CONTRACT_ATTR"], "desc": "主数据表正确"},
+        {"type": "contains_any", "values": ["客户合同属性", "MDM"], "desc": "说明归属/含义"},
+        {"type": "contains_any", "values": ["_DRAFT", "_HISTORY", "草稿", "历史"], "desc": "识别变体表"}
+      ],
+      "notes": "开放语义 + 主从判断"
+    },
+    {
+      "id": "open-03",
+      "category": "open_ended",
+      "difficulty": 3,
+      "question": "发票相关的数据表分布在哪些数据源？（统计口径：表名含 INVOICE/INV_ 或中文名含『发票』）按数据源统计表数量（数据源名、数量两列），并说明核心发票主表和总数。",
+      "oracle_sql": "SELECT substr(full_table_name, 1, instr(full_table_name, '.') - 1) AS datasource, COUNT(*) AS n FROM physical_table WHERE upper(table_name) LIKE '%INVOICE%' OR upper(table_name) LIKE '%INV!_%' ESCAPE '!' OR name LIKE '%发票%' GROUP BY 1 ORDER BY n DESC",
+      "expected_summary": "共 38 张：IHRO 23、ITS 8、BILL 6、HPM 1；主表为 ITS.ITS_USER.T_INVOICE（发票表）、IHRO.IHRO_BILL.T_INVOICE（销售发票表）等",
+      "checks": [
+        {"type": "regex", "pattern": "\\b38\\b", "desc": "总数 38"},
+        {"type": "contains", "values": ["ITS", "IHRO", "BILL"], "desc": "三大数据源"},
+        {"type": "contains_any", "values": ["T_INVOICE"], "desc": "主表 T_INVOICE"},
+        {"type": "regex", "pattern": "\\b23\\b", "desc": "IHRO 23 张"}
+      ],
+      "notes": "题目给定统计口径保证可复现；答案空间大，检查项锚定关键事实"
+    },
+    {
+      "id": "neg-01",
+      "category": "negative",
+      "difficulty": 1,
+      "question": "TEST_DB.dbo.NO_SUCH_TABLE 这张表有哪些字段？",
+      "oracle_sql": "SELECT COUNT(*) AS existing FROM physical_table WHERE full_table_name = 'TEST_DB.dbo.NO_SUCH_TABLE'",
+      "expected_summary": "该表不存在于元数据中，应回答查不到，且不得编造字段",
+      "checks": [
+        {"type": "contains_any", "values": ["不存在", "未找到", "查不到", "没有", "未收录", "无此表"], "desc": "明确回答不存在"},
+        {"type": "not_contains", "values": ["INV_NO", "BUYER_NAME", "CREATE_TIME"], "desc": "不得编造字段（命中说明幻觉）"}
+      ],
+      "notes": "幻觉探测：正确行为是拒绝编造"
+    },
+    {
+      "id": "neg-02",
+      "category": "negative",
+      "difficulty": 2,
+      "question": "哪张表的数据行数最多？",
+      "oracle_sql": "SELECT * FROM col WHERE 0",
+      "expected_summary": "元数据只有表/字段结构，不含行数统计：问答模式应回答无法判断；查询级评测期望查询返回空结果或执行失败，不得返回编造的行数排行",
+      "checks": [
+        {"type": "contains_any", "values": ["无法", "不包含", "没有", "不能", "缺少", "不具备", "未提供", "不知道"], "desc": "说明元数据不含行数"},
+        {"type": "not_contains", "values": ["行数最多的是", "排名第一的是"], "desc": "不得给出确定答案"}
+      ],
+      "notes": "越界问题：考察对元数据覆盖面的自知"
+    },
+    {
+      "id": "neg-03",
+      "category": "negative",
+      "difficulty": 2,
+      "question": "人力资源服务订单（FSGHR）和外包雇员管理系统（IHRM）各有多少张表？哪个数据源的表更多？",
+      "oracle_sql": "SELECT d.datasource_name, COUNT(*) AS n FROM physical_table t JOIN datasource d ON d.id = t.datasource_id WHERE d.datasource_name IN ('FSGHR', 'IHRM') GROUP BY 1 ORDER BY n DESC",
+      "expected_summary": "FSGHR 215 张、IHRM 67 张，FSGHR 更多",
+      "checks": [
+        {"type": "regex", "pattern": "\\b215\\b", "desc": "FSGHR 215"},
+        {"type": "regex", "pattern": "\\b67\\b", "desc": "IHRM 67"},
+        {"type": "contains_any", "values": ["FSGHR", "人力资源服务订单"], "desc": "比较结论正确"}
+      ],
+      "notes": "名称相近的两个数据源做对照，兼做比较题"
+    }
+  ]
+}

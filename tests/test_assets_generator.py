@@ -197,7 +197,7 @@ def test_assets_generator_ladybug_names():
 
         import_csv_to_ladybug(csv_dir, db_path)
 
-        graph = LadybugGraph(db_path)
+        graph = LadybugGraph(db_path, read_only=True)
         output_dir = Path(tmpdir) / "assets"
         output_dir.mkdir()
 

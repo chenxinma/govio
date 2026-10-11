@@ -124,6 +124,8 @@ PTA1B2C3D4,值1,值2,...
 - Column 1: `:ID(NodeType)` -- deterministic string ID (prefix + SHA256 hash)
 - Remaining columns: node attributes
 - `Datasource.csv` 的 `filter` 列存放 JSON 字符串（RFC 4180 引号转义）
+- 数值型属性列 `size`/`precision`/`scale`/`order_no`（Col/Standard）在 CSV 中为整数文本；
+  入图时保持数值类型（Ladybug 为 INT64），缺失值兑底 0
 
 ### Edge CSVs
 

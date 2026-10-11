@@ -28,38 +28,65 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# 内联阈值：小于等于该行数时 stdout 额外内联一份结果
+INLINE_LIMIT = 50
 
-def output_result(data):
-    """输出查询结果"""
+
+def output_result(data, columns: list[str] | None = None):
+    """输出查询结果
+
+    输出契约：
+    - 结果永远落 UTF-8 JSONL 文件（records 带字段名），文件是权威结果；
+    - stdout 摘要行 Result output: <path> rows: N columns: [...] 全 ASCII
+      （columns 经 ensure_ascii 转义，免疫控制台编码差异）；
+    - 行数 <= INLINE_LIMIT 时 stdout 额外内联一行 JSON（ensure_ascii=True，
+      同样编码安全）；
+    - 空结果只输出 Data not found.，不写文件。
+
+    Args:
+        data: 查询结果（list[行] 或单行/标量）
+        columns: 列名（RETURN 别名）；None 时用位置键 "0"/"1" 兑底
+    """
     if not data:
         print("Data not found.")
         logger.info("data not found.")
         return
 
-    if isinstance(data, list):
-        _size = len(data)
-    else:
-        _size = 1
+    if not isinstance(data, list):
         data = [data]
 
-    if _size > 0:
-        if _size > 20:
-            output_dir = Path(".") / ".govio"
-            output_dir.mkdir(parents=True, exist_ok=True)
-            fname = (
-                output_dir / f"output-{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
-            )
-            df = pd.DataFrame(data)
-            df.to_json(
-                fname, index=False, orient="records", lines=True, force_ascii=False
-            )
-            print("Result output:", fname, "rows:", _size)
-            logger.info("result file: %s", str(fname))
-        else:
-            print(
-                json.dumps(data, ensure_ascii=False, default=lambda obj: obj.__dict__)
-            )
-        logger.info("result rows: %s", str(_size))
+    # to_json 往返统一 NaN→null、Decimal→str，保证 stdout / 文件的 JSON 都合法
+    # shortcut: RETURN 别名重复时 records 同名键会合并，出现真实需求再处理
+    df = pd.DataFrame(data, columns=columns)
+    records = json.loads(
+        df.to_json(
+            orient="records",
+            force_ascii=False,
+            date_format="iso",
+            default_handler=str,
+        )
+    )
+
+    output_dir = Path(".") / ".govio"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fname = (
+        output_dir / f"output-{datetime.now().strftime('%Y%m%d%H%M%S%f')}.json"
+    )
+    with open(fname, "w", encoding="utf-8") as f:
+        f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
+
+    _size = len(records)
+    print(
+        "Result output:",
+        fname,
+        "rows:",
+        _size,
+        "columns:",
+        json.dumps([str(c) for c in df.columns], ensure_ascii=True),
+    )
+    if _size <= INLINE_LIMIT:
+        print(json.dumps(records, ensure_ascii=True))
+    logger.info("result file: %s rows: %s", str(fname), str(_size))
 
 
 def cmd_networkx(code: str, gml_path: str):
@@ -76,8 +103,8 @@ def cmd_networkx(code: str, gml_path: str):
 
     local_vars = {"g": g}
     exec(code, locals=local_vars)
-    data = local_vars.get("result")
-    output_result(data)
+    # Python exec 的 result 无列名元信息，由 output_result 按位置键兑底
+    output_result(local_vars.get("result"))
 
 
 def cmd_falkordb(cypher: str, host: str = "localhost", port: int = 6379, graph_name: str = "ontology"):
@@ -90,13 +117,13 @@ def cmd_falkordb(cypher: str, host: str = "localhost", port: int = 6379, graph_n
 
     logger.info("Cypher: " + cypher)
 
-    data = g.query(cypher)
-    output_result(data)
+    columns, data = g.query_with_columns(cypher)
+    output_result(data, columns)
 
 
 def cmd_ladybug(cypher: str, db_path: str):
     """Ladybug 查询处理（Cypher，与 FalkorDB 语法兼容）"""
-    g = LadybugGraph(db_path)
+    g = LadybugGraph(db_path, read_only=True)
 
     if not cypher.upper().startswith("MATCH"):
         print("Please write a MATCH query.")
@@ -104,8 +131,8 @@ def cmd_ladybug(cypher: str, db_path: str):
 
     logger.info("Cypher: " + cypher)
 
-    data = g.query(cypher)
-    output_result(data)
+    columns, data = g.query_with_columns(cypher)
+    output_result(data, columns)
 
 
 def query(query_text):
