@@ -26,7 +26,7 @@ uv tool install govio
 govio-cli -V
 ```
 
-应输出类似 `govio 0.5.2` 的版本号。
+应输出类似 `govio 0.6.0` 的版本号。
 
 ## 初始化配置
 
@@ -49,7 +49,7 @@ Chocolate 是内置的示例数据集，包含 DuckDB 数据库、表间关系�
 
 ### 1. 下载示例数据
 
-从 [GitHub Releases](https://github.com/chenxinma/govio/releases/download/v0.5.2/chocolate.zip) 下载 `chocolate.zip`，解压到任意目录：
+从 [GitHub Releases](https://github.com/chenxinma/govio/releases/download/v0.6.0/chocolate.zip) 下载 `chocolate.zip`，解压到任意目录：
 
 ```
 /path/to/chocolate/
@@ -65,8 +65,8 @@ Chocolate 是内置的示例数据集，包含 DuckDB 数据库、表间关系�
 ```bash
 cd /path/to/chocolate
 
-# 读取 DuckDB 中的表和字段元数据（--schemas 必填，写源库真实 schema 名）
-govio-cli meta meta --source duckdb --db ./chocolate.db --schemas chocolate --output ./output
+# 读取 DuckDB 中的表和字段元数据（--datasource、--schemas 必填；--schemas 写源库真实 schema 名）
+govio-cli meta meta --source duckdb --db ./chocolate.db --datasource chocolate --schemas chocolate --output ./output
 
 # 读取表间关系
 govio-cli meta rel --file ./chocolate_relationships.json --output ./output
@@ -87,10 +87,10 @@ govio-cli meta metric --file ./chocolate_metrics.json --output ./output
 govio-cli meta graph --output ./output --mode rebuild
 ```
 
-成功后会在当前目录生成 `skills/govio/assets/`（命令结束会打印其**绝对路径**），包含：
+成功后会在当前目录生成 `.agents/skills/govio/assets/`（可用 `--assets-dir` 指定其他目录；命令结束会打印其**绝对路径**），包含：
 
 ```
-skills/govio/assets/
+.agents/skills/govio/assets/
 ├── schema.md         # 图数据库模式描述
 ├── metrics_index.md  # 指标索引（原子/派生分组）
 ├── ontology.gml      # NetworkX GML 数据文件
@@ -103,7 +103,7 @@ Govio 通过 Skills 为 AI Agent（如 Codex、Claude Code 等）提供数据治
 
 ### 1. 下载 Skills 定义
 
-从 [GitHub Releases](https://github.com/chenxinma/govio/releases/download/v0.5.2/govio-skills.zip) 下载 `govio-skills.zip`，解压 `skills/` 目录到以下位置之一：
+从 [GitHub Releases](https://github.com/chenxinma/govio/releases/download/v0.6.0/govio-skills.zip) 下载 `govio-skills.zip`，解压 `skills/` 目录到以下位置之一：
 
 | 范围 | 路径 | 说明 |
 |------|------|------|
@@ -118,10 +118,10 @@ Govio 通过 Skills 为 AI Agent（如 Codex、Claude Code 等）提供数据治
 
 ```bash
 # 项目级
-cp -r skills/govio/assets <项目目录>/.codex/skills/govio/
+cp -r .agents/skills/govio/assets <项目目录>/.codex/skills/govio/
 
 # 或全局级
-cp -r skills/govio/assets ~/.codex/skills/govio/
+cp -r .agents/skills/govio/assets ~/.codex/skills/govio/
 ```
 
 确保最终目录结构如下：
@@ -180,7 +180,7 @@ govio-cli backend
 govio-cli query -c "MATCH (n:PhysicalTable) RETURN n.name LIMIT 5"
 
 # 数据探查
-govio-cli observe load chocolate     # 加载数据源
+govio-cli observe load --name t1 --datasource chocolate --sql "SELECT * FROM t1"  # 加载 DataFrame
 govio-cli observe explore            # 探索表间关系
 
 # 指标 SQL 组装
