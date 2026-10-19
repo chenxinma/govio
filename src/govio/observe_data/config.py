@@ -43,7 +43,7 @@ def load_config(path: Path) -> Config:
     if not path.exists():
         raise FileNotFoundError(f"配置文件不存在: {path}")
 
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
 
     datasources = {}

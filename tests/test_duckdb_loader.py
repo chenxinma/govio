@@ -1,9 +1,9 @@
-import pytest
-import pandas as pd
+
 import duckdb
-from pathlib import Path
-from govio.metadata.duckdb_loader import DuckDBLoader
+import pytest
+
 from govio.metadata.database import MetadataLoader
+from govio.metadata.duckdb_loader import DuckDBLoader
 
 
 @pytest.fixture

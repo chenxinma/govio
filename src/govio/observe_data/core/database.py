@@ -74,7 +74,7 @@ class DatabaseManager:
         if datasource in self._duckdb_conns:
             conn = self._duckdb_conns[datasource]
             return conn.execute(sql).df()
-        elif datasource in self._engines:
+        if datasource in self._engines:
             from sqlalchemy import text
 
             engine = self._engines[datasource]

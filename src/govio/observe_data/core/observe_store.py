@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -43,10 +43,10 @@ class Manifest:
     dataframes: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
-    def load(cls) -> "Manifest":
+    def load(cls) -> Manifest:
         if not MANIFEST_FILE.exists():
             return cls()
-        with open(MANIFEST_FILE, "r", encoding="utf-8") as f:
+        with open(MANIFEST_FILE, encoding="utf-8") as f:
             data = json.load(f)
         return cls(
             version=data.get("version", "1.0"),
@@ -110,7 +110,7 @@ class ObserveStore:
             datasource=datasource,
             sql=sql,
             file=str(file_path),
-            loaded_at=datetime.now(timezone.utc).isoformat(),
+            loaded_at=datetime.now(UTC).isoformat(),
             rows=len(df),
             columns=len(df.columns),
             column_info=column_info,

@@ -1,6 +1,7 @@
 """DataFrame 内存存储管理"""
 
 from dataclasses import dataclass, field
+from typing import Self
 
 import pandas as pd
 
@@ -21,7 +22,7 @@ class DataFrameStore:
     _instance = None
     _dataframes: dict[str, pd.DataFrame] = field(default_factory=dict)
 
-    def __new__(cls) -> "DataFrameStore":
+    def __new__(cls) -> Self:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._dataframes = {}

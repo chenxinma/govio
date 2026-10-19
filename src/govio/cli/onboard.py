@@ -4,9 +4,9 @@ from typing import Any
 
 import questionary
 
-from .config import ConfigManager
 from govio.crypto import encrypt_value, parse_password_from_url
 
+from .config import ConfigManager
 
 # ---------------------------------------------------------------------------
 # CSV validation helper (still used internally)
@@ -26,11 +26,7 @@ def validate_csv_directory(csv_dir: Path) -> bool:
 
     required_files = ["PhysicalTable.csv"]
 
-    for filename in required_files:
-        if not (csv_dir / filename).exists():
-            return False
-
-    return True
+    return all((csv_dir / filename).exists() for filename in required_files)
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +271,7 @@ def onboard_datasource_cli(
             _fail("--add-datasource 需同时提供 --url")
         try:
             parsed_args = parse_cli_connect_args(connect_args)
-            entry = add_datasource(
+            add_datasource(
                 add_name,
                 url,
                 connect_args=parsed_args,
@@ -380,7 +376,7 @@ def prompt_datasource_config(
         elif action == "done":
             break
 
-    return datasources if datasources else None
+    return datasources or None
 
 
 # ---------------------------------------------------------------------------

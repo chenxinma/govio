@@ -63,6 +63,14 @@ datasources:
 | `graph.ladybug.db_path` | If backend=ladybug | -- |
 | `datasources.*` | No | Each entry must have `url` key |
 
+## Graph Model Alignment
+
+`config.yaml` 的 `datasources` 与图模型中的 `Datasource` 节点是两个独立概念，仅靠 `datasource_name` 名字契约关联：
+
+- `config.datasources` 是 **observe 运行时连接配置**，只管可达性
+- `Datasource` 节点是 **治理侧信息记录**（`datasource_name` / `name` / `source_type` / `filter`），不保存任何连接或可达性状态
+- 两者没有同步要求：连接配置的增删改不要求更新图，反之亦然
+
 ## Datasource URL Formats
 
 | Type | URL Pattern | Notes |
@@ -85,6 +93,32 @@ datasources:
     query_{YYYYMMDD}.log   # Query logs
 ```
 
+## Datasource Declaration File
+
+`meta meta`（TDS 模式）与 `meta recommend` 使用的治理侧声明文件（示例路径 `data/datasource.json`），schema 见 [metadata.md](metadata.md#datasource-schema-datasource_schemajson)，可用 `govio-cli meta schema datasource` 输出。
+
+```json
+{
+  "version": "1.0",
+  "datasources": [
+    {
+      "datasource_name": "hr_prod",
+      "comment": "人力资源生产库",
+      "source_type": "oracle",
+      "filter": {
+        "schemas": ["ihrodb", "IHRO_BILL"],
+        "include_tables": ["*"],
+        "exclude_tables": ["tmp_*", "bak_*"]
+      }
+    }
+  ]
+}
+```
+
+- `filter.schemas` 决定 TDS 导入的抽取范围；同一 schema 不得归属多个 datasource
+- `include_tables` / `exclude_tables` 为 `fnmatch` glob，大小写不敏感，exclude 优先
+- 首版初始数据已由 `data/app_map.json` 转换生成 `data/datasource.json`：按系统分组聚合 `schema` 为 `filter.schemas`；`datasource_name` 为英文标识（与 observe 的 `config.datasources` key 对齐），`comment` 保留中文系统名，`source_type` 已人工标注
+
 ## Relationship JSON Format
 
 ```json
@@ -92,8 +126,8 @@ datasources:
   "version": "1.0",
   "relationships": [
     {
-      "source": {"PhysicalTable": "schema.table1", "Cols": ["col1"]},
-      "target": {"PhysicalTable": "schema.table2", "Cols": ["col2"]},
+      "source": {"PhysicalTable": "hr_prod.ihrodb.employee", "Cols": ["dept_id"]},
+      "target": {"PhysicalTable": "hr_prod.ihrodb.department", "Cols": ["dept_id"]},
       "relationship_type": "one_to_many",
       "description": "..."
     }
@@ -102,6 +136,8 @@ datasources:
 ```
 
 Valid `relationship_type` values: `one_to_one`, `one_to_many`, `many_to_one`, `many_to_many`
+
+完整结构约束见 [metadata.md](metadata.md#relationship-schema-relationship_schemajson)；`govio-cli meta schema relationship` 可输出该 schema。
 
 ## Metric JSON Format
 

@@ -1,7 +1,7 @@
 """节点 string ID 生成。
 
 ID 格式: <2 字符类型前缀><SHA256(业务键) 前 8 hex>，共 10 位。
-业务键来自各节点的天然唯一列（full_table_name / column / app_id / standard_id / code）。
+业务键来自各节点的天然唯一列（full_table_name / column / datasource_name / standard_id / code）。
 """
 
 import hashlib
@@ -13,7 +13,7 @@ import pandas as pd
 NODE_PREFIXES = {
     "PhysicalTable": "PT",
     "Col": "CO",
-    "Application": "AP",
+    "Datasource": "DS",
     "Standard": "ST",
     "Metric": "ME",
     "Dimension": "DI",

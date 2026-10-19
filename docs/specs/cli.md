@@ -115,8 +115,16 @@ query(query_text) -> None    # Dispatches to networkx, falkordb, or ladybug
 cmd_networkx(code, gml_path) -> None     # exec() with graph in scope, expects `result` var
 cmd_falkordb(cypher, host, port, graph_name) -> None  # Validates MATCH, executes Cypher
 cmd_ladybug(cypher, db_path, ...) -> None  # Validates MATCH, executes Cypher via Ladybug
-output_result(data) -> None  # >20 rows -> JSON file, else stdout
+output_result(data, columns=None) -> None  # 输出契约见下
 ```
+
+**输出契约**（`output_result`）：
+
+- 结果永远写 `.govio/output-<时间戳含微秒>.json`：UTF-8、JSON Lines、records 带字段名（Cypher 后端字段名来自 RETURN 别名，经 `query_with_columns()` 透传；文件是权威结果）
+- stdout 摘要行：`Result output: <path> rows: N columns: [...]`，columns 经 `ensure_ascii` 转义，整行 ASCII 安全（防 bash/PowerShell 控制台编码差异破坏中文 JSON）
+- 行数 ≤ `INLINE_LIMIT`（50）时 stdout 额外内联一行 JSON records（`ensure_ascii=True`，同样编码安全）
+- 空结果只输出 `Data not found.`，不写文件
+- networkx 后端（Python exec 的 `result`）无列名元信息，位置键 `"0"`/`"1"` 兑底
 
 Logs to `~/.govio/logs/query_{YYYYMMDD}.log`.
 
@@ -136,26 +144,30 @@ Exception: `import-schema` reads `config.datasources` to resolve the DuckDB file
 
 | Subcommand | Description |
 |---|---|
-| `meta meta` | Import TDS/DuckDB metadata (PhysicalTable, Col, HAS_COLUMN) |
-| `meta app` | Import application list (Application + USE edges) |
+| `meta meta` | Import TDS/DuckDB metadata (Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS) |
 | `meta std` | Import data standards (Standard nodes, TDS only) |
-| `meta compliance` | Export existing standard-column associations (COMPLIES_WITH, TDS only) |
+| `meta compliance` | Export existing standard-column associations (COMPLIES_WITH, TDS only; `--datasources-file` 必填) |
 | `meta rel` | Import table relationships (RELATES_TO edges) |
 | `meta metric` | Import metric/dimension definitions (Metric, Dimension + 5 edge types) |
 | `meta graph` | Graph database management (update/rebuild/clear + assets) |
-| `meta recommend` | Data standard recommendation |
+| `meta recommend` | Data standard recommendation (schema scope from `--datasource`) |
+| `meta schema` | Print input JSON Schema (metric / relationship / datasource) |
 | `meta import-schema` | Import metadata from a configured DuckDB datasource to graph (shortcut for meta + graph) |
 
-Recommended order: `meta` → `app` → `std` → `compliance` → `rel` → `metric` → `graph`
+Recommended order: `meta` → `std` → `compliance` → `rel` → `metric` → `graph`
 
 ### Data Sources
 
-The `meta` subcommand supports three data source modes (`--source`):
-- **tds**: Read from metadata database only; `--kundb`, `--workspace-uuid`, `--schemas` are required
-- **duckdb**: Read from local DuckDB file only; `--db`, `--schemas` are required (skips Standard data)
-- **both**: Merge TDS + DuckDB (DuckDB wins on conflict); TDS-side params same as tds mode
+`meta meta` 覆盖单一信息来源（`--source`）；TDS 与 DuckDB 分多次运行，通过 CSV merge 合流：
 
-`--schemas` is mandatory for every source mode. Omitting it used to export zero tables silently, because `DuckDBLoader` filters with `schema_name IN (SELECT unnest(?))`. DuckDB files normally hold a single user schema named `main`.
+- **tds**: 从元数据库读取；`--kundb`、`--workspace-uuid`、`--datasources-file` 必填
+  - 抽取范围 = 声明文件各条目 `filter.schemas` 的并集（**不接受 `--schemas`**）
+  - 一次运行可产出多个 `Datasource` 节点（声明文件全部条目）及其 `OWNS` 归属
+- **duckdb**: 从本地 DuckDB 文件读取；`--db`、`--schemas`、`--datasource` 必填
+  - 过滤由 CLI `--schemas` 执行；一次运行对应一个 `Datasource`
+  - 提供 `--datasources-file` 时按声明校验/合并定义，否则按 CLI 参数自动声明（`source_type=duckdb`，`filter.schemas` 取 `--schemas`）
+
+DuckDB 文件通常只有单个用户 schema `main`；缺省 `--schemas` 会静默导出 0 张表，因此必须显式指定。
 
 ### Empty-Result Guard
 
@@ -167,26 +179,25 @@ _describe_duckdb_schemas(db_path) -> str   # read-only "main(5 张表)、..." hi
 
 - Returns `None`, `cmd_meta` exits with code 1
 - Error text: `❌ 未发现任何表: schema [...] 在元数据源中不存在或为空（未写入任何 CSV）`
-- For `duckdb` / `both`, the message appends the importable schemas of the file via `DuckDBLoader.list_schemas()`, so callers never need to connect to the source database themselves
-- Renaming a schema during import is not supported; node names always come from `full_table_name = <schema>.<table>`
+- For `duckdb`, the message appends the importable schemas of the file via `DuckDBLoader.list_schemas()`, so callers never need to connect to the source database themselves
+- Renaming a schema during import is not supported; `full_table_name` 恒为 `<datasource_name>.<schema>.<table>`
 
 ### Schema Discovery on Missing `--schemas`
 
-When `--schemas` is omitted, `cmd_meta` prints an error message **plus** context-dependent hints:
+When `--schemas` is omitted in duckdb mode, `cmd_meta` prints an error message **plus** context-dependent hints:
 
 | Source | Hint |
 |---|---|
-| `duckdb` / `both` with `--db` | Lists importable schemas via `DuckDBLoader.list_schemas()` (e.g. `📖 test.duckdb 中可导入的 schema: main(5 张表)`) |
-| `duckdb` / `both` without `--db` | `提示: 请指定 --db 参数后可列出可用 schema` |
-| `tds` | `提示: TDS 模式下请直接指定 --schemas 参数` |
+| `duckdb` with `--db` | Lists importable schemas via `DuckDBLoader.list_schemas()` (e.g. `📖 test.duckdb 中可导入的 schema: main(5 张表)`) |
+| `duckdb` without `--db` | `提示: 请指定 --db 参数后可列出可用 schema` |
+| `tds` | `提示: TDS 模式下抽取范围由 --datasources-file 的 filter.schemas 决定` |
 
 ### Step Functions
 
 Each subcommand maps to an independent, idempotent step function:
 
 ```python
-step_meta_export(output, source, db_path, schemas, db_name, kundb, workspace_uuid) -> tuple[df_tables, df_columns] | None
-step_app_export(output, app_list_file, app_map_file, db_name) -> None
+step_meta_export(output, source, db_path, schemas, datasource_name, datasource_file, kundb, workspace_uuid) -> tuple[df_tables, df_columns] | None
 step_std_export(output, kundb, workspace_uuid) -> None
 step_compliance_export(output, kundb, workspace_uuid) -> None
 step_rel_export(output, relationship_file) -> None
@@ -201,6 +212,27 @@ Incremental merge support via:
 merge_node_csv(new_df, csv_path, node_type, key_col) -> pd.DataFrame
 merge_edge_csv(new_df, csv_path, dedup_cols) -> pd.DataFrame
 ```
+
+### `schema` Subcommand
+
+`govio-cli meta schema {metric|relationship|datasource}` — 输出标准 JSON Schema（UTF-8），供外部 agent 生成可被 `meta metric` / `meta rel` / `meta meta` 导入的标准数据。
+
+```bash
+govio-cli meta schema metric
+govio-cli meta schema relationship -o relationship_schema.json
+govio-cli meta schema datasource
+```
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `schema_name` (positional) | Yes | — | `metric` / `relationship` / `datasource` |
+| `-o/--output` | No | stdout | 输出文件路径 |
+
+输出内容与包内 schema 文件一一对应：`src/govio/metadata/metric_schema.json`、`relationship_schema.json`、`datasource_schema.json`。
+
+### `recommend` Subcommand
+
+`meta recommend` 用 `--datasource NAME` 替代原 `--app-map`：schema 分析范围从该 `Datasource` 的 `filter.schemas` 解析，解析顺序为 `--datasources-file` → `--csv-dir/Datasource.csv`。
 
 ### Graph Management
 
@@ -236,6 +268,8 @@ govio-cli meta import-schema --datasource mydb --schemas main --output ./data --
 
 Only supports DuckDB datasources (`duckdb://` URL). Non-DuckDB datasources cause exit with code 1.
 
+同时生成 `Datasource.csv` / `OWNS.csv`：`datasource_name` 取 `--datasource`，`source_type=duckdb`，`filter.schemas` 取 `--schemas`。
+
 ---
 
 ## sql.py
@@ -266,10 +300,10 @@ cat query.json | govio-cli sql build
 ## std_recommend.py
 
 ```python
-std_recommend(output_dir, kundb, workspace_uuid, app_map, csv_dir) -> None
+std_recommend(output_dir, kundb, workspace_uuid, datasource_name, schemas, csv_dir) -> None
 ```
 
-All parameters are explicit function arguments. Loads `df_app_db_map` from JSON, calls `data_standard_recommend()`. Called by `meta recommend` CLI subcommand.
+All parameters are explicit function arguments. `schemas` 由 `meta recommend` 从 `Datasource.filter.schemas` 解析后传入，调用 `data_standard_recommend()`。Called by `meta recommend` CLI subcommand.
 
 ---
 

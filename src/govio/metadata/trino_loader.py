@@ -4,7 +4,7 @@ import pandas as pd
 from trino import dbapi
 
 from .database import MetadataLoader
-
+from .datasource import qualify
 
 # 匹配 Trino 类型：base 或 base(params)，如 decimal(10,2)、varchar(19)、bigint
 _TYPE_RE = re.compile(r"^(\w+)\s*(?:\(([^)]*)\))?$")
@@ -54,6 +54,7 @@ class TrinoLoader(MetadataLoader):
         user: str = "trino",
         http_scheme: str = "http",
         auth: object | None = None,
+        datasource_name: str = "",
     ) -> None:
         self.host = host
         self.port = port
@@ -62,6 +63,7 @@ class TrinoLoader(MetadataLoader):
         self.auth = auth
         self.catalog = catalog
         self.schemas = schemas
+        self.datasource_name = datasource_name
 
     def _connect(self):
         return dbapi.connect(
@@ -100,9 +102,12 @@ class TrinoLoader(MetadataLoader):
             sql = f"SHOW TABLES FROM {self._qualify(self.catalog, schema)}"
             df = self._fetch(sql)
             for table_name in df.iloc[:, 0].tolist():
+                full_table_name = f"{schema}.{table_name}"
+                if self.datasource_name:
+                    full_table_name = qualify(self.datasource_name, full_table_name)
                 records.append(
                     {
-                        "full_table_name": f"{schema}.{table_name}",
+                        "full_table_name": full_table_name,
                         "schema": schema,
                         "table_name": str(table_name),
                         "name": str(table_name),
@@ -135,7 +140,7 @@ class TrinoLoader(MetadataLoader):
         scale: list[int] = []
         order_no: list[int] = []
         for schema, table_name in zip(
-            tables["schema"].tolist(), tables["table_name"].tolist()
+            tables["schema"].tolist(), tables["table_name"].tolist(), strict=False
         ):
             sql = f"SHOW COLUMNS FROM {self._qualify(self.catalog, schema, table_name)}"
             df = self._fetch(sql)
@@ -143,15 +148,20 @@ class TrinoLoader(MetadataLoader):
             ctypes = df["Type"].astype(str).tolist()
             comments = df["Comment"].tolist()
             for i, (cname, ctype, comment) in enumerate(
-                zip(cnames, ctypes, comments), start=1
+                zip(cnames, ctypes, comments, strict=False), start=1
             ):
                 # Comment 可能为 None / NaN / ""，非空字符串才作为展示名
                 disp = comment if isinstance(comment, str) and comment else cname
                 _size, _prec, _scale = _parse_type(ctype)
-                col.append(f"{schema}.{table_name}.{cname}")
+                col_id = f"{schema}.{table_name}.{cname}"
+                ftn_id = f"{schema}.{table_name}"
+                if self.datasource_name:
+                    col_id = qualify(self.datasource_name, col_id)
+                    ftn_id = qualify(self.datasource_name, ftn_id)
+                col.append(col_id)
                 column_name.append(cname)
                 name.append(disp)
-                full_table_name.append(f"{schema}.{table_name}")
+                full_table_name.append(ftn_id)
                 dtype.append(ctype)
                 size.append(_size)
                 precision.append(_prec)

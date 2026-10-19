@@ -107,7 +107,7 @@ class StandardRecommender:
         if 'standard_name' in self.std_compliance.columns:
             self._standard_names = dict(zip(
                 self.std_compliance['standard_id'],
-                self.std_compliance['standard_name']
+                self.std_compliance['standard_name'], strict=False
             ))
         
         # 训练 TF-IDF 向量化器并构建标准列特征矩阵
@@ -145,7 +145,7 @@ class StandardRecommender:
         dtype_features_scaled = dtype_scaler.fit_transform(dtype_features)
         
         # 拼接所有特征
-        from scipy.sparse import hstack, csr_matrix
+        from scipy.sparse import csr_matrix, hstack
         self._std_features_matrix = hstack([
             table_features * self.weights['table'],
             name_features * self.weights['name'],
@@ -191,7 +191,7 @@ class StandardRecommender:
             'date': ['date', 'time', 'datetime', 'timestamp']
         }
         
-        for family, types in type_families.items():
+        for types in type_families.values():
             if any(t in type1 for t in types) and any(t in type2 for t in types):
                 return 0.6
         
@@ -345,7 +345,7 @@ class StandardRecommender:
                             (columns['column_name'].str.lower() == "id"))] # skip 物理主键ID
 
         # 数据值标准化
-        columns['size_scaled'] = [ s for s  in self._numeric_scaler.transform(columns[['size', 'precision', 'scale']]) ]
+        columns['size_scaled'] = list(self._numeric_scaler.transform(columns[['size', 'precision', 'scale']]))
 
         # 构建已贯标列的键集合
         compliant_columns = set()

@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+
 from govio.metadata.node_id import (
     assign_node_ids,
     make_id,
@@ -36,7 +37,7 @@ def test_make_id_all_prefixes():
     """6 种节点类型前缀正确。"""
     assert make_id("PhysicalTable", "k").startswith("PT")
     assert make_id("Col", "k").startswith("CO")
-    assert make_id("Application", "k").startswith("AP")
+    assert make_id("Datasource", "k").startswith("DS")
     assert make_id("Standard", "k").startswith("ST")
     assert make_id("Metric", "k").startswith("ME")
     assert make_id("Dimension", "k").startswith("DI")
@@ -100,7 +101,7 @@ def test_write_node_csv_header_and_id_column(tmp_path):
     path = tmp_path / "PhysicalTable.csv"
     write_node_csv(df, path, "PhysicalTable")
     read_back = pd.read_csv(path)
-    assert ":ID(PhysicalTable)" == read_back.columns[0]
+    assert read_back.columns[0] == ":ID(PhysicalTable)"
     assert read_back[":ID(PhysicalTable)"].iloc[0].startswith("PT")
     assert "full_table_name" in read_back.columns
     assert "name" in read_back.columns

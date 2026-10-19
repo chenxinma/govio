@@ -8,13 +8,13 @@ import importlib
 from typing import Any
 
 __all__ = [
-    "StandardRecommender",
-    "create_recommender",
-    "DEFAULT_WEIGHTS",
     "DEFAULT_K_NEIGHBORS",
     "DEFAULT_TOP_N",
+    "DEFAULT_WEIGHTS",
     "MIN_SIMILARITY",
     "RelationshipLoader",
+    "StandardRecommender",
+    "create_recommender",
     "load_relationships",
 ]
 

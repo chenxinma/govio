@@ -1,6 +1,6 @@
 import argparse
-from importlib.metadata import version, PackageNotFoundError
 import sys
+from importlib.metadata import PackageNotFoundError, version
 
 from govio.cli.config import ConfigManager
 
@@ -130,18 +130,18 @@ def main():
     elif args.action == "meta":
         from .meta import meta
 
-        sys.argv = ["govio-cli"] + args.meta_args + remaining
+        sys.argv = ["govio-cli", *args.meta_args, *remaining]
         meta()
     elif args.action == "observe":
         from .observe import observe
 
         # 将 observe 子命令参数设为 sys.argv 供 observe() 解析
-        sys.argv = ["govio-cli"] + args.observe_args + remaining
+        sys.argv = ["govio-cli", *args.observe_args, *remaining]
         observe()
     elif args.action == "sql":
         from .sql import sql
 
-        sys.argv = ["govio-cli"] + args.sql_args + remaining
+        sys.argv = ["govio-cli", *args.sql_args, *remaining]
         sql()
     else:
         parser.print_help()

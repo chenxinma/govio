@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Govio Table Relationship Definition",
-  "description": "物理表关系定义文件 schema，用于校验 govio relationship 输入",
+  "title": "Govio Relationship Definition",
+  "description": "物理表关系定义文件 schema，用于校验 govio relationship JSON（表引用使用全限定标识 <datasource_name>.<schema>.<table>）",
   "type": "object",
   "required": ["version", "relationships"],
   "additionalProperties": false,
@@ -19,7 +19,7 @@
     }
   },
   "definitions": {
-    "table_endpoint": {
+    "table_ref": {
       "type": "object",
       "required": ["PhysicalTable", "Cols"],
       "additionalProperties": false,
@@ -27,7 +27,7 @@
         "PhysicalTable": {
           "type": "string",
           "minLength": 1,
-          "description": "物理表全名，格式为 schema.table_name"
+          "description": "全限定表标识 <datasource_name>.<schema>.<table>"
         },
         "Cols": {
           "type": "array",
@@ -36,7 +36,7 @@
             "minLength": 1
           },
           "minItems": 1,
-          "description": "参与关联的列名列表"
+          "description": "关联列名列表（表内简单列名），支持复合键"
         }
       }
     },
@@ -45,20 +45,18 @@
       "required": ["source", "target", "relationship_type"],
       "additionalProperties": false,
       "properties": {
-        "description": {
-          "type": "string",
-          "description": "关系的业务含义描述"
-        },
         "source": {
-          "$ref": "#/definitions/table_endpoint"
+          "$ref": "#/definitions/table_ref"
         },
         "target": {
-          "$ref": "#/definitions/table_endpoint"
+          "$ref": "#/definitions/table_ref"
         },
         "relationship_type": {
           "type": "string",
-          "enum": ["one_to_one", "one_to_many", "many_to_one", "many_to_many"],
-          "description": "关系基数类型"
+          "enum": ["one_to_one", "one_to_many", "many_to_one", "many_to_many"]
+        },
+        "description": {
+          "type": "string"
         }
       }
     }

@@ -1,6 +1,13 @@
 """sql_builder 核心逻辑单元测试"""
 
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
 import pytest
+
 from govio.core.sql_builder import build_metric_sql
 
 
@@ -133,22 +140,17 @@ def test_empty_metrics_raises():
 
 # ---------- CLI 集成测试 ----------
 
-import json
-import subprocess
-import sys
-import tempfile
-from pathlib import Path
-
 
 def _run_cli(*args, stdin_text=None):
     """运行 govio-cli sql build，返回 (returncode, stdout, stderr)"""
-    cmd = [sys.executable, "-X", "utf8", "-m", "govio.cli"] + list(args)
+    cmd = [sys.executable, "-X", "utf8", "-m", "govio.cli", *list(args)]
     proc = subprocess.run(
         cmd,
         input=stdin_text,
         capture_output=True,
         text=True,
         encoding="utf-8",
+        check=False,
     )
     return proc.returncode, proc.stdout, proc.stderr
 
@@ -213,7 +215,7 @@ def test_cli_build_stdin_input():
 
 def test_cli_build_file_not_found():
     """文件不存在 → exit 1"""
-    rc, out, err = _run_cli("sql", "build", "-f", "/nonexistent/q.json")
+    rc, _out, err = _run_cli("sql", "build", "-f", "/nonexistent/q.json")
     assert rc == 1
     assert "文件不存在" in err
 
@@ -223,7 +225,7 @@ def test_cli_build_json_parse_error():
     with tempfile.TemporaryDirectory() as d:
         qpath = Path(d) / "q.json"
         qpath.write_text("{invalid json", encoding="utf-8")
-        rc, out, err = _run_cli("sql", "build", "-f", str(qpath))
+        rc, _out, err = _run_cli("sql", "build", "-f", str(qpath))
         assert rc == 1
         assert "JSON 解析失败" in err
 
@@ -242,7 +244,7 @@ def test_cli_build_value_error_propagation():
             "filters": {},
         }
         qpath.write_text(json.dumps(req), encoding="utf-8")
-        rc, out, err = _run_cli("sql", "build", "-f", str(qpath))
+        rc, _out, err = _run_cli("sql", "build", "-f", str(qpath))
         assert rc == 1
         assert "SQL 组装失败" in err
         assert "report_ym" in err

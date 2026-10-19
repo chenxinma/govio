@@ -2,7 +2,6 @@
 
 import tempfile
 
-
 from govio.observe_data.config import DataSourceConfig
 from govio.observe_data.core.database import DatabaseManager
 

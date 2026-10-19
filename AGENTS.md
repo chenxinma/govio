@@ -74,6 +74,8 @@ uv run ruff format src/ tests/
 uv run ruff check --fix src/ tests/
 ```
 
+Lint 规则集固定在 `pyproject.toml` 的 `[tool.ruff.lint]`（`uvx ruff check` 与 `uv run ruff check` 结果一致）；中文内容、测试断言、错误边界宽捕获等意图性排除见该配置内注释。
+
 ### Build
 
 ```bash
@@ -123,7 +125,7 @@ uv run pyright src/
 govio-cli onboard           # Interactive setup wizard
 govio-cli backend            # Show current graph backend
 govio-cli query -c "..."     # Knowledge graph query
-govio-cli meta meta --source duckdb --db x.duckdb --schemas main --output ./output   # 导入元数据 -> CSV
+govio-cli meta meta --source duckdb --db x.duckdb --schemas main --datasource local_duckdb --output ./output   # 导入元数据 -> CSV
 govio-cli meta graph --output ./output --mode update  # CSV -> 图库 + assets
 govio-cli meta recommend     # Data standard recommendation
 govio-cli observe info       # Show datasources + DataFrames
@@ -153,8 +155,8 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from .application import AppInfoLoader
 from .database import TDSLoader
+from .datasource import DatasourceLoader
 ```
 
 ### Type Hints
@@ -283,14 +285,17 @@ src/govio/
 │   └── ladybug_loader.py    # CSV bulk import/upsert to Ladybug
 ├── metadata/                # Metadata loading and processing
 │   ├── __init__.py
-│   ├── application.py       # AppInfoLoader
 │   ├── database.py          # TDSLoader (base: MetadataLoader)
+│   ├── datasource.py        # DatasourceLoader (datasource.json declaration)
+│   ├── datasource_schema.json  # Datasource declaration JSON Schema
 │   ├── duckdb_loader.py     # DuckDBLoader
 │   ├── gen_networkx.py      # CSV → GML conversion (incremental support)
 │   ├── metric.py            # MetricLoader
+│   ├── metric_schema.json   # Metric definition JSON Schema
 │   ├── node_id.py           # Deterministic 10-char string ID generation
 │   ├── recommender.py       # StandardRecommender (k-NN)
 │   ├── relationship.py      # RelationshipLoader
+│   ├── relationship_schema.json  # Relationship definition JSON Schema
 │   ├── standard.py          # StandardLoader
 │   ├── trino_loader.py      # TrinoLoader
 │   └── utility.py           # make_csv, data_standard_recommend
