@@ -64,7 +64,7 @@ Govio turns enterprise metadata into a knowledge graph, supporting three graph d
                  │ (explicit args, no config file)      │ (graph backend + datasources)
                  ▼                                      ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  ① meta meta/app/std/compliance/rel/metric -> CSV (incremental merge)│
+│  ① meta meta/std/compliance/rel/metric -> CSV (incremental merge)    │
 │  ② meta graph --mode update -> update graph -> generate assets       │
 └────────────────────────────────┬─────────────────────────────────────┘
                                  │
@@ -76,7 +76,7 @@ Govio turns enterprise metadata into a knowledge graph, supporting three graph d
                                          │
                                          ▼
                     ┌────────────────────────────────────┐
-                    │  skills/govio*/assets              │
+                    │  .agents/skills/govio/assets       │
                     │  schema.md / metrics_index.md      │
                     │  ontology.gml / names/             │
                     └────────────────────────────────────┘
@@ -119,8 +119,8 @@ Configuration is saved to `~/.govio/config.yaml`.
 Each `meta` subcommand runs independently with explicit arguments (no config file dependency), following a two-step workflow: **subcommand generates CSV → `meta graph` imports into the graph**:
 
 ```bash
-# ① Generate/merge CSV (--schemas is required; the default schema of a DuckDB file is main)
-govio-cli meta meta --source duckdb --db ./data/chocolate.db --schemas chocolate --output ./data/meta
+# ① Generate/merge CSV (--datasource and --schemas are required; the default schema of a DuckDB file is main)
+govio-cli meta meta --source duckdb --db ./data/chocolate.db --datasource chocolate --schemas chocolate --output ./data/meta
 
 # ② Incrementally import into the graph + generate assets
 govio-cli meta graph --output ./data/meta --mode update
@@ -136,7 +136,7 @@ When done, copy `skills/govio*` into your Agent's skills directory to query in n
 <summary>meta meta + meta graph example run</summary>
 
 ```bash
-$ govio-cli meta meta --source duckdb --db ./data/chocolate.db --schemas chocolate --output ./data/meta
+$ govio-cli meta meta --source duckdb --db ./data/chocolate.db --datasource chocolate --schemas chocolate --output ./data/meta
 Reading metadata from DuckDB...
 ✓ Metadata exported: 4 tables, 17 columns
 
@@ -148,8 +148,8 @@ Incrementally updating Ladybug graph (C:\Users\Administrator\.govio\ontology.lbd
 ✓ Ladybug data updated
 
 Generating assets...
-✓ Assets generated at: D:\Work\gov-io\govio\skills\govio\assets
-  (resolved from skills/govio/assets under the current working directory; if this differs from the assets directory your application reads, merge them yourself)
+✓ Assets generated at: D:\Work\gov-io\govio\.agents\skills\govio\assets
+  (resolved from .agents/skills/govio/assets under the current working directory; use --assets-dir to choose another directory; if this differs from the assets directory your application reads, merge them yourself)
 
 ✅ graph update complete!
 ```
@@ -183,23 +183,25 @@ All subcommands are fully independent and CLI-only (no config file dependency). 
 
 | Subcommand | Purpose | Output CSV |
 |--------|------|----------|
-| `govio-cli meta meta` | Import TDS/DuckDB metadata | PhysicalTable, Col, HAS_COLUMN |
+| `govio-cli meta meta` | Import TDS/DuckDB metadata | Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS |
 | `govio-cli meta std` | Import data standards (TDS only) | Standard |
 | `govio-cli meta compliance` | Export existing standard associations (TDS only) | COMPLIES_WITH |
 | `govio-cli meta rel` | Import table relations | RELATES_TO |
 | `govio-cli meta metric` | Import metric/dimension definitions | Metric, Dimension + 5 edge types |
+| `govio-cli meta schema` | Output standard JSON Schemas (metric/relationship/datasource) | — (printed or written to file) |
 | `govio-cli meta graph` | Update/rebuild/clear graph + generate assets | graph + assets |
 | `govio-cli meta recommend` | Data standard recommendation | recommendation results |
+| `govio-cli meta import-schema` | One-shot import from a configured DuckDB data source (metadata + graph + assets) | graph + assets |
 
 Recommended order for a first-time build: `meta → std → compliance → rel → metric → graph`. For top-ups, run only the subcommand with new input plus `graph`.
 
 ```bash
-# DuckDB metadata (--db / --schemas required)
-govio-cli meta meta --source duckdb --db /path/to/meta.duckdb --schemas main --output ./data/meta
+# DuckDB metadata (--db / --datasource / --schemas required)
+govio-cli meta meta --source duckdb --db /path/to/meta.duckdb --datasource mydb --schemas main --output ./data/meta
 
-# TDS metadata (--kundb / --workspace-uuid / --schemas required)
+# TDS metadata (--kundb / --workspace-uuid / --datasources-file required; extraction scope comes from filter.schemas in the declaration file)
 govio-cli meta meta --source tds --kundb "mysql+pymysql://user:pass@host:port/catalog" \
-  --workspace-uuid <uuid> --schemas dbo,public --output ./data/meta
+  --workspace-uuid <uuid> --datasources-file ./data/datasources.json --output ./data/meta
 
 # Table relations / metric definitions
 govio-cli meta rel --file ./data/relationships.json --output ./data/meta
@@ -213,9 +215,8 @@ govio-cli meta graph --output ./data/meta --mode update
 
 | Source | Description |
 |------|------|
-| `tds` | Read from the metadata database only; `--kundb`, `--workspace-uuid`, `--schemas` required |
-| `duckdb` | Read from a DuckDB file only; `--db`, `--schemas` required; **skips Standard data standards** |
-| `both` | TDS + DuckDB merged; DuckDB data overrides same-named TDS data |
+| `tds` | Read from the metadata database only; `--kundb`, `--workspace-uuid`, `--datasources-file` required; extraction scope comes from `filter.schemas` in the declaration file |
+| `duckdb` | Read from a DuckDB file only; `--db`, `--datasource`, `--schemas` required; **skips Standard data standards** |
 
 **`meta graph --mode`:**
 
@@ -230,7 +231,7 @@ govio-cli meta graph --output ./data/meta --mode update
 - Node names come from `full_table_name = <schema>.<table>`; node_id is auto-generated by hashing the business key
 - `--schemas` must contain schema names that actually exist in the source database (the default schema of a DuckDB file is `main`); renaming on import is not supported in the current version
 - If a schema does not exist or the source has no tables, the command fails without writing CSV, and the error lists the importable schemas of that database
-- Assets are always written to `skills/govio/assets` under the current working directory, and the absolute path is printed at the end; if this differs from the directory your application reads, merge them yourself (improvement tracked in `docs/roadmap.md`)
+- Assets are written to `.agents/skills/govio/assets` under the current working directory by default (use `--assets-dir` to choose another directory), and the absolute path is printed at the end; if this differs from the directory your application reads, merge them yourself (improvement tracked in `docs/roadmap.md`)
 
 ### Query Tool
 

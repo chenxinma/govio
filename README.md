@@ -64,7 +64,7 @@ Govio 将企业元数据转化为知识图谱，支持三种图数据库后端�
                  │ (参数显式传入，不依赖配置文件)          │ (图后端 + 数据源)
                  ▼                                      ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  ① meta meta/app/std/compliance/rel/metric -> CSV（增量合并）         │
+│  ① meta meta/std/compliance/rel/metric -> CSV（增量合并）            │
 │  ② meta graph --mode update -> 更新图库 -> 生成 assets                │
 └────────────────────────────────┬─────────────────────────────────────┘
                                  │
@@ -76,7 +76,7 @@ Govio 将企业元数据转化为知识图谱，支持三种图数据库后端�
                                          │
                                          ▼
                     ┌────────────────────────────────────┐
-                    │  skills/govio*/assets              │
+                    │  .agents/skills/govio/assets       │
                     │  schema.md / metrics_index.md      │
                     │  ontology.gml / names/             │
                     └────────────────────────────────────┘
@@ -119,8 +119,8 @@ govio-cli onboard
 `meta` 命令组的子命令各自独立运行、参数显式传入（不依赖配置文件），统一按「**子命令生成 CSV → `meta graph` 导入图库**」两步工作：
 
 ```bash
-# ① 生成/合并 CSV（--schemas 必填，DuckDB 文件的默认 schema 是 main）
-govio-cli meta meta --source duckdb --db ./data/chocolate.db --schemas chocolate --output ./data/meta
+# ① 生成/合并 CSV（--datasource、--schemas 必填；DuckDB 文件的默认 schema 是 main）
+govio-cli meta meta --source duckdb --db ./data/chocolate.db --datasource chocolate --schemas chocolate --output ./data/meta
 
 # ② 增量导入图库 + 生成 assets
 govio-cli meta graph --output ./data/meta --mode update
@@ -136,7 +136,7 @@ govio-cli meta graph --output ./data/meta --mode update
 <summary>meta meta + meta graph 运行示例</summary>
 
 ```bash
-$ govio-cli meta meta --source duckdb --db ./data/chocolate.db --schemas chocolate --output ./data/meta
+$ govio-cli meta meta --source duckdb --db ./data/chocolate.db --datasource chocolate --schemas chocolate --output ./data/meta
 从 DuckDB 读取元数据...
 ✓ 元数据已导出: 4 张表, 17 个字段
 
@@ -148,8 +148,8 @@ $ govio-cli meta graph --output ./data/meta --mode update
 ✓ Ladybug 数据已更新
 
 正在生成 assets...
-✓ Assets 已生成到: D:\Work\gov-io\govio\skills\govio\assets
-  （路径由当前工作目录的 skills/govio/assets 解析而来；如与应用读取的 assets 目录不一致，请自行合并）
+✓ Assets 已生成到: D:\Work\gov-io\govio\.agents\skills\govio\assets
+  （路径由当前工作目录的 .agents/skills/govio/assets 解析而来，可用 --assets-dir 指定其他目录；如与应用读取的 assets 目录不一致，请自行合并）
 
 ✅ graph 更新完成！
 ```
@@ -183,23 +183,25 @@ $ govio-cli meta meta --source duckdb --db ./data/sales.duckdb --schemas sales -
 
 | 子命令 | 用途 | 产出 CSV |
 |--------|------|----------|
-| `govio-cli meta meta` | 导入 TDS/DuckDB 元数据 | PhysicalTable, Col, HAS_COLUMN |
+| `govio-cli meta meta` | 导入 TDS/DuckDB 元数据 | Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS |
 | `govio-cli meta std` | 导入数据标准（仅 TDS） | Standard |
 | `govio-cli meta compliance` | 导出已有标准关联（仅 TDS） | COMPLIES_WITH |
 | `govio-cli meta rel` | 导入表关系 | RELATES_TO |
 | `govio-cli meta metric` | 导入指标维度 | Metric, Dimension + 5 种边 |
+| `govio-cli meta schema` | 输出标准 JSON Schema（metric/relationship/datasource） | —（打印或写文件） |
 | `govio-cli meta graph` | 更新/重建/清空图库 + 生成 assets | 图库 + assets |
 | `govio-cli meta recommend` | 数据标准推荐 | 推荐结果 |
+| `govio-cli meta import-schema` | 从已配置 DuckDB 数据源一键导入（元数据 + 图库 + assets） | 图库 + assets |
 
 首次建库推荐顺序：`meta → std → compliance → rel → metric → graph`；零星补充时只跑有新输入的子命令 + `graph`。
 
 ```bash
-# DuckDB 元数据（--db / --schemas 必填）
-govio-cli meta meta --source duckdb --db /path/to/meta.duckdb --schemas main --output ./data/meta
+# DuckDB 元数据（--db / --datasource / --schemas 必填）
+govio-cli meta meta --source duckdb --db /path/to/meta.duckdb --datasource mydb --schemas main --output ./data/meta
 
-# TDS 元数据（--kundb / --workspace-uuid / --schemas 必填）
+# TDS 元数据（--kundb / --workspace-uuid / --datasources-file 必填；抽取范围取声明文件的 filter.schemas）
 govio-cli meta meta --source tds --kundb "mysql+pymysql://user:pass@host:port/catalog" \
-  --workspace-uuid <uuid> --schemas dbo,public --output ./data/meta
+  --workspace-uuid <uuid> --datasources-file ./data/datasources.json --output ./data/meta
 
 # 表关系 / 指标定义
 govio-cli meta rel --file ./data/relationships.json --output ./data/meta
@@ -213,9 +215,8 @@ govio-cli meta graph --output ./data/meta --mode update
 
 | 来源 | 说明 |
 |------|------|
-| `tds` | 仅从元数据库读取；`--kundb`、`--workspace-uuid`、`--schemas` 必填 |
-| `duckdb` | 仅从 DuckDB 文件读取；`--db`、`--schemas` 必填；**跳过 Standard 数据标准** |
-| `both` | TDS + DuckDB 合并，DuckDB 数据覆盖同名 TDS 数据 |
+| `tds` | 仅从元数据库读取；`--kundb`、`--workspace-uuid`、`--datasources-file` 必填，抽取范围取声明文件的 `filter.schemas` |
+| `duckdb` | 仅从 DuckDB 文件读取；`--db`、`--datasource`、`--schemas` 必填；**跳过 Standard 数据标准** |
 
 **`meta graph --mode`：**
 
@@ -230,7 +231,7 @@ govio-cli meta graph --output ./data/meta --mode update
 - 节点名来自 `full_table_name = <schema>.<table>`，node_id 由业务键哈希自动生成
 - `--schemas` 必须写源库中真实存在的 schema 名（DuckDB 文件的默认 schema 是 `main`）；当前版本不支持改名导入
 - schema 不存在或源库无表时命令失败退出且不写 CSV，错误信息会列出该库可导入的 schema
-- assets 固定输出到当前工作目录下的 `skills/govio/assets`，命令结束时打印绝对路径；与应用读取目录不一致时请自行合并（改进项见 `docs/roadmap.md`）
+- assets 默认输出到当前工作目录下的 `.agents/skills/govio/assets`（可用 `--assets-dir` 指定），命令结束时打印绝对路径；与应用读取目录不一致时请自行合并（改进项见 `docs/roadmap.md`）
 
 ### 查询工具
 
