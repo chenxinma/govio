@@ -8,11 +8,12 @@
 **已完成：**
 - [x] 实现 `TDSLoader` 从 TDS（KunDB/MySQL 元数据库）读取表/字段/标准
 - [x] 实现 `DuckDBLoader` 从 DuckDB 读取表/字段元数据
-- [x] 实现 `AppInfoLoader` 从 Excel 读取应用清单
+- [x] 实现 `TrinoLoader` 从 Trino 读取表/字段元数据
+- [x] 实现 `DatasourceLoader` 从 datasource.json 读取数据源声明（JSON Schema 校验，取代原 Excel 应用清单），图模型增加 Datasource 归属（Datasource 节点 + OWNS 边）
 - [x] 实现 `StandardLoader` 读取数据标准与贯标关系
 - [x] 实现 `RelationshipLoader` 从 JSON 读取表间关系
 - [x] 实现 `MetricLoader` 从 JSON 读取指标/维度定义，生成血缘边
-- [x] 实现 `Recommender` 数据标准推荐（k-NN 协同过滤）
+- [x] 实现 `StandardRecommender` 数据标准推荐（k-NN 协同过滤）
 - [x] 实现 `NetworkXGraph`（GML 文件读写、schema 内省）
 - [x] 实现 `FalkorDBGraph`（Cypher 查询、schema 内省）
 - [x] 实现 `LadybugGraph`（嵌入式 `.lbdb`，Cypher 兼容）
@@ -26,8 +27,10 @@
 **已完成：**
 - [x] `govio-cli onboard` 初始化向导（图后端选择 + 数据源配置）
 - [x] `govio-cli meta` 完整同步管线（元数据 → CSV → 图库 → assets）
-- [x] `govio-cli meta` 分步子命令（`meta`/`app`/`rel`/`std`/`compliance`/`metric`/`graph`），已重构为 CLI-only 独立子命令（原 `meta sync` / `meta config` 交互式入口已移除）
-- [x] `govio-cli meta recommend` 数据标准推荐
+- [x] `govio-cli meta` 分步子命令（`meta`/`std`/`compliance`/`rel`/`metric`/`schema`/`graph`/`import-schema`），已重构为 CLI-only 独立子命令（原 `meta sync` / `meta config` / `app` 已移除）
+- [x] `govio-cli meta recommend` 数据标准推荐（schema 范围由 `--datasource` 解析）
+- [x] `govio-cli meta schema` 输出标准 JSON Schema（metric/relationship/datasource）
+- [x] `govio-cli meta import-schema` 从已配置 DuckDB 数据源一键导入（元数据 + 图库 + assets）
 - [x] `govio-cli query` 知识图谱查询（Cypher / Python 自适应）
 - [x] `govio-cli backend` 查看当前图后端
 - [x] `govio-cli -V` 版本查看
@@ -40,9 +43,10 @@
 **已完成：**
 - [x] `govio-cli observe load` 从数据源加载 DataFrame
 - [x] `govio-cli observe explore` 探查表间关系（列名相似性 + 值重叠推断）
+- [x] `govio-cli observe visualize-relations` 生成关系图谱（networkx/JSON）
 - [x] `govio-cli observe compare` 比对两个 DataFrame（datacompy）
-- [x] `govio-cli observe chart` 生成关系图谱可视化（matplotlib）
-- [x] `govio-cli observe list` 列出已加载的数据源
+- [x] `govio-cli observe chart` 从 DataFrame 生成图表 PNG（bar/line）
+- [x] `govio-cli observe info` 数据源/DataFrame 信息查询（合并原 show-datasource / list / show）
 - [x] `govio-cli observe release` 释放 DataFrame
 - [x] `govio-cli sql build` 指标 SQL 组装（从 JSON 规格生成标准 SQL）
 - [x] DataFrameStore 内存存储管理
@@ -61,6 +65,7 @@
 - [x] `govio-query` — 元数据/指标查询（应用、表、字段、指标问数）
 - [x] `govio-observe` — 数据探查与比对（加载、探索、比对、图表）
 - [x] `govio-eda` — EDA 探索性数据分析（4 阶段标准流程）
+- [x] `govio-reconcile` — 多源数据对账分析（跨系统一致性、实体关联覆盖、多维统计画像）
 - [x] 指标 Playbook — 单指标 + 维度过滤的标准查询流程
 - [x] 名称映射机制 — `assets/names/` 中文系统名到标准代码映射
 - [x] Skill 与 CLI 命令组对齐重构
@@ -79,10 +84,10 @@
 ### SQL 组装增强
 **目标：** 覆盖更复杂的指标查询场景，提升 SQL 生成的准确率和表达力。
 
-- [ ] 多指标组合查询（一次请求多个指标共享维度过滤）
+- [x] 多指标组合查询（一次请求多个指标共享维度过滤，UNION ALL 合并）
 - [ ] 环比/同比分析（自动生成时间偏移 JOIN）
-- [ ] 派生指标递归展开（`DERIVED_FROM` 链自动拆解为 CTE）
-- [ ] 聚合排序与 Top-N（`ORDER BY metric_value DESC LIMIT N`）
+- [ ] 派生指标递归展开（`DERIVED_FROM` 链自动拆解为 CTE）——单层派生已实现（derived CTE），派生引用派生的递归展开未支持
+- [x] 聚合排序与 Top-N（`ORDER BY metric_value DESC LIMIT N`，`sql build` 支持 order_by/limit）
 - [ ] 维度枚举值自动补全（从图谱中查询维度可选值）
 
 ### 数据质量检核
@@ -104,7 +109,7 @@
 ### CLI 工程化待办
 **目标：** 消除元数据导入流程中的现场变通（目录联接、临时库、手工合并 assets）。
 
-- [x] **assets 输出目录可配置**：`meta graph --assets-dir <path>` 参数已实现，默认 `.s/skills/govio/assets`
+- [x] **assets 输出目录可配置**：`meta graph --assets-dir <path>` 参数已实现，默认 `.agents/skills/govio/assets`
 - [ ] **多份 assets 副本的归并策略**：通过 `--assets-dir` 可指定单一输出目录，消除了多副本问题；但仓库内 `skills/govio/assets` 与应用侧的归并策略仍需用户自行管理
 
 已评估、暂不实现（如需重启请先讨论）：
@@ -144,12 +149,11 @@
                              ▼
 ┌──────────────────────────────────────────────────────────────┐
 │                    Agent（LLM + Skills）                      │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │ govio    │  │govio-meta│  │govio-query│  │govio-eda │    │
-│  │ 路由分发  │  │ 图谱维护  │  │ 元数据查询 │  │ EDA 分析 │    │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘    │
-│       │             │             │             │            │
-│       ▼             ▼             ▼             ▼            │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  govio(路由) · govio-meta · govio-query              │   │
+│  │  govio-observe · govio-eda · govio-reconcile         │   │
+│  └──────────────────────┬───────────────────────────────┘   │
+│                         ▼                                   │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │              govio-cli（命令行工具）                    │   │
 │  │  onboard · meta · query · observe · sql · backend    │   │
