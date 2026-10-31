@@ -41,7 +41,12 @@ async function runGovioCli(
 			aborted = true;
 			child.kill();
 		};
-		signal.addEventListener("abort", onAbort, { once: true });
+		// aborted 预检：监听注册前已 abort 的信号不会触发事件，需立即终止而非跑满超时
+		if (signal.aborted) {
+			onAbort();
+		} else {
+			signal.addEventListener("abort", onAbort, { once: true });
+		}
 
 		child.stdout.setEncoding("utf8");
 		child.stderr.setEncoding("utf8");
