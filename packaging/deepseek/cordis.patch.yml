@@ -1,0 +1,8 @@
+# Govio 工具插件挂载行（bundle patch 层，安装后随包进入 profile 层叠）
+- insert:
+    - id: govio-tools
+      name: '@dsh-external/govio-tools'
+      inject: [tools]
+      config:
+        cliPath: govio-cli        # 可被用户 profile patch 按行覆盖（config 为整行替换语义）
+        timeoutMs: 120000

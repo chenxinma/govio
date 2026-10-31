@@ -1,0 +1,19 @@
+{
+  "task": "T3",
+  "status": "done",
+  "summary": "按 T1 设计实现 DeepSeek Harness bundle 插件分发：packaging/deepseek/（manifest/cordis.patch.yml/TS 插件 govio_cli+govio_query/README）+ scripts/package_harness_plugin.py（可重复打包、版本注入、--skills-bundle、产物结构自检），TS 以真实 @deepseek-ai/* 类型 strict 编译零错误，8 个测试与打包链路全部通过",
+  "files": [
+    "packaging/deepseek/package.json",
+    "packaging/deepseek/cordis.patch.yml",
+    "packaging/deepseek/tsconfig.json",
+    "packaging/deepseek/src/index.ts",
+    "packaging/deepseek/README.md",
+    "packaging/deepseek/lib/index.js",
+    "packaging/deepseek/lib/types/index.d.ts",
+    "scripts/package_harness_plugin.py",
+    "docs/tasks/T3-harness-plugin/test_package_harness_plugin.py",
+    "docs/tasks/T3-harness-plugin/install-doc-draft.md",
+    "docs/tasks/T3-harness-plugin/progress.md",
+    "docs/tasks/T3-harness-plugin/status.json"
+  ]
+}
