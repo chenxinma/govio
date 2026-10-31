@@ -18,6 +18,13 @@ assets/
 .iflow
 .worktrees/
 
+# 打包脚本生成的 skills 副本（单一真源为 skills/）
+packaging/pi/skills/
+
+# DeepSeek Harness 插件 npm install 生成物（打包脚本同时排除，不进 dist）
+packaging/deepseek/node_modules/
+packaging/deepseek/package-lock.json
+
 # observe DataFrame storage
 .govio/observe/
 

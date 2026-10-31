@@ -1,6 +1,6 @@
 [project]
 name = "govio"
-version = "0.6.0"
+version = "0.7.0"
 description = "Add your description here"
 readme = "README.md"
 license = "MIT"
@@ -17,6 +17,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "pandas>=2.3.3",
     "matplotlib>=3.8",
+    "psycopg[binary]>=3.2.0",
     "pymysql>=1.1.2",
     "pyyaml>=6.0.0",
     "questionary>=2.1.1",
@@ -96,3 +97,9 @@ ignore = [
 "src/govio/cli/query.py" = ["S102", "DTZ005"]
 # 测试夹具中的假口令与路径字面量
 "tests/**" = ["S105", "S106", "S108"]
+
+[tool.pytest.ini_options]
+# integration 用例需 wslc 真实库环境（GOVIO_REAL_DB=1 才执行），默认 skip
+markers = [
+    "integration: 需要真实数据库（wslc 容器）环境的集成测试",
+]

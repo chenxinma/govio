@@ -1,0 +1,12 @@
+{
+  "task": "T4",
+  "status": "done",
+  "summary": "新增 MysqlLoader（pymysql 读 information_schema.tables/columns），输出列结构与 TrinoLoader/DuckDBLoader 一致，25 个打桩测试全部通过，ruff 检查与格式化通过",
+  "files": [
+    "src/govio/metadata/mysql_loader.py",
+    "tests/test_mysql_loader.py",
+    "docs/tasks/T4-mysql-loader/progress.md",
+    "docs/tasks/T4-mysql-loader/status.json",
+    "docs/tasks/T4-mysql-loader/spec-draft.md"
+  ]
+}

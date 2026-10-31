@@ -77,16 +77,36 @@ DatabaseManager(datasources: dict[str, DataSourceConfig])
 ```
 
 - DuckDB URLs: `duckdb://path` -- supports file and directory modes
-- Other URLs: SQLAlchemy engines
+- Other URLs: SQLAlchemy engines（scheme 先经 `_resolve_sqlalchemy_target` 归一）
 - Connections are lazy: the constructor only records configs, each datasource is connected on first `execute_sql` / `get_engine` call (`_ensure(name)`). Listing datasources never opens a connection.
 - `duckdb` / `sqlalchemy` / `pandas` are imported on demand, not at module import.
+
+### URL Scheme Normalization
+
+```python
+_resolve_sqlalchemy_target(url: str) -> tuple[str, dict[str, Any]]
+# 返回 (归一后的 SQLAlchemy URL, 追加的 connect_args)；其余 URL 原样返回
+```
+
+| Config URL scheme | 实际连接 | 说明 |
+|---|---|---|
+| `duckdb://` | duckdb 原生连接 | 文件 / 目录两种模式，不走 SQLAlchemy |
+| `mysql://` | `mysql+pymysql://` | 归一到 pymysql（默认 mysqldb 驱动未安装） |
+| `mysql+pymysql://` | 同左 | 原样 |
+| `postgresql://` / `postgres://` | `postgresql+psycopg://` | 归一到 psycopg3 |
+| `postgresql+psycopg://` | 同左 | 原样 |
+| `trino://` | trino.sqlalchemy 方言（trino-python-client 自带） | 原样；URL 含密码时方言自动构造 BasicAuthentication |
+| `trino+http://` | `trino://` + `connect_args.http_scheme="http"` | HTTP；`config.connect_args` 同名键优先 |
+| `trino+https://` | `trino://` + `connect_args.http_scheme="https"` | HTTPS；`config.connect_args` 同名键优先 |
 
 ### Methods
 
 ```python
 get_engine(datasource: str) -> Engine      # Raises ValueError if not SQLAlchemy
-execute_sql(datasource: str, sql: str) -> pd.DataFrame  # DuckDB or SQLAlchemy
+execute_sql(datasource: str, sql: str) -> pd.DataFrame  # DuckDB 或 pandas.read_sql（统一执行路径）
 ```
+
+mysql / postgresql / trino 的查询执行统一走 SQLAlchemy 引擎 + `pandas.read_sql`，`load_dataframe` 无需按后端分支；trino 的 http_scheme / 证书等高级连接参数可经 `config.connect_args` 透传（合并时 config 显式配置优先）。
 
 ---
 
@@ -189,8 +209,8 @@ or `{"success": false, "error": "..."}` on failure.
 |---|---|---|
 | `list_dataframes(store)` | `ObserveStore` | `{'dataframes': [{name, rows, columns, column_info}]}` |
 | `list_datasources(db_manager)` | `DatabaseManager` | `[{name, driver, url}]` |
-| `load_dataframe(store, db_manager, datasource, name, sql)` | mixed | `{'success': True/False, ...}` |
-| `load_from_memory(store, name, sql)` | `ObserveStore` | Loads all registered DataFrames into in-memory DuckDB, executes SQL, stores result. Returns `{'success': True/False, ..., source_tables: [...]}` |
+| `load_dataframe(store, db_manager, datasource, name, sql)` | mixed | `{'success': True/False, ...}`；失败时 `{'success': False, 'error': ...}`（ValueError 原文透传，其余包 `SQL 执行错误: ...`） |
+| `load_from_memory(store, name, sql)` | `ObserveStore` | Loads all registered DataFrames into in-memory DuckDB, executes SQL, stores result. Returns `{'success': True/False, ..., source_tables: [...]}`；失败时 `{'success': False, 'error': ...}` |
 | `release_dataframe(store, name)` | `ObserveStore` | `{'success': True/False}` |
 | `release_all_dataframes(store)` | `ObserveStore` | `{'success': True, 'released': [], 'count': int}` |
 | `visualize_relations(relations)` | list or dict | `{'success': True, 'nodes': [], 'edges': []}` |
@@ -208,3 +228,7 @@ or `{"success": false, "error": "..."}` on failure.
 | `explore` | `--dataframes` (optional) | Explore relationships |
 | `visualize-relations` | `--relations-file FILE` | Generate visualization |
 | `chart` | `--name`, `--type bar\|line`, `--x`, `--y`, `-o OUTPUT` | Generate PNG chart |
+
+### load 失败语义与退出码
+
+`load_dataframe` / `load_from_memory` 保持 `{'success': True/False, 'error': ...}` 契约不变（向后兼容）。`observe load` 在 `success: false` 时：stdout 仍输出完整结果 JSON（含 `error` 字段），另向 stderr 打印 `❌ {error}` 并以退出码 1 结束；成功（含 0 行结果）退出 0。详见 `docs/specs/cli.md`「退出码契约（observe load）」。

@@ -1,0 +1,16 @@
+{
+  "task": "T2",
+  "status": "done",
+  "summary": "按 T1 设计实现 govio 的 pi.agent 扩展分发形态：packaging/pi 包源（pi manifest + govio_cli/govio_query 工具与 /govio 诊断命令扩展 + skills 接线）、可重复执行的 scripts/package_pi_extension.py 打包脚本（产出 dist/govio-pi-0.6.0/ 并内置产物结构自检），并经 pi 1.4.0 实测验证工具注册、调用链、子命令白名单与 govio_query 全链路",
+  "files": [
+    "packaging/pi/package.json",
+    "packaging/pi/README.md",
+    "packaging/pi/extensions/govio-tools.ts",
+    "packaging/pi/skills/",
+    "scripts/package_pi_extension.py",
+    "docs/tasks/T2-pi-extension/install-draft.md",
+    "docs/tasks/T2-pi-extension/progress.md",
+    "docs/tasks/T2-pi-extension/status.json",
+    "dist/govio-pi-0.6.0/"
+  ]
+}

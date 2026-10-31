@@ -15,12 +15,14 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+from sqlalchemy.engine import make_url
+from trino.auth import BasicAuthentication
 
 from govio.core.assets_generator import AssetsGenerator
 from govio.core.graph_factory import GraphFactory
 from govio.graph.falkordb_loader import import_csv_to_falkordb, upsert_csv_to_falkordb
 from govio.graph.ladybug_loader import import_csv_to_ladybug, upsert_csv_to_ladybug
-from govio.metadata.database import TDSLoader
+from govio.metadata.database import MetadataLoader, TDSLoader
 from govio.metadata.datasource import (
     DatasourceLoader,
     build_owns_edges,
@@ -29,13 +31,47 @@ from govio.metadata.datasource import (
 )
 from govio.metadata.duckdb_loader import DuckDBLoader
 from govio.metadata.metric import MetricLoader
+from govio.metadata.mysql_loader import MysqlLoader
 from govio.metadata.node_id import assign_node_ids, write_node_csv
+from govio.metadata.postgres_loader import PostgresLoader
 from govio.metadata.relationship import load_relationships
 from govio.metadata.standard import StandardLoader
+from govio.metadata.trino_loader import TrinoLoader
 
 from .config import ConfigManager
 
 DEFAULT_ASSETS_DIR = Path(".agents/skills/govio/assets")
+
+# --source 取值与展示名（tds 之外的来源都通过 --db 定位数据源）
+SOURCE_LABELS = {
+    "tds": "TDS",
+    "duckdb": "DuckDB",
+    "mysql": "MySQL",
+    "postgres": "PostgreSQL",
+    "trino": "Trino",
+}
+
+# --schemas 缺省时的来源相关提示
+SCHEMA_HINTS = {
+    "duckdb": "DuckDB 文件默认 schema 为 main",
+    "mysql": "MySQL 中 schema 即库名",
+    "postgres": "PostgreSQL 常用 schema 为 public",
+    "trino": "Trino schema 为 catalog 下的命名空间",
+}
+
+# --source 对应的 --db 连接 URL scheme（含驱动限定写法），见 docs/specs/cli.md
+SOURCE_URL_SCHEMES: dict[str, set[str]] = {
+    "mysql": {"mysql", "mysql+pymysql"},
+    "postgres": {"postgres", "postgresql", "postgresql+psycopg"},
+    "trino": {"trino", "trino+http", "trino+https"},
+}
+
+# 连接 URL 未给出 user / port 时的默认值，与各加载器构造参数默认值一致
+SOURCE_URL_DEFAULTS: dict[str, tuple[str, int]] = {
+    "mysql": ("root", 3306),
+    "postgres": ("postgres", 5432),
+    "trino": ("trino", 8080),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +310,94 @@ def _describe_duckdb_schemas(db_path: str) -> str:
     return "、".join(f"{name}({count} 张表)" for name, count in pairs)
 
 
+def _build_metadata_loader(
+    source: str, db: str, schemas: list[str], datasource_name: str
+) -> MetadataLoader:
+    """按 --source 构造元数据加载器。
+
+    duckdb 的 db 为文件路径；mysql / postgres / trino 的 db 为连接 URL，
+    scheme 必须与 --source 匹配（格式见 docs/specs/cli.md）。
+
+    Args:
+        source: 信息来源（duckdb / mysql / postgres / trino）
+        db: DuckDB 文件路径，或 mysql / postgres / trino 连接 URL
+        schemas: 导入的 schema 列表（非 TDS 导入的实际过滤范围）
+        datasource_name: 数据源名（全限定前缀与 Datasource / OWNS 归属）
+
+    Returns:
+        MetadataLoader: 对应来源的元数据加载器
+
+    Raises:
+        ValueError: URL 不合法、scheme 与 --source 不匹配或缺少必要 URL 段
+    """
+    if source == "duckdb":
+        return DuckDBLoader(db, schemas, datasource_name)
+    if source not in SOURCE_URL_SCHEMES:
+        raise ValueError(f"不支持的信息来源: {source}")
+
+    try:
+        url = make_url(db)
+    except Exception as e:
+        raise ValueError(f"--db 不是合法的连接 URL: {db}（{e}）") from e
+
+    # scheme 匹配大小写不敏感（与 observe 的 scheme.lower() 归一行为一致）
+    if url.drivername.lower() not in SOURCE_URL_SCHEMES[source]:
+        expected = " / ".join(sorted(SOURCE_URL_SCHEMES[source]))
+        raise ValueError(
+            f"--db 的 URL scheme '{url.drivername}' 与 --source {source} 不匹配"
+            f"（期望: {expected}）"
+        )
+    if not url.host:
+        raise ValueError(f"--db 的 URL 缺少 host: {db}")
+
+    default_user, default_port = SOURCE_URL_DEFAULTS[source]
+    user = url.username or default_user
+    password = url.password or ""
+    port = url.port or default_port
+
+    if source == "mysql":
+        return MysqlLoader(
+            host=url.host,
+            schemas=schemas,
+            port=port,
+            user=user,
+            password=password,
+            database=url.database or "",
+            datasource_name=datasource_name,
+        )
+    if source == "postgres":
+        return PostgresLoader(
+            host=url.host,
+            schemas=schemas,
+            dbname=url.database or "postgres",
+            port=port,
+            user=user,
+            password=password,
+            datasource_name=datasource_name,
+        )
+
+    # trino：路径恰好一段为 catalog，schema 由 --schemas 指定
+    catalog = url.database or ""
+    if not catalog or "/" in catalog:
+        raise ValueError(
+            "trino URL 路径必须恰好为 catalog 一段"
+            "（如 trino://user@host:8080/catalog），schema 由 --schemas 指定"
+        )
+    if password and not url.username:
+        raise ValueError("trino URL 指定 password 时必须同时指定 user")
+    auth = BasicAuthentication(user, password) if password else None
+    return TrinoLoader(
+        host=url.host,
+        catalog=catalog,
+        schemas=schemas,
+        port=port,
+        user=user,
+        http_scheme="https" if url.drivername.lower() == "trino+https" else "http",
+        auth=auth,
+        datasource_name=datasource_name,
+    )
+
+
 def step_meta_export(
     output: Path,
     source: str,
@@ -286,7 +410,8 @@ def step_meta_export(
 ) -> tuple[pd.DataFrame, pd.DataFrame] | None:
     """步骤：导出元数据（Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS）。
 
-    单次运行覆盖一种信息来源（TDS 或一个实际数据源）。
+    单次运行覆盖一种信息来源（TDS 或一个实际数据源：DuckDB / MySQL / PostgreSQL / Trino）。
+    db_path 语义随 source 变化：duckdb 为文件路径，mysql / postgres / trino 为连接 URL。
 
     Returns:
         (df_tables, df_columns) 或 None（出错时）
@@ -315,13 +440,15 @@ def step_meta_export(
         )
         df_datasources = ds_loader.Datasource
     else:
+        label = SOURCE_LABELS.get(source, source)
+        db_desc = "文件路径" if source == "duckdb" else "连接 URL"
         if not db_path:
-            print("错误: DuckDB 模式需要指定 --db 路径", file=sys.stderr)
+            print(f"错误: {label} 模式需要指定 --db（{db_desc}）", file=sys.stderr)
             return None
         if not datasource_name:
-            print("错误: DuckDB 模式需要指定 --datasource", file=sys.stderr)
+            print(f"错误: {label} 模式需要指定 --datasource", file=sys.stderr)
             return None
-        print("从 DuckDB 读取元数据...")
+        print(f"从 {label} 读取元数据...")
         declared = None
         if datasource_file:
             try:
@@ -336,11 +463,17 @@ def step_meta_export(
                 print(f"❌ 无法加载数据源声明文件: {e}", file=sys.stderr)
                 return None
         ds_def = make_datasource_def(
-            datasource_name, "duckdb", schemas or [], declared
+            datasource_name, source, schemas or [], declared
         )
-        duck_loader = DuckDBLoader(db_path, schemas or [], datasource_name)
-        df_tables = duck_loader.PhysicalTable
-        df_columns = duck_loader.Col
+        try:
+            loader = _build_metadata_loader(
+                source, db_path, schemas or [], datasource_name
+            )
+        except ValueError as e:
+            print(f"❌ {e}", file=sys.stderr)
+            return None
+        df_tables = loader.PhysicalTable
+        df_columns = loader.Col
         df_tables, df_columns = filter_frames(
             df_tables, df_columns, ds_def.matches_table
         )
@@ -667,7 +800,7 @@ def step_metric_export(
 
 
 def cmd_meta(args: argparse.Namespace) -> None:
-    """meta meta — 导入 TDS/DuckDB 元数据（Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS）"""
+    """meta meta — 导入元数据（TDS/DuckDB/MySQL/PostgreSQL/Trino，Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS）"""
     source = args.source
     db_path = args.db or ""
     schemas = [s.strip() for s in args.schemas.split(",")] if args.schemas else []
@@ -691,21 +824,25 @@ def cmd_meta(args: argparse.Namespace) -> None:
             print(f"❌ TDS 模式需要指定: {', '.join(missing)}", file=sys.stderr)
             sys.exit(1)
     else:
-        # DuckDB 过滤由 CLI --schemas 执行：省略会静默导出 0 张表
+        # 非 TDS 模式过滤由 CLI --schemas 执行：省略会静默导出 0 张表
+        label = SOURCE_LABELS.get(source, source)
+        db_desc = "文件路径" if source == "duckdb" else "连接 URL"
         if not db_path:
-            print("❌ DuckDB 模式需要指定 --db", file=sys.stderr)
+            print(f"❌ {label} 模式需要指定 --db（{db_desc}）", file=sys.stderr)
             sys.exit(1)
         if not datasource_name:
-            print("❌ DuckDB 模式需要指定 --datasource", file=sys.stderr)
+            print(f"❌ {label} 模式需要指定 --datasource", file=sys.stderr)
             sys.exit(1)
         if not schemas:
+            hint = SCHEMA_HINTS.get(source)
+            tail = f"；{hint}" if hint else ""
             print(
-                "❌ 需要指定 --schemas（源库 schema 名，逗号分隔；"
-                "DuckDB 文件默认 schema 为 main）",
+                f"❌ 需要指定 --schemas（源库 schema 名，逗号分隔{tail}）",
                 file=sys.stderr,
             )
-            print(f"\n📖 {db_path} 中可导入的 schema:", file=sys.stderr)
-            print(f"   {_describe_duckdb_schemas(db_path)}", file=sys.stderr)
+            if source == "duckdb":
+                print(f"\n📖 {db_path} 中可导入的 schema:", file=sys.stderr)
+                print(f"   {_describe_duckdb_schemas(db_path)}", file=sys.stderr)
             sys.exit(1)
 
     result = step_meta_export(
@@ -930,21 +1067,28 @@ def meta():
     # meta meta — 元数据导入
     p_meta = sub.add_parser(
         "meta",
-        help="导入 TDS/DuckDB 元数据（Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS）",
+        help="导入 TDS/DuckDB/MySQL/PostgreSQL/Trino 元数据（Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS）",
     )
     p_meta.add_argument(
-        "--source", choices=["tds", "duckdb"], required=True, help="信息来源"
+        "--source",
+        choices=["tds", "duckdb", "mysql", "postgres", "trino"],
+        required=True,
+        help="信息来源",
     )
-    p_meta.add_argument("--db", type=str, help="DuckDB 数据库文件路径")
+    p_meta.add_argument(
+        "--db",
+        type=str,
+        help="数据源位置：duckdb 为文件路径；mysql/postgres/trino 为连接 URL（如 mysql://user:pass@host:3306/db）",
+    )
     p_meta.add_argument(
         "--schemas",
         type=str,
-        help="要导出的 schema 列表，逗号分隔（DuckDB 模式必填；文件默认 schema 为 main）",
+        help="要导出的 schema 列表，逗号分隔（非 TDS 模式必填；DuckDB 文件默认 schema 为 main）",
     )
     p_meta.add_argument(
         "--datasource",
         type=str,
-        help="数据源名（DuckDB 模式必填，生成 Datasource 节点与 OWNS 归属）",
+        help="数据源名（非 TDS 模式必填，生成 Datasource 节点与 OWNS 归属）",
     )
     p_meta.add_argument(
         "--datasources-file",

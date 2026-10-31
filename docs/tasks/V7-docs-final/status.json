@@ -1,0 +1,14 @@
+{
+  "task": "V7",
+  "status": "done",
+  "summary": "文档整合与收尾核验完成：P2-b 修复 docs/specs/README.md Packaging 行失效链接（../../install.md → ../install.md，仓库根无 install.md 已证实）；P2 修复 install.md 示例路径语义两处（cp 步骤加注 assets 已在 <skills-root>/govio/assets 时跳过并以绝对路径为源，meta graph --output 统一为 ./output 并注明目录须已存在的前置条件，与 cmd_graph 退出行为核对一致）；收尾核验 V2~V6 回写：roadmap 补记打包测试/真实库集成测试并勾选已完成迁入项、修正 assets 默认目录过时描述，install.md 补 URL scheme 归一说明，越界 1 行小修 metadata.md（unsigned/zerofill 剥离语义）与 design.md §4.4（package-lock.json 排除）；全量验证 ruff 通过、pytest 303 passed 18 skipped（integration 默认 skip）",
+  "files": [
+    "docs/specs/README.md",
+    "docs/install.md",
+    "docs/roadmap.md",
+    "docs/specs/metadata.md",
+    "docs/tasks/T1-distribution-design/design.md",
+    "docs/tasks/V7-docs-final/progress.md",
+    "docs/tasks/V7-docs-final/status.json"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "task": "T1",
+  "status": "done",
+  "summary": "完成 pi.agent 扩展包与 DeepSeek Harness 插件两种分发形态的调研与设计：research.md（机制调研+来源证据）与 design.md（目录结构/文件清单/打包脚本接口/安装升级卸载流程/注册契约）已就绪，T2/T3 可直接照做",
+  "files": [
+    "docs/tasks/T1-distribution-design/research.md",
+    "docs/tasks/T1-distribution-design/design.md",
+    "docs/tasks/T1-distribution-design/progress.md",
+    "docs/tasks/T1-distribution-design/status.json"
+  ]
+}

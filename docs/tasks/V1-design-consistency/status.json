@@ -1,0 +1,11 @@
+{
+  "task": "V1",
+  "status": "done",
+  "summary": "完成 T1 设计-实现-文档三方一致性核验：23 项核验表全部落定（打包产物结构/skills 接线/govio_cli+govio_query 注册契约/assets 契约/安装升级卸载流程均一致；pi git 子目录源与 R2 assets 更新两处 T1 已知缺口在 packaging/pi/README.md、docs/install.md、design.md、research.md 如实保留）；以实现为准修正 design.md 23 处漂移（脚本/目录命名、pi manifest 定稿、打包脚本接口、devDependencies、§7 测试交付缺口标注、§8 风险注记）与 research.md 4 处注记；未改代码与 install.md",
+  "files": [
+    "docs/tasks/T1-distribution-design/design.md",
+    "docs/tasks/T1-distribution-design/research.md",
+    "docs/tasks/V1-design-consistency/progress.md",
+    "docs/tasks/V1-design-consistency/status.json"
+  ]
+}

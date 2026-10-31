@@ -1,0 +1,11 @@
+{
+  "task": "V2",
+  "status": "done",
+  "summary": "修复第 2 轮评审两项发现：P2-d 在 packaging/pi/extensions/govio-tools.ts 补 aborted 预检（照搬 deepseek 范式，预 abort 信号立即终止子进程而非跑满超时）；P2 为 scripts/package_pi_extension.py 新建 8 个自动化测试（版本注入、排除规则、重复执行幂等、产物自检失败路径，tmp_path/monkeypatch 不依赖网络）。pytest 8 passed、ruff 通过、node TS 语法通过、打包脚本连跑两次自检通过且产物逐文件哈希一致",
+  "files": [
+    "packaging/pi/extensions/govio-tools.ts",
+    "tests/test_package_pi_extension.py",
+    "docs/tasks/V2-pi-fixes/progress.md",
+    "docs/tasks/V2-pi-fixes/status.json"
+  ]
+}

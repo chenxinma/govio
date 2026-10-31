@@ -1,5 +1,9 @@
 # Roadmap
 
+> 定位：govio 是**无 LLM、可插拔任意 Agent Runtime 的数据治理 skill + CLI**。
+> 本路线图按 T7 架构审视（[docs/tasks/T7-architecture-roadmap/design.md](tasks/T7-architecture-roadmap/design.md)）
+> 重排：先做工程精简与边界收敛（Phase 3），再做功能扩展（Phase 4/5）。
+
 ## Phase 1: 结构定义层 ✅ 已完成
 
 ### 元数据知识图谱
@@ -8,8 +12,10 @@
 **已完成：**
 - [x] 实现 `TDSLoader` 从 TDS（KunDB/MySQL 元数据库）读取表/字段/标准
 - [x] 实现 `DuckDBLoader` 从 DuckDB 读取表/字段元数据
-- [x] 实现 `TrinoLoader` 从 Trino 读取表/字段元数据
-- [x] 实现 `DatasourceLoader` 从 datasource.json 读取数据源声明（JSON Schema 校验，取代原 Excel 应用清单），图模型增加 Datasource 归属（Datasource 节点 + OWNS 边）
+- [x] 实现 `MysqlLoader` 从 MySQL `information_schema` 读取表/字段元数据
+- [x] 实现 `PostgresLoader` 从 PostgreSQL `information_schema` + `pg_catalog` 读取表/字段元数据
+- [x] 实现 `TrinoLoader` 从 Trino `SHOW TABLES` / `SHOW COLUMNS` 读取表/字段元数据（并接入 CLI）
+- [x] 实现 `AppInfoLoader` 从 Excel 读取应用清单
 - [x] 实现 `StandardLoader` 读取数据标准与贯标关系
 - [x] 实现 `RelationshipLoader` 从 JSON 读取表间关系
 - [x] 实现 `MetricLoader` 从 JSON 读取指标/维度定义，生成血缘边
@@ -25,13 +31,12 @@
 **目标：** 提供交互式 CLI 覆盖元数据管理全流程。
 
 **已完成：**
-- [x] `govio-cli onboard` 初始化向导（图后端选择 + 数据源配置）
+- [x] `govio-cli onboard` 初始化向导（图后端选择 + 数据源配置，含非交互式增删数据源）
 - [x] `govio-cli meta` 完整同步管线（元数据 → CSV → 图库 → assets）
-- [x] `govio-cli meta` 分步子命令（`meta`/`std`/`compliance`/`rel`/`metric`/`schema`/`graph`/`import-schema`），已重构为 CLI-only 独立子命令（原 `meta sync` / `meta config` / `app` 已移除）
-- [x] `govio-cli meta recommend` 数据标准推荐（schema 范围由 `--datasource` 解析）
-- [x] `govio-cli meta schema` 输出标准 JSON Schema（metric/relationship/datasource）
-- [x] `govio-cli meta import-schema` 从已配置 DuckDB 数据源一键导入（元数据 + 图库 + assets）
-- [x] `govio-cli query` 知识图谱查询（Cypher / Python 自适应）
+- [x] `govio-cli meta` 分步子命令（`meta`/`app`/`rel`/`std`/`compliance`/`metric`/`graph`），已重构为 CLI-only 独立子命令（原 `meta sync` / `meta config` 交互式入口已移除）
+- [x] `govio-cli meta meta --source` 多数据源接入：duckdb / mysql / postgres / trino（`--db` 为连接 URL，解析为各 Loader 构造参数）
+- [x] `govio-cli meta recommend` 数据标准推荐
+- [x] `govio-cli query` 知识图谱查询（Cypher / Python 自适应，结果落 UTF-8 JSONL 文件）
 - [x] `govio-cli backend` 查看当前图后端
 - [x] `govio-cli -V` 版本查看
 - [x] 配置文件格式重构（嵌套 YAML，自动迁移旧格式）
@@ -50,7 +55,7 @@
 - [x] `govio-cli observe release` 释放 DataFrame
 - [x] `govio-cli sql build` 指标 SQL 组装（从 JSON 规格生成标准 SQL）
 - [x] DataFrameStore 内存存储管理
-- [x] DatabaseManager 统一连接管理（MySQL / DuckDB）
+- [x] DatabaseManager 统一连接管理与查询执行（DuckDB / MySQL / PostgreSQL / Trino，SQLAlchemy scheme 归一到统一 `execute_sql` 路径）
 
 ---
 
@@ -65,10 +70,20 @@
 - [x] `govio-query` — 元数据/指标查询（应用、表、字段、指标问数）
 - [x] `govio-observe` — 数据探查与比对（加载、探索、比对、图表）
 - [x] `govio-eda` — EDA 探索性数据分析（4 阶段标准流程）
-- [x] `govio-reconcile` — 多源数据对账分析（跨系统一致性、实体关联覆盖、多维统计画像）
+- [x] `govio-reconcile` — 多源数据对账（5 阶段流程）
 - [x] 指标 Playbook — 单指标 + 维度过滤的标准查询流程
 - [x] 名称映射机制 — `assets/names/` 中文系统名到标准代码映射
 - [x] Skill 与 CLI 命令组对齐重构
+
+### 分发形态
+**目标：** skill + CLI 可插拔任意 Agent Runtime，形态差异收敛在宿主注册面。
+
+**已完成：**
+- [x] 形态 0：`govio-skills.zip` + `uv tool install govio`（通用基线，适用 Codex / Claude Code 等）
+- [x] 形态 1：pi.agent 扩展包（`packaging/pi/`，注册 `govio_cli`/`govio_query` 工具与 `/govio` 诊断命令）
+- [x] 形态 2：DeepSeek Harness bundle 插件（`packaging/deepseek/`，同一工具面契约）
+- [x] 共享注册契约：skills 单一真源、assets 契约（`<skills-root>/govio/assets`）、govio-cli 适配层契约（argv 子进程、子命令白名单、UTF-8、超时/取消）
+- [x] 可重复打包脚本：`package_skills.py`、`scripts/package_pi_extension.py`、`scripts/package_harness_plugin.py`
 
 ### Eval 体系
 **目标：** 将"感觉更好"转化为可量化的回归检测。
@@ -79,7 +94,31 @@
 
 ---
 
-## Phase 3: 可信数据分析（进行中）
+## Phase 3: 工程精简与边界收敛（进行中，下一优先）
+
+**目标：** 执行 T7 架构审视的精简建议（详见 [design.md](tasks/T7-architecture-roadmap/design.md) §6），
+先删冗余、收敛边界，再扩功能。
+
+- [ ] 删除未使用的 `mcp` 依赖（`src/`/`tests/` 无引用）
+- [ ] `_parse_type` 类型解析三份（trino/mysql/postgres loader）收敛为共享实现
+- [ ] 打包排除规则与版本注入收敛到 `scripts/` 共享模块（三支打包脚本复用）
+- [x] `test_package_harness_plugin.py` 从任务目录迁入 `tests/` 常规集（V3 已完成；同轮补齐 `tests/test_package_pi_extension.py`、`tests/test_package_harness_plugin.py` 打包脚本自动化测试）
+- [x] 真实库集成测试固化：`tests/test_real_mysql.py` / `tests/test_real_postgres.py` / `tests/test_real_observe.py`（`@pytest.mark.integration`，默认 skip，`GOVIO_REAL_DB=1` 才执行；用 wslc 容器 mysql:8 / postgres:17 / trino:483 验证，用后 `wslc stop` + `wslc remove` 清理，保证无容器时 `uv run pytest tests/` 全绿）
+- [ ] `cli/meta.py`（1240 行）按子命令域拆文件（切点 `_build_metadata_loader` / 各 `cmd_*`）
+- [ ] `metadata/utility.py` 拆分「导出编排 / 推荐入口」两类职责
+- [ ] `metadata/gen_networkx.py`（CSV→GML）归属迁移到 `graph/`，同步 spec
+- [ ] observe_data 的 tools/core 分层说明补进 docs/specs/observe-data.md
+
+已停止 / 暂缓的路线（T7 复核，如需重启请先讨论）：
+
+- **MCP 托管数据集服务**（design-thoughts.md 方案一）：observe_data 本地受控执行已覆盖单 Agent 场景，无多 Agent 共享消费方，暂缓
+- **Iceberg 文件存储**（方案二）：维持放弃
+- **npm 发布通道**（`@govio/pi-package` / `@dsh-external/govio-tools`）：本地/git 分发已够，待外部需求再启
+- **DSH developer preview 深度适配**：保持薄壳，不做 typed wrapper 扩展
+
+---
+
+## Phase 4: 可信数据分析（下一阶段）
 
 ### SQL 组装增强
 **目标：** 覆盖更复杂的指标查询场景，提升 SQL 生成的准确率和表达力。
@@ -110,16 +149,16 @@
 **目标：** 消除元数据导入流程中的现场变通（目录联接、临时库、手工合并 assets）。
 
 - [x] **assets 输出目录可配置**：`meta graph --assets-dir <path>` 参数已实现，默认 `.agents/skills/govio/assets`
-- [ ] **多份 assets 副本的归并策略**：通过 `--assets-dir` 可指定单一输出目录，消除了多副本问题；但仓库内 `skills/govio/assets` 与应用侧的归并策略仍需用户自行管理
+- [x] **多份 assets 副本的归并策略**：`--assets-dir` 单一输出目录已消解多副本问题（三种分发形态统一落位 `<skills-root>/govio/assets`，见 install.md）
 
-已评估、暂不实现（如需重启请先讨论）：
+已评估、暂不实现（T7 复核：维持停止，如需重启请先讨论）：
 
 - `meta meta --schema-alias main=sales`（改名导入）：0.5.5 要求 `--schemas` 写源库真实 schema，命名不一致时告知并停止；改名会牵动 node_id 稳定性与既有图谱迁移
 - `meta meta --dry-run`（只读探查规模）：目前由空结果守卫在报错时列出可用 schema 代替
 
 ---
 
-## Phase 4: 智能化增强（规划中）
+## Phase 5: 智能化增强（规划中）
 
 ### 自然语言到查询的端到端优化
 **目标：** 减少 Agent 从自然语言到正确查询的步骤数和失败率。
@@ -148,25 +187,29 @@
                              │
                              ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                    Agent（LLM + Skills）                      │
+│            Agent Runtime（LLM + Skills，可插拔）                │
+│  Codex / Claude Code / pi.agent / DeepSeek harness / …        │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
+│  │ govio    │  │govio-meta│  │govio-query│  │govio-eda │    │
+│  │ 路由分发  │  │ 图谱维护  │  │ 元数据查询 │  │ EDA 分析 │    │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘    │
+│       │             │             │             │            │
+│       ▼             ▼             ▼             ▼            │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  govio(路由) · govio-meta · govio-query              │   │
-│  │  govio-observe · govio-eda · govio-reconcile         │   │
-│  └──────────────────────┬───────────────────────────────┘   │
-│                         ▼                                   │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │              govio-cli（命令行工具）                    │   │
-│  │  onboard · meta · query · observe · sql · backend    │   │
+│  │        分发壳层（薄壳：注册 + govio-cli 子进程转发）      │   │
+│  │  skills.zip+uv tool · pi 扩展 · DeepSeek Harness 插件  │   │
 │  └──────────────────────────┬───────────────────────────┘   │
 └─────────────────────────────┼───────────────────────────────┘
                               │
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
 ┌──────────────────┐ ┌──────────────┐ ┌──────────────────┐
-│  图数据库后端      │ │  元数据源     │ │  数据源           │
-│  NetworkX (GML)  │ │  TDS (MySQL) │ │  MySQL / DuckDB  │
-│  FalkorDB        │ │  DuckDB      │ │                  │
-│  Ladybug (.lbdb) │ │              │ │                  │
+│  图数据库后端      │ │  元数据源     │ │  数据源（observe） │
+│  NetworkX (GML)  │ │  TDS (KunDB) │ │  MySQL           │
+│  FalkorDB        │ │  DuckDB      │ │  PostgreSQL      │
+│  Ladybug (.lbdb) │ │  MySQL       │ │  Trino           │
+│                  │ │  PostgreSQL  │ │  DuckDB          │
+│                  │ │  Trino       │ │                  │
 └──────────────────┘ └──────────────┘ └──────────────────┘
 ```
 
@@ -177,4 +220,5 @@
 1. **约束优于自由**：Agent 只能沿被治理过的语义路径查数，不能自由发挥
 2. **结构化优于非结构化**：知识存在图谱中而非文档中，让 Agent 搜索路径确定且可审计
 3. **安全边界分离**：Skill 决定操作意图，CLI 决定数据可见性
-4. **Eval 驱动迭代**：每次人工修正转化为测试用例，防止回归
+4. **Runtime 薄壳适配**：分发形态只做工具注册与 govio-cli 转发，不绑定 harness 私有行为
+5. **Eval 驱动迭代**：每次人工修正转化为测试用例，防止回归

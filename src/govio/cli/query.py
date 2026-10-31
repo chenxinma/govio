@@ -7,7 +7,9 @@ import json
 import logging
 import sys
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
+from typing import NoReturn
 
 import pandas as pd
 
@@ -30,6 +32,16 @@ logger = logging.getLogger(__name__)
 
 # 内联阈值：小于等于该行数时 stdout 额外内联一份结果
 INLINE_LIMIT = 50
+
+
+def _fail(message: str) -> NoReturn:
+    """打印错误到 stderr 并以退出码 1 结束进程
+
+    Args:
+        message: 错误信息（自动加 ❌ 前缀）
+    """
+    print(f"❌ {message}", file=sys.stderr)
+    sys.exit(1)
 
 
 def output_result(data, columns: list[str] | None = None):
@@ -55,9 +67,12 @@ def output_result(data, columns: list[str] | None = None):
     if not isinstance(data, list):
         data = [data]
 
-    # to_json 往返统一 NaN→null、Decimal→str，保证 stdout / 文件的 JSON 都合法
+    # to_json 往返统一 NaN→null，保证 stdout / 文件的 JSON 都合法
+    # pandas 会把 Decimal 直接序列化为 float（822 -> 822.0），与「Decimal->str」契约不符，
+    # 故在往返前显式转 str
     # shortcut: RETURN 别名重复时 records 同名键会合并，出现真实需求再处理
     df = pd.DataFrame(data, columns=columns)
+    df = df.map(lambda v: str(v) if isinstance(v, Decimal) else v)
     records = json.loads(
         df.to_json(
             orient="records",
@@ -93,86 +108,106 @@ def cmd_networkx(code: str, gml_path: str):
     """NetworkX 查询处理"""
     gml_file = Path(gml_path)
     if not gml_file.exists():
-        print(f"GML file not found: {gml_file}")
-        sys.exit(1)
+        _fail(f"GML file not found: {gml_file}")
 
-    gf = NetworkXGraph(gml_file) # pyright: ignore[reportArgumentType]
-    g = gf.G
+    try:
+        gf = NetworkXGraph(gml_file) # pyright: ignore[reportArgumentType]
+        g = gf.G
+    except Exception as e:
+        _fail(f"连接图库失败: {e!s}")
 
     logger.info("NetworkX Code: " + code)
 
     local_vars = {"g": g}
-    exec(code, locals=local_vars)
+    try:
+        exec(code, locals=local_vars)
+    except Exception as e:
+        _fail(f"查询执行失败: {e!s}")
     # Python exec 的 result 无列名元信息，由 output_result 按位置键兑底
     output_result(local_vars.get("result"))
 
 
 def cmd_falkordb(cypher: str, host: str = "localhost", port: int = 6379, graph_name: str = "ontology"):
     """FalkorDB 查询处理"""
-    g = FalkorDBGraph(graph=graph_name, host=host, port=port)
-
     if not cypher.upper().startswith("MATCH"):
-        print("Please write a MATCH query.")
-        sys.exit(1)
+        _fail("Please write a MATCH query.")
 
     logger.info("Cypher: " + cypher)
 
-    columns, data = g.query_with_columns(cypher)
+    try:
+        g = FalkorDBGraph(graph=graph_name, host=host, port=port)
+    except Exception as e:
+        _fail(f"连接图库失败: {e!s}")
+
+    try:
+        columns, data = g.query_with_columns(cypher)
+    except Exception as e:
+        _fail(f"查询执行失败: {e!s}")
     output_result(data, columns)
 
 
 def cmd_ladybug(cypher: str, db_path: str):
     """Ladybug 查询处理（Cypher，与 FalkorDB 语法兼容）"""
-    g = LadybugGraph(db_path, read_only=True)
-
     if not cypher.upper().startswith("MATCH"):
-        print("Please write a MATCH query.")
-        sys.exit(1)
+        _fail("Please write a MATCH query.")
 
     logger.info("Cypher: " + cypher)
 
-    columns, data = g.query_with_columns(cypher)
+    try:
+        g = LadybugGraph(db_path, read_only=True)
+    except Exception as e:
+        _fail(f"连接图库失败: {e!s}")
+
+    try:
+        columns, data = g.query_with_columns(cypher)
+    except Exception as e:
+        _fail(f"查询执行失败: {e!s}")
     output_result(data, columns)
 
 
-def query(query_text):
-    """Query CLI 主函数"""
-    
-    config_manager = ConfigManager()
-    if not config_manager.exists():
-        print("配置文件不存在，请先运行 govio-cli onboard")
-        sys.exit(1)
+def query(query_text: str | None):
+    """Query CLI 主函数
 
-    config = config_manager.load()
-    graph = config.get("graph") or {}
-    backend = graph.get("backend")
-    if not backend:
-        print("配置文件缺少 'graph.backend' 字段，请重新运行 govio-cli onboard")
-        sys.exit(1)
+    退出码契约：成功（含空结果）退出 0；失败（参数缺失、配置/后端错误、
+    连接失败、查询执行失败）打印 ❌ 错误到 stderr 并退出 1。
+    """
+    if not query_text or not query_text.strip():
+        _fail("缺少查询语句，请用 -c/--code 指定查询语句")
 
-    if backend == "networkx":
-        gml_path = graph.get("networkx", {}).get("gml_path")
-        if not gml_path:
-            print("配置文件缺少 graph.networkx.gml_path 字段")
-            sys.exit(1)
-        cmd_networkx(query_text, gml_path)
-    elif backend == "falkordb":
-        falkordb_config = graph.get("falkordb", {})
-        cmd_falkordb(
-            query_text,
-            host=falkordb_config.get("host", "localhost"),
-            port=falkordb_config.get("port", 6379),
-            graph_name=falkordb_config.get("graph", "ontology"),
-        )
-    elif backend == "ladybug":
-        ladybug_config = graph.get("ladybug", {})
-        db_path = ladybug_config.get("db_path")
-        if not db_path:
-            print("配置文件缺少 graph.ladybug.db_path 字段")
-            sys.exit(1)
-        cmd_ladybug(query_text, db_path)
-    else:
-        print(f"不支持的 backend: {backend}")
-        sys.exit(1)
+    try:
+        config_manager = ConfigManager()
+        if not config_manager.exists():
+            _fail("配置文件不存在，请先运行 govio-cli onboard")
+
+        config = config_manager.load()
+        graph = config.get("graph") or {}
+        backend = graph.get("backend")
+        if not backend:
+            _fail("配置文件缺少 'graph.backend' 字段，请重新运行 govio-cli onboard")
+
+        if backend == "networkx":
+            gml_path = graph.get("networkx", {}).get("gml_path")
+            if not gml_path:
+                _fail("配置文件缺少 graph.networkx.gml_path 字段")
+            cmd_networkx(query_text, gml_path)
+        elif backend == "falkordb":
+            falkordb_config = graph.get("falkordb", {})
+            cmd_falkordb(
+                query_text,
+                host=falkordb_config.get("host", "localhost"),
+                port=falkordb_config.get("port", 6379),
+                graph_name=falkordb_config.get("graph", "ontology"),
+            )
+        elif backend == "ladybug":
+            ladybug_config = graph.get("ladybug", {})
+            db_path = ladybug_config.get("db_path")
+            if not db_path:
+                _fail("配置文件缺少 graph.ladybug.db_path 字段")
+            cmd_ladybug(query_text, db_path)
+        else:
+            _fail(f"不支持的 backend: {backend}")
+    except Exception as e:
+        # 兜底：未预期异常转简洁错误，避免裸 traceback
+        _fail(f"查询执行失败: {e!s}")
 
 

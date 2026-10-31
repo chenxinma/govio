@@ -111,11 +111,12 @@ onboard() -> None                                    # Interactive wizard entry
 Knowledge graph query interface.
 
 ```python
-query(query_text) -> None    # Dispatches to networkx, falkordb, or ladybug
+query(query_text: str | None) -> None    # Dispatches to networkx, falkordb, or ladybug
 cmd_networkx(code, gml_path) -> None     # exec() with graph in scope, expects `result` var
 cmd_falkordb(cypher, host, port, graph_name) -> None  # Validates MATCH, executes Cypher
 cmd_ladybug(cypher, db_path, ...) -> None  # Validates MATCH, executes Cypher via Ladybug
 output_result(data, columns=None) -> None  # 输出契约见下
+_fail(message: str) -> NoReturn          # ❌ 前缀错误到 stderr + sys.exit(1)
 ```
 
 **输出契约**（`output_result`）：
@@ -129,6 +130,19 @@ output_result(data, columns=None) -> None  # 输出契约见下
 Logs to `~/.govio/logs/query_{YYYYMMDD}.log`.
 
 **Security**: `cmd_networkx` uses `exec()` for arbitrary Python code execution.
+
+### 退出码契约（query）
+
+| 场景 | 退出码 | 输出 |
+|---|---|---|
+| 查询成功（有结果） | 0 | stdout 结果摘要（+内联）+ 结果文件 |
+| 查询成功但结果为空 | 0 | `Data not found.`（空结果不是失败） |
+| 查询执行失败（Python 语法错、Cypher 错、后端异常） | 1 | `❌ 查询执行失败: ...` → stderr |
+| 连接失败（图库/数据库不可达、GML 不存在） | 1 | `❌ 连接图库失败: ...` / `❌ GML file not found: ...` → stderr |
+| 参数缺失或非法（缺 `-c`、非 MATCH 查询、配置缺字段） | 1 | `❌ ...` → stderr |
+| 未预期异常（兜底） | 1 | `❌ 查询执行失败: ...` → stderr（不裸奔 traceback） |
+
+约定：成功 0 / 失败非 0（统一 1）。错误信息一律 `❌` 前缀走 stderr，stdout 不混入错误。
 
 ---
 
@@ -144,7 +158,7 @@ Exception: `import-schema` reads `config.datasources` to resolve the DuckDB file
 
 | Subcommand | Description |
 |---|---|
-| `meta meta` | Import TDS/DuckDB metadata (Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS) |
+| `meta meta` | Import TDS/DuckDB/MySQL/PostgreSQL/Trino metadata (Datasource, PhysicalTable, Col, HAS_COLUMN, OWNS) |
 | `meta std` | Import data standards (Standard nodes, TDS only) |
 | `meta compliance` | Export existing standard-column associations (COMPLIES_WITH, TDS only; `--datasources-file` 必填) |
 | `meta rel` | Import table relationships (RELATES_TO edges) |
@@ -158,14 +172,28 @@ Recommended order: `meta` → `std` → `compliance` → `rel` → `metric` → 
 
 ### Data Sources
 
-`meta meta` 覆盖单一信息来源（`--source`）；TDS 与 DuckDB 分多次运行，通过 CSV merge 合流：
+`meta meta` 覆盖单一信息来源（`--source`）；各来源分多次运行，通过 CSV merge 合流：
 
 - **tds**: 从元数据库读取；`--kundb`、`--workspace-uuid`、`--datasources-file` 必填
   - 抽取范围 = 声明文件各条目 `filter.schemas` 的并集（**不接受 `--schemas`**）
   - 一次运行可产出多个 `Datasource` 节点（声明文件全部条目）及其 `OWNS` 归属
-- **duckdb**: 从本地 DuckDB 文件读取；`--db`、`--schemas`、`--datasource` 必填
+- **duckdb / mysql / postgres / trino**: 从一个实际数据源读取；`--db`、`--schemas`、`--datasource` 必填
   - 过滤由 CLI `--schemas` 执行；一次运行对应一个 `Datasource`
-  - 提供 `--datasources-file` 时按声明校验/合并定义，否则按 CLI 参数自动声明（`source_type=duckdb`，`filter.schemas` 取 `--schemas`）
+  - 提供 `--datasources-file` 时按声明校验/合并定义，否则按 CLI 参数自动声明（`source_type` 取 `--source`，`filter.schemas` 取 `--schemas`）
+
+`--db` 语义随 `--source` 变化：
+
+| `--source` | `--db` 格式 | 示例 |
+|---|---|---|
+| `duckdb` | DuckDB 文件路径 | `./data/local.duckdb` |
+| `mysql` | 连接 URL（scheme: `mysql` / `mysql+pymysql`） | `mysql://user:pass@host:3306/db` |
+| `postgres` | 连接 URL（scheme: `postgres` / `postgresql` / `postgresql+psycopg`） | `postgresql://user:pass@host:5432/db` |
+| `trino` | 连接 URL（scheme: `trino` / `trino+http` / `trino+https`） | `trino://user:pass@host:8080/catalog` |
+
+- URL 省略 user / port 时取各加载器默认值（mysql: `root`/3306，postgres: `postgres`/5432，trino: `trino`/8080）
+- trino URL 路径必须恰好为 catalog 一段，schema 由 `--schemas` 指定（路径带第二段或缺 catalog 报错）
+- trino URL 含密码时构造 `trino.auth.BasicAuthentication`（此时必须同时给 user）；`trino+https` 表示 HTTPS 连接
+- URL scheme 与 `--source` 不匹配、URL 非法或缺 host 时，`step_meta_export` 打印 `❌ ...` 并返回 None（`cmd_meta` 退出码 1）
 
 DuckDB 文件通常只有单个用户 schema `main`；缺省 `--schemas` 会静默导出 0 张表，因此必须显式指定。
 
@@ -184,13 +212,16 @@ _describe_duckdb_schemas(db_path) -> str   # read-only "main(5 张表)、..." hi
 
 ### Schema Discovery on Missing `--schemas`
 
-When `--schemas` is omitted in duckdb mode, `cmd_meta` prints an error message **plus** context-dependent hints:
+When `--schemas` is omitted in 非 TDS 模式, `cmd_meta` prints an error message **plus** source-dependent hints:
 
 | Source | Hint |
 |---|---|
-| `duckdb` with `--db` | Lists importable schemas via `DuckDBLoader.list_schemas()` (e.g. `📖 test.duckdb 中可导入的 schema: main(5 张表)`) |
-| `duckdb` without `--db` | `提示: 请指定 --db 参数后可列出可用 schema` |
-| `tds` | `提示: TDS 模式下抽取范围由 --datasources-file 的 filter.schemas 决定` |
+| any non-tds | 错误行含来源相关 schema 语义（`duckdb`: `DuckDB 文件默认 schema 为 main`；`mysql`: `MySQL 中 schema 即库名`；`postgres`: `PostgreSQL 常用 schema 为 public`；`trino`: `Trino schema 为 catalog 下的命名空间`） |
+| `duckdb` with `--db` | 额外列出可导入 schema（`DuckDBLoader.list_schemas()`，如 `📖 test.duckdb 中可导入的 schema: main(5 张表)`） |
+| `mysql` / `postgres` / `trino` | 无额外提示（无法离线列举 schema，按错误行的 schema 语义重试） |
+| `tds` | 不接受 `--schemas`（抽取范围由 `--datasources-file` 的 `filter.schemas` 决定） |
+
+`--db` / `--datasource` 缺省时先于 `--schemas` 报错（`❌ {Source} 模式需要指定 --db（文件路径/连接 URL）` / `❌ {Source} 模式需要指定 --datasource`）。
 
 ### Step Functions
 
@@ -202,6 +233,16 @@ step_std_export(output, kundb, workspace_uuid) -> None
 step_compliance_export(output, kundb, workspace_uuid) -> None
 step_rel_export(output, relationship_file) -> None
 step_metric_export(output, metric_file) -> bool
+```
+
+`step_meta_export` 的 `db_path` 即 `--db` 值：duckdb 为文件路径，mysql / postgres / trino 为连接 URL。
+
+加载器构造由 `_build_metadata_loader` 完成（`src/govio/cli/meta.py`）：
+
+```python
+_build_metadata_loader(source, db, schemas, datasource_name) -> MetadataLoader
+# duckdb -> DuckDBLoader；mysql -> MysqlLoader；postgres -> PostgresLoader；trino -> TrinoLoader
+# URL scheme 与 --source 不匹配、URL 非法或缺 host 时抛 ValueError
 ```
 
 ### CSV Merge Helpers
@@ -357,3 +398,14 @@ Supports `bar` and `line` chart types. Includes Chinese font fallback chain.
 ### `load -o` Output
 
 When `-o/--output` is specified, writes DataFrame content as JSON (records orientation, UTF-8, indented) to the specified file path.
+
+### 退出码契约（observe load）
+
+| 场景 | 退出码 | 输出 |
+|---|---|---|
+| 加载成功（含 0 行结果） | 0 | stdout 结果 JSON（`success: true`） |
+| SQL 错误 / 连接失败 / 内存加载失败 | 1 | stdout 保留结果 JSON（`success: false, error: ...`，契约向后兼容）+ `❌ {error}` → stderr |
+| 参数缺失（如 `--datasource` 未设且非 `--memory`） | 1 | `❌ ...` → stderr |
+| 未预期异常（observe 入口兜底） | 1 | `❌ 执行失败: ...` → stderr（不裸奔 traceback） |
+
+约定与 query 一致：成功 0 / 失败非 0；`load` 失败时 stdout 的 result JSON 契约不变，仅额外向 stderr 输出 `❌` 错误并以退出码 1 结束。其余 observe 子命令（compare/explore/chart 等）本次不在退出码改造范围内。
