@@ -1,9 +1,14 @@
 """PostgresLoader 单元测试 — monkeypatch 打桩 psycopg 连接，不依赖真实数据库。"""
 
+import pandas as pd
 import pytest
 
 from govio.metadata.database import MetadataLoader
-from govio.metadata.postgres_loader import PostgresLoader, _parse_type
+from govio.metadata.postgres_loader import (
+    _COLUMNS_SQL,
+    PostgresLoader,
+    _parse_type,
+)
 
 _TABLE_COLUMNS = [
     "full_table_name",
@@ -90,27 +95,32 @@ class FakePostgresConn:
     def __init__(self, tables, columns):
         self.tables = tables
         self.columns = columns
+        self.closed = False
 
     def cursor(self):
         return FakeCursor(self)
 
     def close(self):
-        pass
+        self.closed = True
 
 
 def make_loader(monkeypatch, tables, columns, **kwargs):
     """构造一个打桩了 psycopg.connect 的 PostgresLoader。"""
     captured: dict = {}
+    conns: list[FakePostgresConn] = []
 
     def _connect(**kw):
         captured.update(kw)
-        return FakePostgresConn(tables, columns)
+        conn = FakePostgresConn(tables, columns)
+        conns.append(conn)
+        return conn
 
     monkeypatch.setattr("govio.metadata.postgres_loader.psycopg.connect", _connect)
     kwargs.setdefault("schemas", ["test_schema"])
     kwargs.setdefault("dbname", "test_db")
     loader = PostgresLoader(host="localhost", **kwargs)
     loader._captured = captured  # type: ignore[attr-defined]
+    loader._conns = conns  # type: ignore[attr-defined]
     return loader
 
 
@@ -332,6 +342,61 @@ def test_postgres_loader_connect_kwargs(monkeypatch, fake_dataset):
     }
 
 
+def test_postgres_loader_closes_connection(monkeypatch, fake_dataset):
+    """查询后连接被关闭。"""
+    tables, columns = fake_dataset
+    loader = make_loader(monkeypatch, tables, columns)
+    loader.load_tables()
+    assert loader._conns[0].closed  # type: ignore[attr-defined]
+
+
+def test_postgres_loader_mixed_null_attrs_nan(monkeypatch):
+    """P1-1 回归：混合列 + NULL 属性经 DataFrame 推断成 NaN 后仍正确解析。
+
+    同批结果里 varchar(19) / numeric(10,2) 与无长度 varchar、无精度 numeric
+    并存时，character_maximum_length / numeric_* 列被 pandas 推断为 float64，
+    SQL NULL 变 NaN（既非 None 也非 falsy），修复前 int(NaN) 抛 ValueError。
+    """
+    tables = {"s": [("t", None)]}
+    columns = {
+        "s": [
+            ("t", "v1", "character varying", 19, None, None, 1, None),
+            ("t", "v2", "character varying", None, None, None, 2, None),
+            ("t", "n1", "numeric", None, 10, 2, 3, "金额"),
+            ("t", "n2", "numeric", None, None, None, 4, None),
+        ],
+    }
+    loader = make_loader(monkeypatch, tables, columns, schemas=["s"])
+    # 复现前提：混合列被推断为 float64，NULL 属性是 NaN 而非 Python None
+    raw = loader._fetch(_COLUMNS_SQL, (["s"],))
+    assert raw["character_maximum_length"].dtype == "float64"
+    assert pd.isna(
+        raw.loc[raw["column_name"] == "v2", "character_maximum_length"].iloc[0]
+    )
+    assert pd.isna(raw.loc[raw["column_name"] == "n2", "numeric_precision"].iloc[0])
+    df = loader.load_columns().set_index("column_name")
+    assert (df.loc["v1", "size"], df.loc["v1", "precision"], df.loc["v1", "scale"]) == (
+        19,
+        0,
+        0,
+    )
+    assert (df.loc["v2", "size"], df.loc["v2", "precision"], df.loc["v2", "scale"]) == (
+        0,
+        0,
+        0,
+    )
+    assert (df.loc["n1", "size"], df.loc["n1", "precision"], df.loc["n1", "scale"]) == (
+        0,
+        10,
+        2,
+    )
+    assert (df.loc["n2", "size"], df.loc["n2", "precision"], df.loc["n2", "scale"]) == (
+        0,
+        0,
+        0,
+    )
+
+
 @pytest.mark.parametrize(
     "data_type, char_len, num_prec, num_scale, expected",
     [
@@ -340,10 +405,15 @@ def test_postgres_loader_connect_kwargs(monkeypatch, fake_dataset):
         ("bit", 1, None, None, (1, 0, 0)),
         ("bit varying", 8, None, None, (8, 0, 0)),
         ("character varying", None, None, None, (0, 0, 0)),
+        ("character varying", float("nan"), None, None, (0, 0, 0)),
+        ("bit varying", float("nan"), None, None, (0, 0, 0)),
         ("text", None, None, None, (0, 0, 0)),
         ("numeric", None, 10, 2, (0, 10, 2)),
         ("numeric", None, 10, 0, (0, 10, 0)),
         ("numeric", None, None, None, (0, 0, 0)),
+        ("numeric", None, float("nan"), float("nan"), (0, 0, 0)),
+        ("numeric", None, 10, float("nan"), (0, 10, 0)),
+        ("decimal", None, float("nan"), 2, (0, 0, 2)),
         ("decimal", None, 12, 4, (0, 12, 4)),
         ("bigint", None, 64, 0, (0, 0, 0)),
         ("integer", None, 32, 0, (0, 0, 0)),

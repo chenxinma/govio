@@ -71,9 +71,9 @@ _COLUMN_OUTPUT_COLUMNS = [
 
 def _parse_type(
     data_type: str,
-    character_maximum_length: int | None,
-    numeric_precision: int | None,
-    numeric_scale: int | None,
+    character_maximum_length: float | None,
+    numeric_precision: float | None,
+    numeric_scale: float | None,
 ) -> tuple[int, int, int]:
     """从 information_schema 类型属性解析 (size, precision, scale)。
 
@@ -82,22 +82,28 @@ def _parse_type(
     其他类型 -> (0, 0, 0)。整型的 numeric_precision 是位宽语义，
     不计入 precision，与 TrinoLoader 的 decimal 语义保持一致。
 
+    判空统一用 pd.notna：_fetch 经 pd.DataFrame 承接整型+NULL 混合列时
+    会被推断为 float64，SQL NULL 变成 NaN（既非 None 也非 falsy），
+    用 ``is not None`` 或真值判断会在 int(NaN) 上抛 ValueError。
+
     Args:
         data_type: information_schema.columns.data_type 类型名
-        character_maximum_length: 字符/位串最大长度（无则为 None）
-        numeric_precision: 数值精度（无则为 None）
-        numeric_scale: 数值小数位（无则为 None）
+        character_maximum_length: 字符/位串最大长度（无则为 None/NaN）
+        numeric_precision: 数值精度（无则为 None/NaN）
+        numeric_scale: 数值小数位（无则为 None/NaN）
 
     Returns:
         tuple[int, int, int]: (size, precision, scale)
     """
     base = data_type.strip().lower()
     if base in ("character varying", "character", "bit", "bit varying"):
-        length = int(character_maximum_length) if character_maximum_length else 0
+        length = (
+            int(character_maximum_length) if pd.notna(character_maximum_length) else 0
+        )
         return length, 0, 0
     if base in ("numeric", "decimal"):
-        precision = int(numeric_precision) if numeric_precision is not None else 0
-        scale = int(numeric_scale) if numeric_scale is not None else 0
+        precision = int(numeric_precision) if pd.notna(numeric_precision) else 0
+        scale = int(numeric_scale) if pd.notna(numeric_scale) else 0
         return 0, precision, scale
     return 0, 0, 0
 
