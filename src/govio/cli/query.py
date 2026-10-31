@@ -35,11 +35,15 @@ INLINE_LIMIT = 50
 
 
 def _fail(message: str) -> NoReturn:
-    """打印错误到 stderr 并以退出码 1 结束进程
+    """打印错误并以退出码 1 结束进程
+
+    报错文案双路输出：原文（无前缀）落 stdout，供脚本/回归契约直接读取；
+    同时以 ❌ 前缀落 stderr（stdout 不出现 ❌ 前缀行）。
 
     Args:
-        message: 错误信息（自动加 ❌ 前缀）
+        message: 错误信息（stderr 侧自动加 ❌ 前缀）
     """
+    print(message)
     print(f"❌ {message}", file=sys.stderr)
     sys.exit(1)
 
@@ -141,6 +145,9 @@ def cmd_falkordb(cypher: str, host: str = "localhost", port: int = 6379, graph_n
 
     try:
         columns, data = g.query_with_columns(cypher)
+    except ValueError:
+        # 非法 Cypher 由图层包装为 ValueError，按当前契约向上传播
+        raise
     except Exception as e:
         _fail(f"查询执行失败: {e!s}")
     output_result(data, columns)
@@ -160,6 +167,9 @@ def cmd_ladybug(cypher: str, db_path: str):
 
     try:
         columns, data = g.query_with_columns(cypher)
+    except ValueError:
+        # 非法 Cypher 由图层包装为 ValueError，按当前契约向上传播
+        raise
     except Exception as e:
         _fail(f"查询执行失败: {e!s}")
     output_result(data, columns)
@@ -169,7 +179,8 @@ def query(query_text: str | None):
     """Query CLI 主函数
 
     退出码契约：成功（含空结果）退出 0；失败（参数缺失、配置/后端错误、
-    连接失败、查询执行失败）打印 ❌ 错误到 stderr 并退出 1。
+    连接失败、查询执行失败）报错文案双路输出（stdout 原文 + stderr ❌）并退出 1。
+    例外：非法 Cypher 由图层包装为 ValueError，按当前契约向上传播（不转 SystemExit）。
     """
     if not query_text or not query_text.strip():
         _fail("缺少查询语句，请用 -c/--code 指定查询语句")
@@ -206,6 +217,9 @@ def query(query_text: str | None):
             cmd_ladybug(query_text, db_path)
         else:
             _fail(f"不支持的 backend: {backend}")
+    except ValueError:
+        # 图层包装的非法 Cypher ValueError 按当前契约向上传播（不转 SystemExit）
+        raise
     except Exception as e:
         # 兜底：未预期异常转简洁错误，避免裸 traceback
         _fail(f"查询执行失败: {e!s}")

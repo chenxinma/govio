@@ -1,0 +1,7 @@
+:ID(Col),column,column_name,name,comment,full_table_name,data_type,dtype,size,precision,scale,order_no
+co00000001,local.main.customers.customer_id,customer_id,customer_id,客户编号,local.main.customers,integer,INTEGER,4,10,0,1
+co00000002,local.main.customers.name,name,name,客户姓名,local.main.customers,varchar,VARCHAR,64,0,0,2
+co00000003,local.main.customers.region,region,region,地区,local.main.customers,varchar,VARCHAR,32,0,0,3
+co00000004,local.main.orders.order_id,order_id,order_id,订单编号,local.main.orders,integer,INTEGER,4,10,0,1
+co00000005,local.main.orders.amount,amount,amount,订单金额,local.main.orders,double,DOUBLE,8,0,0,2
+co00000006,local.main.orders.status,status,status,订单状态,local.main.orders,varchar,VARCHAR,16,0,0,3

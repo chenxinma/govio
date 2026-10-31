@@ -10,7 +10,7 @@ wheels/
 # Virtual environments
 .venv
 logs/
-data/
+/data/
 .env
 uv.lock
 

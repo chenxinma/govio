@@ -116,7 +116,7 @@ cmd_networkx(code, gml_path) -> None     # exec() with graph in scope, expects `
 cmd_falkordb(cypher, host, port, graph_name) -> None  # Validates MATCH, executes Cypher
 cmd_ladybug(cypher, db_path, ...) -> None  # Validates MATCH, executes Cypher via Ladybug
 output_result(data, columns=None) -> None  # 输出契约见下
-_fail(message: str) -> NoReturn          # ❌ 前缀错误到 stderr + sys.exit(1)
+_fail(message: str) -> NoReturn          # 报错文案双路输出（stdout 原文 + stderr ❌）+ sys.exit(1)
 ```
 
 **输出契约**（`output_result`）：
@@ -137,12 +137,13 @@ Logs to `~/.govio/logs/query_{YYYYMMDD}.log`.
 |---|---|---|
 | 查询成功（有结果） | 0 | stdout 结果摘要（+内联）+ 结果文件 |
 | 查询成功但结果为空 | 0 | `Data not found.`（空结果不是失败） |
-| 查询执行失败（Python 语法错、Cypher 错、后端异常） | 1 | `❌ 查询执行失败: ...` → stderr |
-| 连接失败（图库/数据库不可达、GML 不存在） | 1 | `❌ 连接图库失败: ...` / `❌ GML file not found: ...` → stderr |
-| 参数缺失或非法（缺 `-c`、非 MATCH 查询、配置缺字段） | 1 | `❌ ...` → stderr |
-| 未预期异常（兜底） | 1 | `❌ 查询执行失败: ...` → stderr（不裸奔 traceback） |
+| 查询执行失败（Python exec 语法错/运行错） | 1 | `查询执行失败: ...`（stdout 原文）+ `❌ ...` → stderr |
+| Cypher 语句非法/执行错误（falkordb/ladybug） | 异常传播 | `query_with_columns()` 包装为 `ValueError: Generated Cypher Statement is not valid...` 向上传播（当前契约，不转 SystemExit） |
+| 连接失败（图库/数据库不可达、GML 不存在） | 1 | `连接图库失败: ...` / `GML file not found: ...`（stdout 原文）+ `❌ ...` → stderr |
+| 参数缺失或非法（缺 `-c`、非 MATCH 查询、配置缺字段） | 1 | 报错文案（stdout 原文）+ `❌ ...` → stderr |
+| 未预期异常（兜底） | 1 | `查询执行失败: ...`（stdout 原文）+ `❌ ...` → stderr（不裸奔 traceback；ValueError 除外，见上行） |
 
-约定：成功 0 / 失败非 0（统一 1）。错误信息一律 `❌` 前缀走 stderr，stdout 不混入错误。
+约定：成功 0 / 失败非 0（统一 1）。报错文案双路输出——原文（无前缀）落 stdout 供脚本/回归契约直接读取，`❌ ` 前缀行走 stderr；stdout 不出现 `❌` 前缀。
 
 ---
 
