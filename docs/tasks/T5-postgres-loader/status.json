@@ -1,0 +1,12 @@
+{
+  "task": "T5",
+  "status": "done",
+  "summary": "新增 PostgresLoader（information_schema + pg_catalog 注释），DataFrame 列结构与 Trino/DuckDB 加载器一致，27 个打桩单测全部通过，psycopg[binary] 已入 pyproject",
+  "files": [
+    "src/govio/metadata/postgres_loader.py",
+    "tests/test_postgres_loader.py",
+    "pyproject.toml",
+    "docs/tasks/T5-postgres-loader/progress.md",
+    "docs/tasks/T5-postgres-loader/status.json"
+  ]
+}
