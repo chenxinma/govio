@@ -209,8 +209,8 @@ or `{"success": false, "error": "..."}` on failure.
 |---|---|---|
 | `list_dataframes(store)` | `ObserveStore` | `{'dataframes': [{name, rows, columns, column_info}]}` |
 | `list_datasources(db_manager)` | `DatabaseManager` | `[{name, driver, url}]` |
-| `load_dataframe(store, db_manager, datasource, name, sql)` | mixed | `{'success': True/False, ...}` |
-| `load_from_memory(store, name, sql)` | `ObserveStore` | Loads all registered DataFrames into in-memory DuckDB, executes SQL, stores result. Returns `{'success': True/False, ..., source_tables: [...]}` |
+| `load_dataframe(store, db_manager, datasource, name, sql)` | mixed | `{'success': True/False, ...}`；失败时 `{'success': False, 'error': ...}`（ValueError 原文透传，其余包 `SQL 执行错误: ...`） |
+| `load_from_memory(store, name, sql)` | `ObserveStore` | Loads all registered DataFrames into in-memory DuckDB, executes SQL, stores result. Returns `{'success': True/False, ..., source_tables: [...]}`；失败时 `{'success': False, 'error': ...}` |
 | `release_dataframe(store, name)` | `ObserveStore` | `{'success': True/False}` |
 | `release_all_dataframes(store)` | `ObserveStore` | `{'success': True, 'released': [], 'count': int}` |
 | `visualize_relations(relations)` | list or dict | `{'success': True, 'nodes': [], 'edges': []}` |
@@ -228,3 +228,7 @@ or `{"success": false, "error": "..."}` on failure.
 | `explore` | `--dataframes` (optional) | Explore relationships |
 | `visualize-relations` | `--relations-file FILE` | Generate visualization |
 | `chart` | `--name`, `--type bar\|line`, `--x`, `--y`, `-o OUTPUT` | Generate PNG chart |
+
+### load 失败语义与退出码
+
+`load_dataframe` / `load_from_memory` 保持 `{'success': True/False, 'error': ...}` 契约不变（向后兼容）。`observe load` 在 `success: false` 时：stdout 仍输出完整结果 JSON（含 `error` 字段），另向 stderr 打印 `❌ {error}` 并以退出码 1 结束；成功（含 0 行结果）退出 0。详见 `docs/specs/cli.md`「退出码契约（observe load）」。

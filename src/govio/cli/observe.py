@@ -66,7 +66,8 @@ def cmd_load(
         result = load_from_memory(store=store, name=name, sql=sql)
     else:
         if datasource is None:
-            raise ValueError("datasource not setted.")
+            print("❌ datasource not setted.", file=sys.stderr)
+            sys.exit(1)
         
         db_manager = get_db_manager(config)
         result = load_dataframe(
@@ -84,6 +85,12 @@ def cmd_load(
             result["output_file"] = output
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
+    if not result.get("success"):
+        # 加载失败：保留 stdout 的 result JSON（success/error 契约），
+        # 错误信息同步到 stderr 并以退出码 1 结束
+        print(f"❌ {result.get('error', '加载失败')}", file=sys.stderr)
+        sys.exit(1)
 
 
 def cmd_list(config: dict) -> None:
@@ -339,33 +346,37 @@ def observe():
             file=sys.stderr,
         )
 
-    # 分发子命令
-    match args.action:
-        case "load":
-            cmd_load(
-                config,
-                args.name,
-                args.sql,
-                datasource=args.datasource,
-                memory=args.memory,
-                output=getattr(args, "output", None),
-            )
-        case "release":
-            if not args.all and not args.name:
-                print("请指定 --name 或 --all")
-                sys.exit(1)
-            cmd_release(config, args.name, args.all)
-        case "compare":
-            cols = [c.strip() for c in args.join_columns.split(",")]
-            cmd_compare(config, args.source, args.target, cols)
-        case "explore":
-            cmd_explore(config, args.dataframes or None)
-        case "visualize-relations":
-            cmd_visualize(config, args.relations_file)
-        case "chart":
-            cmd_chart(config, args.name, args.type, args.x, args.y, args.output)
-        case "info":
-            cmd_info(config, args)
+    # 分发子命令（失败统一转 ❌ stderr + 退出码 1，避免裸 traceback）
+    try:
+        match args.action:
+            case "load":
+                cmd_load(
+                    config,
+                    args.name,
+                    args.sql,
+                    datasource=args.datasource,
+                    memory=args.memory,
+                    output=getattr(args, "output", None),
+                )
+            case "release":
+                if not args.all and not args.name:
+                    print("❌ 请指定 --name 或 --all", file=sys.stderr)
+                    sys.exit(1)
+                cmd_release(config, args.name, args.all)
+            case "compare":
+                cols = [c.strip() for c in args.join_columns.split(",")]
+                cmd_compare(config, args.source, args.target, cols)
+            case "explore":
+                cmd_explore(config, args.dataframes or None)
+            case "visualize-relations":
+                cmd_visualize(config, args.relations_file)
+            case "chart":
+                cmd_chart(config, args.name, args.type, args.x, args.y, args.output)
+            case "info":
+                cmd_info(config, args)
+    except Exception as e:
+        print(f"❌ 执行失败: {e!s}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

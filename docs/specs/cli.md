@@ -111,11 +111,12 @@ onboard() -> None                                    # Interactive wizard entry
 Knowledge graph query interface.
 
 ```python
-query(query_text) -> None    # Dispatches to networkx, falkordb, or ladybug
+query(query_text: str | None) -> None    # Dispatches to networkx, falkordb, or ladybug
 cmd_networkx(code, gml_path) -> None     # exec() with graph in scope, expects `result` var
 cmd_falkordb(cypher, host, port, graph_name) -> None  # Validates MATCH, executes Cypher
 cmd_ladybug(cypher, db_path, ...) -> None  # Validates MATCH, executes Cypher via Ladybug
 output_result(data, columns=None) -> None  # 输出契约见下
+_fail(message: str) -> NoReturn          # ❌ 前缀错误到 stderr + sys.exit(1)
 ```
 
 **输出契约**（`output_result`）：
@@ -129,6 +130,19 @@ output_result(data, columns=None) -> None  # 输出契约见下
 Logs to `~/.govio/logs/query_{YYYYMMDD}.log`.
 
 **Security**: `cmd_networkx` uses `exec()` for arbitrary Python code execution.
+
+### 退出码契约（query）
+
+| 场景 | 退出码 | 输出 |
+|---|---|---|
+| 查询成功（有结果） | 0 | stdout 结果摘要（+内联）+ 结果文件 |
+| 查询成功但结果为空 | 0 | `Data not found.`（空结果不是失败） |
+| 查询执行失败（Python 语法错、Cypher 错、后端异常） | 1 | `❌ 查询执行失败: ...` → stderr |
+| 连接失败（图库/数据库不可达、GML 不存在） | 1 | `❌ 连接图库失败: ...` / `❌ GML file not found: ...` → stderr |
+| 参数缺失或非法（缺 `-c`、非 MATCH 查询、配置缺字段） | 1 | `❌ ...` → stderr |
+| 未预期异常（兜底） | 1 | `❌ 查询执行失败: ...` → stderr（不裸奔 traceback） |
+
+约定：成功 0 / 失败非 0（统一 1）。错误信息一律 `❌` 前缀走 stderr，stdout 不混入错误。
 
 ---
 
@@ -384,3 +398,14 @@ Supports `bar` and `line` chart types. Includes Chinese font fallback chain.
 ### `load -o` Output
 
 When `-o/--output` is specified, writes DataFrame content as JSON (records orientation, UTF-8, indented) to the specified file path.
+
+### 退出码契约（observe load）
+
+| 场景 | 退出码 | 输出 |
+|---|---|---|
+| 加载成功（含 0 行结果） | 0 | stdout 结果 JSON（`success: true`） |
+| SQL 错误 / 连接失败 / 内存加载失败 | 1 | stdout 保留结果 JSON（`success: false, error: ...`，契约向后兼容）+ `❌ {error}` → stderr |
+| 参数缺失（如 `--datasource` 未设且非 `--memory`） | 1 | `❌ ...` → stderr |
+| 未预期异常（observe 入口兜底） | 1 | `❌ 执行失败: ...` → stderr（不裸奔 traceback） |
+
+约定与 query 一致：成功 0 / 失败非 0；`load` 失败时 stdout 的 result JSON 契约不变，仅额外向 stderr 输出 `❌` 错误并以退出码 1 结束。其余 observe 子命令（compare/explore/chart 等）本次不在退出码改造范围内。

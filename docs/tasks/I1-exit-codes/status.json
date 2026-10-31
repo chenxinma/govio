@@ -1,0 +1,14 @@
+{
+  "task": "I1",
+  "status": "done",
+  "summary": "query 与 observe load 失败路径统一 ❌ stderr + 退出码 1（执行失败/连接失败/参数非法/兜底异常），成功含空结果退出 0；observe load 保留 stdout success/error JSON 契约；新增 14 个打桩退出码用例全过（317 passed, 18 skipped），ruff 通过，cli.md 与 observe-data.md 退出码语义已同步",
+  "files": [
+    "src/govio/cli/query.py",
+    "src/govio/cli/observe.py",
+    "tests/test_exit_codes.py",
+    "docs/specs/cli.md",
+    "docs/specs/observe-data.md",
+    "docs/tasks/I1-exit-codes/progress.md",
+    "docs/tasks/I1-exit-codes/status.json"
+  ]
+}

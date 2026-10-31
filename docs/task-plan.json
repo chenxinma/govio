@@ -11,9 +11,34 @@
     "ownershipRule": "任务只允许修改 ownFiles 列出的文件/目录；共享文档（docs/install.md、docs/roadmap.md、docs/specs/README.md）由 T7 统一整合"
   },
   "batches": [
-    { "batch": 1, "tasks": ["T1", "T4", "T5"], "parallel": true, "note": "调研设计与两个独立 loader 无文件交集，可并行" },
-    { "batch": 2, "tasks": ["T2", "T3", "T6"], "parallel": true, "note": "T2/T3 依赖 T1 设计；T6 依赖 T4/T5 loader；三者文件所有权互不重叠" },
-    { "batch": 3, "tasks": ["T7"], "parallel": false, "note": "全量整合、路线图修正与最终验证，依赖前两批全部完成" }
+    {
+      "batch": 1,
+      "tasks": [
+        "T1",
+        "T4",
+        "T5"
+      ],
+      "parallel": true,
+      "note": "调研设计与两个独立 loader 无文件交集，可并行"
+    },
+    {
+      "batch": 2,
+      "tasks": [
+        "T2",
+        "T3",
+        "T6"
+      ],
+      "parallel": true,
+      "note": "T2/T3 依赖 T1 设计；T6 依赖 T4/T5 loader；三者文件所有权互不重叠"
+    },
+    {
+      "batch": 3,
+      "tasks": [
+        "T7"
+      ],
+      "parallel": false,
+      "note": "全量整合、路线图修正与最终验证，依赖前两批全部完成"
+    }
   ],
   "tasks": [
     {
@@ -31,7 +56,9 @@
         "docs/tasks/T1-distribution-design/status.json"
       ],
       "completedAt": "2026-10-30",
-      "ownFiles": ["docs/tasks/T1-distribution-design/"],
+      "ownFiles": [
+        "docs/tasks/T1-distribution-design/"
+      ],
       "deliverables": [
         "docs/tasks/T1-distribution-design/research.md（调研笔记：pi 扩展机制 + DeepSeek harness 插件机制，附来源）",
         "docs/tasks/T1-distribution-design/design.md（两种分发形态的打包/安装/注册契约设计，可直接指导 T2/T3 实现）"
@@ -41,7 +68,9 @@
       "id": "T2",
       "dir": "docs/tasks/T2-pi-extension",
       "title": "pi.agent 扩展分发实现",
-      "dependsOn": ["T1"],
+      "dependsOn": [
+        "T1"
+      ],
       "batch": 2,
       "status": "done",
       "summary": "按 T1 设计实现 govio 的 pi.agent 扩展分发形态：packaging/pi 包源（pi manifest + govio_cli/govio_query 工具与 /govio 诊断命令扩展 + skills 接线）、可重复执行的 scripts/package_pi_extension.py 打包脚本（产出 dist/govio-pi-0.6.0/ 并内置产物结构自检），并经 pi 1.4.0 实测验证工具注册、调用链、子命令白名单与 govio_query 全链路",
@@ -57,7 +86,11 @@
         "dist/govio-pi-0.6.0/"
       ],
       "completedAt": "2026-10-30",
-      "ownFiles": ["packaging/pi/", "scripts/package_pi_extension.py", "docs/tasks/T2-pi-extension/"],
+      "ownFiles": [
+        "packaging/pi/",
+        "scripts/package_pi_extension.py",
+        "docs/tasks/T2-pi-extension/"
+      ],
       "deliverables": [
         "按 T1 设计实现 pi 扩展打包产物与打包脚本",
         "打包脚本可重复执行并自测产物结构",
@@ -68,7 +101,9 @@
       "id": "T3",
       "dir": "docs/tasks/T3-harness-plugin",
       "title": "DeepSeek harness 插件分发实现",
-      "dependsOn": ["T1"],
+      "dependsOn": [
+        "T1"
+      ],
       "batch": 2,
       "status": "done",
       "summary": "按 T1 设计实现 DeepSeek Harness bundle 插件分发：packaging/deepseek/（manifest/cordis.patch.yml/TS 插件 govio_cli+govio_query/README）+ scripts/package_harness_plugin.py（可重复打包、版本注入、--skills-bundle、产物结构自检），TS 以真实 @deepseek-ai/* 类型 strict 编译零错误，8 个测试与打包链路全部通过",
@@ -87,7 +122,11 @@
         "docs/tasks/T3-harness-plugin/status.json"
       ],
       "completedAt": "2026-10-30",
-      "ownFiles": ["packaging/deepseek/", "scripts/package_harness_plugin.py", "docs/tasks/T3-harness-plugin/"],
+      "ownFiles": [
+        "packaging/deepseek/",
+        "scripts/package_harness_plugin.py",
+        "docs/tasks/T3-harness-plugin/"
+      ],
       "deliverables": [
         "按 T1 设计实现 DeepSeek harness 插件打包产物与打包脚本",
         "打包脚本可重复执行并自测产物结构",
@@ -110,7 +149,11 @@
         "docs/tasks/T4-mysql-loader/spec-draft.md"
       ],
       "completedAt": "2026-10-30",
-      "ownFiles": ["src/govio/metadata/mysql_loader.py", "tests/test_mysql_loader.py", "docs/tasks/T4-mysql-loader/"],
+      "ownFiles": [
+        "src/govio/metadata/mysql_loader.py",
+        "tests/test_mysql_loader.py",
+        "docs/tasks/T4-mysql-loader/"
+      ],
       "deliverables": [
         "MysqlLoader(MetadataLoader)：表/列元数据（含注释、size/precision/scale 解析），输出列结构与 DuckDBLoader/TrinoLoader 一致，data_entity_type=MYSQL_TABLE/MYSQL_COLUMN",
         "tests/test_mysql_loader.py（monkeypatch 打桩连接，风格参照 tests/test_trino_loader.py）",
@@ -133,7 +176,12 @@
         "docs/tasks/T5-postgres-loader/status.json"
       ],
       "completedAt": "2026-10-30",
-      "ownFiles": ["src/govio/metadata/postgres_loader.py", "tests/test_postgres_loader.py", "pyproject.toml", "docs/tasks/T5-postgres-loader/"],
+      "ownFiles": [
+        "src/govio/metadata/postgres_loader.py",
+        "tests/test_postgres_loader.py",
+        "pyproject.toml",
+        "docs/tasks/T5-postgres-loader/"
+      ],
       "deliverables": [
         "PostgresLoader(MetadataLoader)：表/列元数据（含列注释 col_description、类型解析），输出列结构一致，data_entity_type=POSTGRES_TABLE/POSTGRES_COLUMN",
         "pyproject.toml 增加 postgresql 驱动依赖（倾向 psycopg[binary]，记录选型理由）",
@@ -144,7 +192,10 @@
       "id": "T6",
       "dir": "docs/tasks/T6-query-cli-integration",
       "title": "多数据库 CLI 接入与查询执行统一（mysql/postgresql/trino）",
-      "dependsOn": ["T4", "T5"],
+      "dependsOn": [
+        "T4",
+        "T5"
+      ],
       "batch": 2,
       "status": "done",
       "summary": "meta meta --source 接入 mysql/postgres/trino（--db 为连接 URL，解析为各 Loader 构造参数），observe 查询执行经 SQLAlchemy scheme 归一统一支持 mysql/postgresql/trino，新增 32 个打桩用例全过，三份 spec 已同步",
@@ -182,7 +233,13 @@
       "id": "T7",
       "dir": "docs/tasks/T7-architecture-roadmap",
       "title": "架构审视、功能精简设计与路线图修正",
-      "dependsOn": ["T2", "T3", "T4", "T5", "T6"],
+      "dependsOn": [
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6"
+      ],
       "batch": 3,
       "status": "done",
       "summary": "架构审视（design.md：模块边界/三形态统一抽象/精简与停线路线）、roadmap 重排纳入多数据源与三种分发形态、install.md 整合三形态安装升级文档、specs/README 同步依赖与模块，并修复 query.py Decimal 序列化既有失败后全量验证通过（ruff 全过、pytest 270 passed/1 skipped）",
@@ -234,8 +291,13 @@
           "docs/tasks/V1-design-consistency/status.json"
         ],
         "completedAt": "2026-10-30",
-        "ownFiles": ["docs/tasks/T1-distribution-design/", "docs/tasks/V1-design-consistency/"],
-        "findings": ["设计 vs packaging/pi、packaging/deepseek、scripts、docs/install.md 漂移核验；T1 已知缺口标注完整性"]
+        "ownFiles": [
+          "docs/tasks/T1-distribution-design/",
+          "docs/tasks/V1-design-consistency/"
+        ],
+        "findings": [
+          "设计 vs packaging/pi、packaging/deepseek、scripts、docs/install.md 漂移核验；T1 已知缺口标注完整性"
+        ]
       },
       {
         "id": "V2",
@@ -251,8 +313,16 @@
           "docs/tasks/V2-pi-fixes/status.json"
         ],
         "completedAt": "2026-10-30",
-        "ownFiles": ["packaging/pi/", "scripts/package_pi_extension.py", "tests/test_package_pi_extension.py", "docs/tasks/V2-pi-fixes/"],
-        "findings": ["P2-d govio-tools.ts:44 取消信号缺 aborted 预检", "P2-6 scripts/package_pi_extension.py 无自动化测试"]
+        "ownFiles": [
+          "packaging/pi/",
+          "scripts/package_pi_extension.py",
+          "tests/test_package_pi_extension.py",
+          "docs/tasks/V2-pi-fixes/"
+        ],
+        "findings": [
+          "P2-d govio-tools.ts:44 取消信号缺 aborted 预检",
+          "P2-6 scripts/package_pi_extension.py 无自动化测试"
+        ]
       },
       {
         "id": "V3",
@@ -271,8 +341,18 @@
           "docs/tasks/V3-dsh-fixes/status.json"
         ],
         "completedAt": "2026-10-30",
-        "ownFiles": ["tests/test_package_harness_plugin.py", "docs/tasks/T3-harness-plugin/test_package_harness_plugin.py", ".gitignore", "scripts/package_harness_plugin.py", "packaging/deepseek/README.md", "docs/tasks/V3-dsh-fixes/"],
-        "findings": ["P1-2 测试在 docs/tasks 下，打包脚本零常规覆盖", "P2-e npm install 生成物未忽略且 package-lock.json 会混入 dist"]
+        "ownFiles": [
+          "tests/test_package_harness_plugin.py",
+          "docs/tasks/T3-harness-plugin/test_package_harness_plugin.py",
+          ".gitignore",
+          "scripts/package_harness_plugin.py",
+          "packaging/deepseek/README.md",
+          "docs/tasks/V3-dsh-fixes/"
+        ],
+        "findings": [
+          "P1-2 测试在 docs/tasks 下，打包脚本零常规覆盖",
+          "P2-e npm install 生成物未忽略且 package-lock.json 会混入 dist"
+        ]
       },
       {
         "id": "V4",
@@ -289,8 +369,17 @@
           "docs/tasks/V4-mysql-verify/status.json"
         ],
         "completedAt": "2026-10-30",
-        "ownFiles": ["src/govio/metadata/mysql_loader.py", "tests/test_mysql_loader.py", "tests/test_real_mysql.py", "docs/tasks/V4-mysql-verify/"],
-        "findings": ["P2-f _TYPE_RE 不剥 unsigned/zerofill 后缀", "P2-4 BASE TABLE 过滤无测试保护", "真实库验证 + 删列后 order_no 语义核验（recommender.py:344 首列契约）"]
+        "ownFiles": [
+          "src/govio/metadata/mysql_loader.py",
+          "tests/test_mysql_loader.py",
+          "tests/test_real_mysql.py",
+          "docs/tasks/V4-mysql-verify/"
+        ],
+        "findings": [
+          "P2-f _TYPE_RE 不剥 unsigned/zerofill 后缀",
+          "P2-4 BASE TABLE 过滤无测试保护",
+          "真实库验证 + 删列后 order_no 语义核验（recommender.py:344 首列契约）"
+        ]
       },
       {
         "id": "V5",
@@ -307,8 +396,17 @@
           "docs/tasks/V5-postgres-verify/status.json"
         ],
         "completedAt": "2026-10-30",
-        "ownFiles": ["src/govio/metadata/postgres_loader.py", "tests/test_postgres_loader.py", "tests/test_real_postgres.py", "docs/tasks/V5-postgres-verify/"],
-        "findings": ["P1-1 _parse_type 对 pandas NaN 崩溃（近必现）", "P2-5 连接关闭无断言", "真实库验证（必须覆盖 P1-1 复现场景）"]
+        "ownFiles": [
+          "src/govio/metadata/postgres_loader.py",
+          "tests/test_postgres_loader.py",
+          "tests/test_real_postgres.py",
+          "docs/tasks/V5-postgres-verify/"
+        ],
+        "findings": [
+          "P1-1 _parse_type 对 pandas NaN 崩溃（近必现）",
+          "P2-5 连接关闭无断言",
+          "真实库验证（必须覆盖 P1-1 复现场景）"
+        ]
       },
       {
         "id": "V6",
@@ -329,8 +427,22 @@
           "docs/tasks/V6-cli-verify/status.json"
         ],
         "completedAt": "2026-10-30",
-        "ownFiles": ["src/govio/observe_data/core/database.py", "src/govio/cli/meta.py", "tests/test_meta_cli_sources.py", "tests/test_observe_multi_db.py", "tests/test_real_observe.py", "docs/specs/config.md", "docs/specs/observe-data.md", "docs/tasks/V6-cli-verify/"],
-        "findings": ["P2-a trino+http 归一缺失 + scheme 大小写不对称", "P2-g 断言强度不足", "P2-c config.md Datasource URL Formats 表未同步（AGENTS 合规）", "真实库端到端（observe execute_sql + meta meta --source 三库）"]
+        "ownFiles": [
+          "src/govio/observe_data/core/database.py",
+          "src/govio/cli/meta.py",
+          "tests/test_meta_cli_sources.py",
+          "tests/test_observe_multi_db.py",
+          "tests/test_real_observe.py",
+          "docs/specs/config.md",
+          "docs/specs/observe-data.md",
+          "docs/tasks/V6-cli-verify/"
+        ],
+        "findings": [
+          "P2-a trino+http 归一缺失 + scheme 大小写不对称",
+          "P2-g 断言强度不足",
+          "P2-c config.md Datasource URL Formats 表未同步（AGENTS 合规）",
+          "真实库端到端（observe execute_sql + meta meta --source 三库）"
+        ]
       },
       {
         "id": "V7",
@@ -349,8 +461,53 @@
           "docs/tasks/V7-docs-final/status.json"
         ],
         "completedAt": "2026-10-30",
-        "ownFiles": ["docs/install.md", "docs/roadmap.md", "docs/specs/README.md", "docs/tasks/V7-docs-final/"],
-        "findings": ["P2-b specs/README.md 相对链接失效", "P2-12 install.md 示例路径语义两处", "V2-V6 修复回写核对 + 全量 pytest/ruff"]
+        "ownFiles": [
+          "docs/install.md",
+          "docs/roadmap.md",
+          "docs/specs/README.md",
+          "docs/tasks/V7-docs-final/"
+        ],
+        "findings": [
+          "P2-b specs/README.md 相对链接失效",
+          "P2-12 install.md 示例路径语义两处",
+          "V2-V6 修复回写核对 + 全量 pytest/ruff"
+        ]
+      }
+    ]
+  },
+  "round3": {
+    "goal": "查询失败时 CLI 以非 0 退出码结束，便于下游 agent/脚本识别失败（空结果不是失败）",
+    "execution": "单任务，subagent 实现，父代理验收并回写计划",
+    "tasks": [
+      {
+        "id": "I1",
+        "dir": "docs/tasks/I1-exit-codes",
+        "title": "query / observe load 查询失败返回非 0 退出码",
+        "status": "done",
+        "summary": "query 与 observe load 失败路径统一 ❌ stderr + 退出码 1（执行失败/连接失败/参数非法/兜底异常），成功含空结果退出 0；observe load 保留 stdout success/error JSON 契约；新增 14 个打桩退出码用例全过（317 passed, 18 skipped），ruff 通过，cli.md 与 observe-data.md 退出码语义已同步",
+        "files": [
+          "src/govio/cli/query.py",
+          "src/govio/cli/observe.py",
+          "tests/test_exit_codes.py",
+          "docs/specs/cli.md",
+          "docs/specs/observe-data.md",
+          "docs/tasks/I1-exit-codes/progress.md",
+          "docs/tasks/I1-exit-codes/status.json"
+        ],
+        "ownFiles": [
+          "src/govio/cli/query.py",
+          "src/govio/cli/observe.py",
+          "src/govio/observe_data/tools/load_dataframe.py",
+          "tests/test_exit_codes.py",
+          "docs/specs/cli.md",
+          "docs/specs/observe-data.md",
+          "docs/tasks/I1-exit-codes/"
+        ],
+        "findings": [
+          "现状：observe load 的 load_dataframe 失败只返回 success:False，cmd_load 未转退出码（进程退出 0）；query.py 执行失败路径退出码不统一",
+          "要求：查询执行失败/连接失败/参数错误 → stderr 报错 + 非 0 退出码；成功但空结果 → 退出码 0"
+        ],
+        "completedAt": "2026-10-30"
       }
     ]
   }
