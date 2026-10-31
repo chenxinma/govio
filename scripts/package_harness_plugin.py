@@ -7,7 +7,7 @@
     dist/govio-dsh-skills/      仅在 --skills-bundle 时生成（6 个 skill 目录副本，排除 assets）
 
 统一排除规则（design.md §4.4）: skills/govio/assets/**、**/__pycache__/**、**/*.pyc、
-.DS_Store；插件源目录额外排除 node_modules/**。每次执行先清理旧产物再重建，可重复执行。
+.DS_Store、package-lock.json；插件源目录额外排除 node_modules/**。每次执行先清理旧产物再重建，可重复执行。
 """
 
 import argparse
@@ -42,7 +42,7 @@ SKILL_DIRS = (
 
 VERSION_PATTERN = re.compile(r"^\d+(\.\d+)*([-.+][0-9A-Za-z.]+)?$")
 EXCLUDED_DIR_NAMES = {"__pycache__", "node_modules"}
-EXCLUDED_FILE_NAMES = {".DS_Store"}
+EXCLUDED_FILE_NAMES = {".DS_Store", "package-lock.json"}
 EXCLUDED_SUFFIXES = {".pyc"}
 
 

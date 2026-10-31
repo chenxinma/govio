@@ -35,6 +35,9 @@ uv run python scripts/package_harness_plugin.py --version 0.6.0 --output dist
 cd packaging/deepseek && npm install && cd ../..
 ```
 
+`npm install` 生成的 `node_modules/` 与 `package-lock.json` 已加入 `.gitignore`，
+且打包脚本统一排除（不会进入 `dist/` 产物）。
+
 ## 安装
 
 ```bash

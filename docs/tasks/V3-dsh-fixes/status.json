@@ -1,0 +1,14 @@
+{
+  "task": "V3",
+  "status": "done",
+  "summary": "修复第 2 轮评审两项发现：P1-2 把 docs/tasks/T3-harness-plugin/test_package_harness_plugin.py（8 用例）迁入 tests/test_package_harness_plugin.py（REPO_ROOT 改 parents[1]，删除原文件），uv run pytest tests/ 常规覆盖且 8 用例全绿（全套 286 passed, 1 skipped）；P2-e .gitignore 新增 packaging/deepseek/node_modules/ 与 package-lock.json 忽略规则，scripts/package_harness_plugin.py 排除集补 package-lock.json（自检复用 is_excluded 自动同步），README 补说明。打包脚本重跑自检通过且产物无 node_modules/lockfile（源目录临时放置生成物验证后已清理），ruff check/format 通过",
+  "files": [
+    "tests/test_package_harness_plugin.py",
+    "docs/tasks/T3-harness-plugin/test_package_harness_plugin.py",
+    ".gitignore",
+    "scripts/package_harness_plugin.py",
+    "packaging/deepseek/README.md",
+    "docs/tasks/V3-dsh-fixes/progress.md",
+    "docs/tasks/V3-dsh-fixes/status.json"
+  ]
+}

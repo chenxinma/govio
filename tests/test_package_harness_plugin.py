@@ -1,7 +1,8 @@
-"""package_harness_plugin.py 的打包与产物自检测试
+"""scripts/package_harness_plugin.py 的打包与产物自检测试
 
-位于 T3 任务目录：tests/ 为共享目录，不在本任务所有权清单内，
-故暂放此处；T7 可将本文件迁入 tests/ 统一管理。
+位于 tests/ 统一目录，随 uv run pytest tests/ 常规覆盖。
+覆盖：版本号校验、统一排除规则、exclude_prefixes、package.json 版本注入、
+产物结构自检、端到端可重复打包。
 """
 
 import importlib.util
@@ -13,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "package_harness_plugin.py"
 PLUGIN_LIB_ENTRY = REPO_ROOT / "packaging" / "deepseek" / "lib" / "index.js"
 
@@ -51,7 +52,7 @@ def test_validate_version_rejects_path_injection(packaging):
 
 
 def test_collect_files_excludes_pycache_pyc_and_ds_store(packaging, tmp_path):
-    """统一排除规则剔除 __pycache__、.pyc、.DS_Store、node_modules"""
+    """统一排除规则剔除 __pycache__、.pyc、.DS_Store、node_modules、package-lock.json"""
     (tmp_path / "keep").mkdir()
     (tmp_path / "keep" / "a.txt").write_text("a", encoding="utf-8")
     (tmp_path / "__pycache__").mkdir()
@@ -60,6 +61,7 @@ def test_collect_files_excludes_pycache_pyc_and_ds_store(packaging, tmp_path):
     (tmp_path / ".DS_Store").write_bytes(b"\x00")
     (tmp_path / "node_modules").mkdir()
     (tmp_path / "node_modules" / "pkg.js").write_text("js", encoding="utf-8")
+    (tmp_path / "package-lock.json").write_text("{}", encoding="utf-8")
 
     files = packaging.collect_files(tmp_path)
 
@@ -150,6 +152,8 @@ def test_build_end_to_end_is_repeatable(tmp_path):
     pkg = json.loads((plugin_dir / "package.json").read_text(encoding="utf-8"))
     assert pkg["version"] == version
     assert pkg["dsh"]["bundle"]["patch"] == "./cordis.patch.yml"
+    assert not (plugin_dir / "node_modules").exists()
+    assert not (plugin_dir / "package-lock.json").exists()
 
     skills_dir = tmp_path / "govio-dsh-skills"
     for skill in (
