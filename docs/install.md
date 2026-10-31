@@ -26,7 +26,7 @@ uv tool install govio
 govio-cli -V
 ```
 
-应输出类似 `govio 0.6.0` 的版本号。
+应输出类似 `govio 0.7.0` 的版本号。
 
 ## 初始化配置
 
@@ -49,7 +49,7 @@ Chocolate 是内置的示例数据集，包含 DuckDB 数据库、表间关系�
 
 ### 1. 下载示例数据
 
-从 [GitHub Releases](https://github.com/chenxinma/govio/releases/download/v0.6.0/chocolate.zip) 下载 `chocolate.zip`，解压到任意目录：
+从 [GitHub Releases](https://github.com/chenxinma/govio/releases/download/v0.7.0/chocolate.zip) 下载 `chocolate.zip`，解压到任意目录：
 
 ```
 /path/to/chocolate/
@@ -120,7 +120,7 @@ Govio 通过 Skills 为 AI Agent 提供数据治理能力。govio 本体不含 L
 
 #### 1. 下载 Skills 定义
 
-从 [GitHub Releases](https://github.com/chenxinma/govio/releases/download/v0.6.0/govio-skills.zip) 下载 `govio-skills.zip`，解压 `skills/` 目录到以下位置之一：
+从 [GitHub Releases](https://github.com/chenxinma/govio/releases/download/v0.7.0/govio-skills.zip) 下载 `govio-skills.zip`，解压 `skills/` 目录到以下位置之一：
 
 | 范围 | 路径 | 说明 |
 |------|------|------|
@@ -167,7 +167,7 @@ Govio 提供 pi.agent 扩展分发包 `@govio/pi-package`：注册 `govio_cli` /
 
 #### 前置条件
 
-- `govio-cli` ≥ 0.6.0 在 PATH（上文「安装 Govio」步骤，验证：`govio-cli -V`）；也可用环境变量 `GOVIO_CLI` 指定可执行文件路径
+- `govio-cli` ≥ 0.7.0 在 PATH（上文「安装 Govio」步骤，验证：`govio-cli -V`）；也可用环境变量 `GOVIO_CLI` 指定可执行文件路径
 - pi（pi-coding-agent）已安装
 
 #### 构建与安装
@@ -178,9 +178,9 @@ uv run scripts/package_pi_extension.py
 # 产物：dist/govio-pi-<version>/（含 skills 副本，已排除 skills/govio/assets 派生数据）
 
 # 安装（三选一）
-pi install ./dist/govio-pi-0.6.0                        # 本地目录
-pi install git:github.com/chenxinma/govio@v0.6.0        # git 源（子目录包支持待实测）
-pi install npm:@govio/pi-package@0.6.0                  # npm 发布后（可选）
+pi install ./dist/govio-pi-0.7.0                        # 本地目录
+pi install git:github.com/chenxinma/govio@v0.7.0        # git 源（子目录包支持待实测）
+pi install npm:@govio/pi-package@0.7.0                  # npm 发布后（可选）
 ```
 
 安装后 `pi list` 确认包已登记；会话内运行 `/govio` 自检（govio-cli 版本 / 图后端 / assets 约定位置）。
@@ -191,7 +191,7 @@ pi install npm:@govio/pi-package@0.6.0                  # npm 发布后（可选
 
 ```bash
 mkdir -p .agents/skills
-cp -r dist/govio-pi-0.6.0/skills/* .agents/skills/    # 目标必须是 .agents/skills/govio/SKILL.md 等 6 个目录
+cp -r dist/govio-pi-0.7.0/skills/* .agents/skills/    # 目标必须是 .agents/skills/govio/SKILL.md 等 6 个目录
 govio-cli meta graph --output ./output --assets-dir .agents/skills/govio/assets
 # 命令打印 assets 绝对路径，请核对等于 <skills-root>/govio/assets
 ```
@@ -236,7 +236,7 @@ Govio 提供 DeepSeek Harness（`dsh`）bundle 插件 `@dsh-external/govio-tools
 
 #### 前置条件
 
-- `govio-cli` ≥ 0.6.0 在 PATH（上文「安装 Govio」步骤，可用 `govio-cli -V` 自检）
+- `govio-cli` ≥ 0.7.0 在 PATH（上文「安装 Govio」步骤，可用 `govio-cli -V` 自检）
 - Node.js ≥ 22（版本线待实测确认）与 `pnpm` 在 PATH（`dsh plugin add` 会把参数转发给 pnpm）
 - 从仓库源码构建还需 TypeScript（`cd packaging/deepseek && npm install`）
 
@@ -254,11 +254,11 @@ uv run python scripts/package_harness_plugin.py --skills-bundle
 #### 2. 安装插件
 
 ```bash
-# 本地目录（开发/内网；Windows 把路径换成 D:\work\gov-io\govio\dist\govio-dsh-0.6.0）
-dsh plugin --profile web add link:/path/to/govio/dist/govio-dsh-0.6.0
+# 本地目录（开发/内网；Windows 把路径换成 D:\work\gov-io\govio\dist\govio-dsh-0.7.0）
+dsh plugin --profile web add link:/path/to/govio/dist/govio-dsh-0.7.0
 
 # npm 发布后（可选）
-dsh plugin --profile web add @dsh-external/govio-tools@0.6.0
+dsh plugin --profile web add @dsh-external/govio-tools@0.7.0
 ```
 
 **bundle 变更需重启对应 profile 才生效**（重启 `dsh web` / `dsh --profile <name>`）。

@@ -1,6 +1,6 @@
 {
   "name": "@govio/pi-package",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Govio 数据治理知识图谱 — Pi 工具与技能包",
   "keywords": ["pi-package"],
   "type": "module",

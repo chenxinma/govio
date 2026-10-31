@@ -12,7 +12,7 @@
 
 ## 前置条件
 
-- `govio-cli` ≥ 0.6.0 在 PATH 中（`uv tool install govio`），可用 `govio-cli -V` 自检
+- `govio-cli` ≥ 0.7.0 在 PATH 中（`uv tool install govio`），可用 `govio-cli -V` 自检
 - Node.js ≥ 22（版本线待实测确认）、`pnpm` 在 PATH（`dsh plugin add` 会把参数转发给 pnpm）
 - 从源码构建还需 TypeScript（见下文；插件包内已含 `lib/` 编译产物时可跳过）
 
@@ -26,7 +26,7 @@ uv run python scripts/package_harness_plugin.py
 uv run python scripts/package_harness_plugin.py --skills-bundle
 
 # 版本号默认取 pyproject.toml 的 project.version，可用 --version 覆盖
-uv run python scripts/package_harness_plugin.py --version 0.6.0 --output dist
+uv run python scripts/package_harness_plugin.py --version 0.7.0 --output dist
 ```
 
 首次从源码编译（`lib/` 缺失时脚本会自动调 `npx tsc -p packaging/deepseek`）：
@@ -42,12 +42,12 @@ cd packaging/deepseek && npm install && cd ../..
 
 ```bash
 # 本地目录（开发/内网，推荐从构建产物安装）
-dsh plugin --profile web add link:/path/to/govio/dist/govio-dsh-0.6.0
+dsh plugin --profile web add link:/path/to/govio/dist/govio-dsh-0.7.0
 # 或直接从源码目录安装（该目录含 lib/ 编译产物时）
 dsh plugin --profile web add link:/path/to/govio/packaging/deepseek
 
 # npm 发布后（可选）
-dsh plugin --profile web add @dsh-external/govio-tools@0.6.0
+dsh plugin --profile web add @dsh-external/govio-tools@0.7.0
 ```
 
 **bundle 变更需重启对应 profile 才生效**（重启 `dsh web` / `dsh --profile <name>`）。

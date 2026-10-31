@@ -1,6 +1,6 @@
 {
   "name": "@dsh-external/govio-tools",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Govio 数据治理工具 — DeepSeek Harness 插件",
   "type": "module",
   "main": "lib/index.js",

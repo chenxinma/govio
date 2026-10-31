@@ -67,13 +67,13 @@ def validate_version(version: str) -> str:
     """校验版本号（限定为安全的文件名字符，避免路径注入）
 
     Args:
-        version: 版本号，如 0.6.0
+        version: 版本号，如 0.7.0
 
     Returns:
         str: 校验通过的版本号
     """
     if not VERSION_PATTERN.fullmatch(version):
-        raise ValueError(f"非法版本号: {version!r}（示例: 0.6.0）")
+        raise ValueError(f"非法版本号: {version!r}（示例: 0.7.0）")
     return version
 
 

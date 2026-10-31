@@ -10,7 +10,7 @@ Govio 数据治理知识图谱的 [pi.agent](https://pi.dev) 扩展分发包（�
 
 ## 前置条件
 
-1. **govio-cli ≥ 0.6.0 在 PATH**（与本包版本 x.y 对应 govio-cli ≥ x.y）：
+1. **govio-cli ≥ 0.7.0 在 PATH**（与本包版本 x.y 对应 govio-cli ≥ x.y）：
 
    ```bash
    uv tool install govio
@@ -32,7 +32,7 @@ uv run scripts/package_pi_extension.py
 产物为 `dist/govio-pi-<version>/`（含 skills 副本，已排除 `skills/govio/assets` 派生数据），可直接安装：
 
 ```bash
-pi install ./dist/govio-pi-0.6.0
+pi install ./dist/govio-pi-0.7.0
 ```
 
 也可以直接从源码目录取包（skills 副本由打包脚本同步生成）：
@@ -46,13 +46,13 @@ pi install ./packaging/pi
 
 ```bash
 # 本地目录（开发/内网）
-pi install ./dist/govio-pi-0.6.0
+pi install ./dist/govio-pi-0.7.0
 
 # git 源（发布 tag 后；子目录包如不被 git 源支持，见下方「待实测」）
-pi install git:github.com/chenxinma/govio@v0.6.0
+pi install git:github.com/chenxinma/govio@v0.7.0
 
 # npm 发布后（可选）
-pi install npm:@govio/pi-package@0.6.0
+pi install npm:@govio/pi-package@0.7.0
 ```
 
 安装后用 `pi list` 确认包已登记，在 pi 会话中运行 `/govio` 验证扩展加载与 govio-cli 可用性。
@@ -66,9 +66,9 @@ assets 是派生数据，由 `govio-cli meta graph` 生成，永远落在 `<skil
 ```bash
 mkdir -p .agents/skills
 # POSIX
-cp -r dist/govio-pi-0.6.0/skills/* .agents/skills/
+cp -r dist/govio-pi-0.7.0/skills/* .agents/skills/
 # Windows (PowerShell)
-Copy-Item -Recurse dist\govio-pi-0.6.0\skills\* .agents\skills\
+Copy-Item -Recurse dist\govio-pi-0.7.0\skills\* .agents\skills\
 
 # 生成 assets（默认即 .agents/skills/govio/assets，命令会打印绝对路径，请核对）
 govio-cli meta graph --output ./data/meta --assets-dir .agents/skills/govio/assets
