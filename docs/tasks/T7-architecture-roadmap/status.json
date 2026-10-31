@@ -1,0 +1,14 @@
+{
+  "task": "T7",
+  "status": "done",
+  "summary": "架构审视（design.md：模块边界/三形态统一抽象/精简与停线路线）、roadmap 重排纳入多数据源与三种分发形态、install.md 整合三形态安装升级文档、specs/README 同步依赖与模块，并修复 query.py Decimal 序列化既有失败后全量验证通过（ruff 全过、pytest 270 passed/1 skipped）",
+  "files": [
+    "docs/tasks/T7-architecture-roadmap/design.md",
+    "docs/roadmap.md",
+    "docs/install.md",
+    "docs/specs/README.md",
+    "src/govio/cli/query.py",
+    "docs/tasks/T7-architecture-roadmap/progress.md",
+    "docs/tasks/T7-architecture-roadmap/status.json"
+  ]
+}
