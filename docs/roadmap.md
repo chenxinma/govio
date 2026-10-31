@@ -101,7 +101,8 @@
 - [ ] 删除未使用的 `mcp` 依赖（`src/`/`tests/` 无引用）
 - [ ] `_parse_type` 类型解析三份（trino/mysql/postgres loader）收敛为共享实现
 - [ ] 打包排除规则与版本注入收敛到 `scripts/` 共享模块（三支打包脚本复用）
-- [ ] `test_package_harness_plugin.py` 从任务目录迁入 `tests/` 常规集
+- [x] `test_package_harness_plugin.py` 从任务目录迁入 `tests/` 常规集（V3 已完成；同轮补齐 `tests/test_package_pi_extension.py`、`tests/test_package_harness_plugin.py` 打包脚本自动化测试）
+- [x] 真实库集成测试固化：`tests/test_real_mysql.py` / `tests/test_real_postgres.py` / `tests/test_real_observe.py`（`@pytest.mark.integration`，默认 skip，`GOVIO_REAL_DB=1` 才执行；用 wslc 容器 mysql:8 / postgres:17 / trino:483 验证，用后 `wslc stop` + `wslc remove` 清理，保证无容器时 `uv run pytest tests/` 全绿）
 - [ ] `cli/meta.py`（1240 行）按子命令域拆文件（切点 `_build_metadata_loader` / 各 `cmd_*`）
 - [ ] `metadata/utility.py` 拆分「导出编排 / 推荐入口」两类职责
 - [ ] `metadata/gen_networkx.py`（CSV→GML）归属迁移到 `graph/`，同步 spec
@@ -146,7 +147,7 @@
 ### CLI 工程化待办
 **目标：** 消除元数据导入流程中的现场变通（目录联接、临时库、手工合并 assets）。
 
-- [x] **assets 输出目录可配置**：`meta graph --assets-dir <path>` 参数已实现，默认 `.s/skills/govio/assets`
+- [x] **assets 输出目录可配置**：`meta graph --assets-dir <path>` 参数已实现，默认 `.agents/skills/govio/assets`
 - [x] **多份 assets 副本的归并策略**：`--assets-dir` 单一输出目录已消解多副本问题（三种分发形态统一落位 `<skills-root>/govio/assets`，见 install.md）
 
 已评估、暂不实现（T7 复核：维持停止，如需重启请先讨论）：

@@ -133,12 +133,14 @@ Govio 通过 Skills 为 AI Agent 提供数据治理能力。govio 本体不含 L
 
 将上一步 `meta graph` 生成的 assets 复制到 skills 目录中（两者路径不一致时以命令打印的绝对路径为准）：
 
+> **注意**：若 assets 已经位于目标 `<skills目录>/govio/assets`（如项目级布局下 `meta graph` 用默认 `--assets-dir` 生成时），**跳过复制**——源与目标同目录执行 `cp -r` 会报 `cannot copy a directory into itself`。以下命令仅在 assets 与 skills 目录不在同一位置（如全局级安装、或 `--assets-dir` 指向了别处）时需要：
+
 ```bash
-# 项目级
-cp -r .agents/skills/govio/assets <项目目录>/.agents/skills/govio/
+# 项目级（assets 不在 <项目目录>/.agents/skills/govio/ 下时）
+cp -r <assets绝对路径> <项目目录>/.agents/skills/govio/
 
 # 或全局级
-cp -r .agents/skills/govio/assets ~/.agents/skills/govio/
+cp -r <assets绝对路径> ~/.agents/skills/govio/
 ```
 
 确保最终目录结构如下：
@@ -190,9 +192,11 @@ pi install npm:@govio/pi-package@0.6.0                  # npm 发布后（可选
 ```bash
 mkdir -p .agents/skills
 cp -r dist/govio-pi-0.6.0/skills/* .agents/skills/    # 目标必须是 .agents/skills/govio/SKILL.md 等 6 个目录
-govio-cli meta graph --output ./data/meta --assets-dir .agents/skills/govio/assets
+govio-cli meta graph --output ./output --assets-dir .agents/skills/govio/assets
 # 命令打印 assets 绝对路径，请核对等于 <skills-root>/govio/assets
 ```
+
+> **前置条件**：`--output` 必须指向已由 `meta meta` / `meta rel` / `meta metric` 写出 CSV 的**已存在**目录（与上文 Chocolate 流程的 `./output` 一致）。`meta graph` 对不存在的目录会报 `❌ 输出目录不存在` 并退出，不会自动创建。
 
 零拷贝方案：直接用包内 skills（pi 自动发现），assets 生成进包内目录。npm/git 源更新时包内 assets 可能被重建，丢失后重跑 `meta graph` 即可。
 
@@ -286,7 +290,8 @@ Copy-Item dist\govio-dsh-skills\* $env:USERPROFILE\.agents\skills\ -Recurse
 assets 生成与核对沿用共享约定：
 
 ```bash
-govio-cli meta graph --output ./data/meta --assets-dir .agents/skills/govio/assets
+govio-cli meta graph --output ./output --assets-dir .agents/skills/govio/assets
+# 同形态二：--output 指向已写出 meta CSV 的已存在目录（不存在会报「输出目录不存在」并退出）
 ```
 
 #### 4. 升级 / 卸载
@@ -335,6 +340,8 @@ URL 格式说明：
 | MySQL | `mysql+pymysql://user:pass@host/db` | `mysql+pymysql://app:***@localhost/mydb` |
 | PostgreSQL | `postgresql+psycopg://user:pass@host:5432/db` | `postgresql+psycopg://app:***@localhost/mydb` |
 | Trino | `trino://user:pass@host:8080/catalog` | `trino://app:***@trino-host:8080/hive` |
+
+> URL scheme 大小写不敏感且自动归一：裸 `mysql://` / `postgres://` / `postgresql://`、以及 `trino+http://` / `trino+https://` 均可直接使用（分别归一到对应驱动与 HTTP/HTTPS 协议，详见 [specs/config.md](specs/config.md)）。
 
 密码会自动加密存储，配置文件可安全分享。
 
