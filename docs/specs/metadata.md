@@ -103,7 +103,7 @@ load_tables() -> pd.DataFrame    # information_schema.tables（BASE TABLE，含�
 load_columns() -> pd.DataFrame   # information_schema.columns（含列注释与类型解析）
 ```
 
-类型解析（`_parse_type`，取 `COLUMN_TYPE`）：`decimal(p,s)` → precision/scale，`varchar(n)` / `char(n)` → size，其余 → (0,0,0)。注释为空（NULL / ""）时 `name` 回退为表名/列名；`order_no` 取 `ORDINAL_POSITION`。
+类型解析（`_parse_type`，取 `COLUMN_TYPE`）：`decimal(p,s)` → precision/scale，`varchar(n)` / `char(n)` → size，其余 → (0,0,0)。数值类型的 `unsigned` / `zerofill` 后缀在解析前剥离（如 `decimal(10,2) unsigned` → (0,10,2)），`dtype` 保留原始 `COLUMN_TYPE`。注释为空（NULL / ""）时 `name` 回退为表名/列名；`order_no` 取 `ORDINAL_POSITION`。
 
 ---
 

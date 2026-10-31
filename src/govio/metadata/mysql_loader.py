@@ -15,6 +15,9 @@ from .datasource import qualify
 
 # 匹配 MySQL 类型：base 或 base(params)，如 decimal(10,2)、varchar(64)、bigint
 _TYPE_RE = re.compile(r"^(\w+)\s*(?:\(([^)]*)\))?$")
+# 数值类型的 unsigned/zerofill 后缀（如 decimal(10,2) unsigned、int(10) unsigned zerofill），
+# 解析参数前剥离，否则整串不匹配会导致 precision/scale 静默丢失
+_MODIFIER_RE = re.compile(r"(?:\s+(?:unsigned|zerofill))+$", re.IGNORECASE)
 
 # 输出 DataFrame 列结构，与 TrinoLoader / DuckDBLoader 保持一致
 _TABLE_COLUMNS = [
@@ -46,8 +49,11 @@ def _parse_type(type_str: str) -> tuple[int, int, int]:
     decimal(p,s) -> (0, p, s)；decimal(p) -> (0, p, 0)
     varchar(n) / char(n) -> (n, 0, 0)；无参 varchar -> (0, 0, 0)
     其他类型（bigint 等）-> (0, 0, 0)
+
+    数值类型的 unsigned / zerofill 后缀在解析前剥离
+    （如 decimal(10,2) unsigned -> (0, 10, 2)），dtype 仍保留原始 COLUMN_TYPE。
     """
-    m = _TYPE_RE.match(type_str.strip())
+    m = _TYPE_RE.match(_MODIFIER_RE.sub("", type_str.strip()))
     if not m:
         return 0, 0, 0
     base = m.group(1).lower()

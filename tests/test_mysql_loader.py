@@ -7,7 +7,9 @@ from govio.metadata.mysql_loader import MysqlLoader, _parse_type
 class FakeMysqlConn:
     """内存版 MySQL 连接，按 information_schema 语义返回表/列数据。
 
-    tables: {schema: [(table_name, table_comment), ...]}，仅含 BASE TABLE
+    tables: {schema: [(table_name, table_comment, table_type), ...]}，
+            table_type 为 "BASE TABLE" / "VIEW"，游标按 SQL 中的
+            TABLE_TYPE 谓词分发（谓词被删则视图行会泄漏到结果）
     columns: {(schema, table): [(column_name, column_type, column_comment, ordinal), ...]}
     """
 
@@ -34,6 +36,9 @@ class FakeMysqlCursor:
         params = tuple(params or ())
         self.conn.executed.append((sql, params))
         self._desc, self._rows = [], []
+        # SQL 带 TABLE_TYPE = 'BASE TABLE' 谓词时才过滤视图，
+        # 谓词被删则视图行会泄漏，由断言捕获
+        base_table_only = "TABLE_TYPE = 'BASE TABLE'" in sql
         if "information_schema.columns" in sql:
             self._desc = [
                 "table_schema",
@@ -43,10 +48,14 @@ class FakeMysqlCursor:
                 "column_comment",
                 "ordinal_position",
             ]
-            # 模拟 JOIN information_schema.tables ... TABLE_TYPE = 'BASE TABLE'：
-            # 只返回表清单（仅含 BASE TABLE）中出现的表的列
+            # 模拟 JOIN information_schema.tables 的表类型过滤：
+            # 谓词存在时只返回 BASE TABLE 的表的列
             for schema in params:
-                for table_name, _comment in self.conn.tables.get(schema, []):
+                for table_name, _comment, table_type in self.conn.tables.get(
+                    schema, []
+                ):
+                    if base_table_only and table_type != "BASE TABLE":
+                        continue
                     rows = self.conn.columns.get((schema, table_name), [])
                     self._rows.extend(
                         (schema, table_name, cname, ctype, ccomment, ordinal)
@@ -57,7 +66,10 @@ class FakeMysqlCursor:
             for schema in params:
                 self._rows.extend(
                     (schema, table_name, comment)
-                    for table_name, comment in self.conn.tables.get(schema, [])
+                    for table_name, comment, table_type in self.conn.tables.get(
+                        schema, []
+                    )
+                    if not base_table_only or table_type == "BASE TABLE"
                 )
         return self
 
@@ -90,7 +102,13 @@ def make_loader(monkeypatch, tables, columns, **kwargs):
 
 @pytest.fixture
 def fake_dataset():
-    tables = {"test_db": [("users", "用户表"), ("orders", "")]}
+    tables = {
+        "test_db": [
+            ("users", "用户表", "BASE TABLE"),
+            ("orders", "", "BASE TABLE"),
+            ("user_view", "用户视图", "VIEW"),
+        ]
+    }
     columns = {
         ("test_db", "users"): [
             ("id", "bigint", "用户ID", 1),
@@ -99,6 +117,10 @@ def fake_dataset():
         ("test_db", "orders"): [
             ("order_id", "bigint", "", 1),
             ("amount", "decimal(10,2)", "金额", 2),
+        ],
+        ("test_db", "user_view"): [
+            ("id", "bigint", "", 1),
+            ("label", "varchar(65)", "标签", 2),
         ],
     }
     return tables, columns
@@ -129,6 +151,20 @@ def test_mysql_loader_load_tables(monkeypatch, fake_dataset):
     assert set(df["schema"]) == {"test_db"}
     assert set(df["table_name"]) == {"users", "orders"}
     assert set(df["full_table_name"]) == {"test_db.users", "test_db.orders"}
+    # BASE TABLE 过滤：视图 user_view 被排除
+    assert "test_db.user_view" not in set(df["full_table_name"])
+
+
+def test_mysql_loader_excludes_views(monkeypatch, fake_dataset):
+    """load_tables 与 load_columns 都排除视图（BASE TABLE 过滤谓词被钉住）。"""
+    tables, columns = fake_dataset
+    loader = make_loader(monkeypatch, tables, columns)
+    df_tables = loader.load_tables()
+    assert set(df_tables["table_name"]) == {"users", "orders"}
+    assert "user_view" not in set(df_tables["table_name"])
+    df_cols = loader.load_columns()
+    assert "test_db.user_view.label" not in set(df_cols["column"])
+    assert not any(name.startswith("test_db.user_view.") for name in df_cols["column"])
 
 
 def test_mysql_loader_load_columns(monkeypatch, fake_dataset):
@@ -218,7 +254,7 @@ def test_mysql_loader_order_no(monkeypatch, fake_dataset):
 
 def test_mysql_loader_type_parsing(monkeypatch):
     """load_columns 将 decimal(10,2)/varchar(64)/bigint 解析为 size/precision/scale。"""
-    tables = {"s": [("t", "")]}
+    tables = {"s": [("t", "", "BASE TABLE")]}
     columns = {
         ("s", "t"): [
             ("price", "decimal(10,2)", "", 1),
@@ -260,7 +296,10 @@ def test_mysql_loader_empty_schemas(monkeypatch, fake_dataset):
 
 def test_mysql_loader_multiple_schemas(monkeypatch):
     """多个 schema 同时导出。"""
-    tables = {"s1": [("t1", "")], "s2": [("t2", ""), ("t3", "")]}
+    tables = {
+        "s1": [("t1", "", "BASE TABLE")],
+        "s2": [("t2", "", "BASE TABLE"), ("t3", "", "BASE TABLE")],
+    }
     columns = {
         ("s1", "t1"): [("a", "varchar(19)", "字段a", 1)],
         ("s2", "t2"): [("b", "integer", "", 1)],
@@ -343,16 +382,40 @@ def test_mysql_loader_schema_filter_is_parameterized(monkeypatch, fake_dataset):
     "type_str, expected",
     [
         ("decimal(10,2)", (0, 10, 2)),
+        ("decimal(10,2) unsigned", (0, 10, 2)),
+        ("decimal(10,2) unsigned zerofill", (0, 10, 2)),
         ("decimal(38)", (0, 38, 0)),
         ("varchar(64)", (64, 0, 0)),
         ("char(3)", (3, 0, 0)),
         ("varchar", (0, 0, 0)),
         ("bigint", (0, 0, 0)),
         ("bigint unsigned", (0, 0, 0)),
+        ("int(10) unsigned zerofill", (0, 0, 0)),
         ("int(11)", (0, 0, 0)),
         ("enum('a','b')", (0, 0, 0)),
     ],
 )
 def test_parse_type(type_str, expected):
-    """size/precision/scale 从 MySQL COLUMN_TYPE 正确解析。"""
+    """size/precision/scale 从 MySQL COLUMN_TYPE 正确解析（unsigned/zerofill 后缀不影响解析）。"""
     assert _parse_type(type_str) == expected
+
+
+def test_mysql_loader_type_parsing_unsigned(monkeypatch):
+    """load_columns 对带 unsigned 后缀的类型仍解析出 precision/scale，dtype 保留原文。"""
+    tables = {"s": [("t", "", "BASE TABLE")]}
+    columns = {
+        ("s", "t"): [
+            ("amount", "decimal(10,2) unsigned", "金额", 1),
+            ("qty", "bigint unsigned", "", 2),
+            ("name", "varchar(64)", "", 3),
+        ],
+    }
+    loader = make_loader(monkeypatch, tables, columns, schemas=["s"])
+    df = loader.load_columns().set_index("column_name")
+    assert df.loc["amount", "precision"] == 10
+    assert df.loc["amount", "scale"] == 2
+    assert df.loc["amount", "size"] == 0
+    assert df.loc["amount", "dtype"] == "decimal(10,2) unsigned"
+    assert df.loc["qty", "precision"] == 0
+    assert df.loc["qty", "scale"] == 0
+    assert df.loc["name", "size"] == 64

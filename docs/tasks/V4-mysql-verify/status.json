@@ -1,0 +1,12 @@
+{
+  "task": "V4",
+  "status": "done",
+  "summary": "MysqlLoader 修复 P2-f（_parse_type 剥离 unsigned/zerofill 后缀，decimal(10,2) unsigned 恢复 precision/scale）与 P2（BASE TABLE 过滤补桩测试钉住 load_tables/load_columns 两处谓词）；真实库 mysql:8 验证列契约/注释/类型解析/order_no（删列后 ORDINAL_POSITION 自动重排、首列 order_no==1 未破坏、无需重排修复），固化为 tests/test_real_mysql.py integration 用例（默认 skip），容器已 stop+remove 清理。",
+  "files": [
+    "src/govio/metadata/mysql_loader.py",
+    "tests/test_mysql_loader.py",
+    "tests/test_real_mysql.py",
+    "docs/tasks/V4-mysql-verify/progress.md",
+    "docs/tasks/V4-mysql-verify/status.json"
+  ]
+}
