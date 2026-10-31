@@ -1,6 +1,7 @@
 # govio 新分发形态设计（pi.agent 扩展 / DeepSeek Harness 插件）
 
 > T1 产出，T2（pi.agent 扩展）/ T3（DeepSeek Harness 插件）按本文直接实现。
+> V1 一致性核验修订：已按 T2/T3 实际交付修正路径/命名漂移（`package_pi.py` → `scripts/package_pi_extension.py`、`packaging/dsh/` → `packaging/deepseek/`、`package_dsh.py` → `scripts/package_harness_plugin.py` 等），核验明细见 [V1 progress](../V1-design-consistency/progress.md)；标注「骨架」的代码块仍为骨架签名，非逐行实现。
 > 证据与来源见 [research.md](./research.md)。本文中标注「（待实测）」的条目为已知残留风险，实现时按 §8 的验证清单收敛。
 > 代码骨架给出签名与关键行，完整实现由 T2/T3 补全；所有新代码遵守 AGENTS.md（Python 3.13+ 类型语法、`encoding="utf-8"`、中文注释/docstring、logging 不用 print、import 三组分离、命名规范、无裸 except）。TypeScript 侧沿用各 runtime 官方示例风格（tab 缩进随官方示例）。
 
@@ -75,9 +76,9 @@ packaging/pi/                        # Pi package 源（也可被 pi install ./p
 ├── README.md                        # 中文安装/升级/卸载说明（见 2.4）
 ├── extensions/
 │   └── govio-tools.ts               # 扩展入口：注册 govio_cli / govio_query + /govio 诊断命令
-└── skills/                          # 由 package_pi.py 从仓库 skills/ 复制生成（排除 assets）
+└── skills/                          # 生成目录：由 scripts/package_pi_extension.py 从仓库 skills/ 同步（排除 assets；.gitignore，非入库源码）
     └── (govio, govio-meta, ..., govio-reconcile)
-package_pi.py                        # 打包脚本（见 §4）
+scripts/package_pi_extension.py      # 打包脚本（见 §4）
 dist/govio-pi-<version>/             # 构建产物（可直接 pi install，或 npm pack 发布）
 ```
 
@@ -92,7 +93,7 @@ dist/govio-pi-<version>/             # 构建产物（可直接 pi install，或
   "type": "module",
   "pi": {
     "extensions": ["extensions/govio-tools.ts"],
-    "skills": ["skills"]
+    "skills": ["skills", "!skills/govio/assets/**"]
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
@@ -105,10 +106,10 @@ dist/govio-pi-<version>/             # 构建产物（可直接 pi install，或
 ```
 
 要点（pi `docs/packages.md` 直接证据）：
-- 约定目录会被自动发现；显式 `pi` manifest 用于钉死范围（`skills` 收 `skills` 目录，排除规则如需可写 `"!skills/govio/assets/**"`，但打包时已排除 assets，双保险）。
+- 约定目录会被自动发现；显式 `pi` manifest 用于钉死范围（`skills` 收 `skills` 目录，排除规则 `"!skills/govio/assets/**"` 与打包时排除 assets 双保险——实现定稿含该排除项）。
 - 宿主供给包必须放 `peerDependencies: "*"`, **不得放 `dependencies`**；本包无自有 npm 依赖，故无 `dependencies`。
 - `pi-package` keyword 使包可被 pi 包画廊发现（可选）。
-- `version` 与 `pyproject.toml` 的 `version` 同步（由 package_pi.py 注入）。
+- `version` 与 `pyproject.toml` 的 `version` 同步（由 `scripts/package_pi_extension.py` 注入）。
 
 ### 2.3 `extensions/govio-tools.ts` 骨架（T2 补全）
 
@@ -203,8 +204,9 @@ pi install npm:@govio/pi-package@0.6.0    # npm 发布后（可选）
 mkdir -p .agents/skills
 cp -r dist/govio-pi-0.6.0/skills/* .agents/skills/     # 或解压 govio-skills.zip 得到 skills/
 govio-cli meta graph --output ./data/meta --assets-dir .agents/skills/govio/assets
-# R2（零拷贝）：用包内 skills（pi 自动发现），assets 同步进包内：
-govio-cli meta graph --output ./data/meta --assets-dir "$(pi list | grep govio)/skills/govio/assets"  # 具体路径以 pi list 为准（待实测）
+# R2（零拷贝）：用包内 skills（pi 自动发现），assets 生成进包内：
+govio-cli meta graph --output ./data/meta --assets-dir <包目录>/skills/govio/assets  # 具体路径以 pi 安装位置为准（本地源安装即源目录，待实测）
+# npm/git 源安装的包在 pi update --extensions 对账更新时包内内容可能被重建，R2 生成的 assets 可能丢失；兜底重跑 meta graph
 
 # 升级
 pi update --extensions                     # 对账更新已装包
@@ -216,7 +218,7 @@ pi remove <source>                         # <source> 与 pi list 显示一致
 rm -rf .agents/skills/govio*               # 手动清理 skills（包卸载不回收已复制的 skills）
 ```
 
-注：pi 的 git 源按「整个 repo/目录」装载，若 `packaging/pi` 是仓库子目录且 pi 不支持子路径 git 源（待实测），则 git 安装方式改为「clone 后 `pi install ./govio/packaging/pi`」或以 npm 发布为准；T2 实测后在 README 定稿其一。
+注：pi 的 git 源按「整个 repo/目录」装载，若 `packaging/pi` 是仓库子目录且 pi 不支持子路径 git 源（待实测），则 git 安装方式改为「clone 后 `pi install ./govio/packaging/pi`」或以 npm 发布为准；实测后在 README 定稿其一（T2 实测未覆盖此项，缺口保留，见 §8.2 与 `packaging/pi/README.md`「待实测」）。
 
 ### 2.5 注册契约小结（pi）
 
@@ -233,21 +235,24 @@ rm -rf .agents/skills/govio*               # 手动清理 skills（包卸载不�
 仓库新增（T3 实现）：
 
 ```
-packaging/dsh/                         # DSH bundle 插件源（npm 包）
+packaging/deepseek/                    # DSH bundle 插件源（npm 包）
 ├── package.json                       # dsh.bundle.patch 声明（见 3.2）
 ├── cordis.patch.yml                   # insert 行：挂载本插件（见 3.3）
 ├── src/
 │   └── index.ts                       # Cordis 插件：ctx.tools.register（见 3.4）
+├── lib/                               # tsc 编译产物（保留入库：免 Node 复用、link: 可直接安装）
+│   ├── index.js
+│   └── types/index.d.ts
 ├── tsconfig.json                      # 目标 ES2022+/NodeNext，outDir lib/
 ├── README.md                          # 中文安装/升级/卸载说明（见 3.5）
 └── (skills/)                          # 不打进插件包！skills 走独立安装（见 3.6）
-package_dsh.py                         # 打包脚本（见 §4）
+scripts/package_harness_plugin.py      # 打包脚本（见 §4）
 dist/govio-dsh-<version>/              # 构建产物（lib/ 已编译，可 npm pack / 直接 add）
 ```
 
-**skills 不进插件包**（DSH 明确「skill 不用 `dsh plugin add` 安装」）；插件包只携带工具。skills 用既有 `dist/govio-skills.zip`（或 package_dsh.py 顺带产出 `dist/govio-dsh-skills/` 目录副本）按 §3.6 安装。
+**skills 不进插件包**（DSH 明确「skill 不用 `dsh plugin add` 安装」）；插件包只携带工具。skills 用既有 `dist/govio-skills.zip`（或 `scripts/package_harness_plugin.py --skills-bundle` 产出 `dist/govio-dsh-skills/` 目录副本）按 §3.6 安装。
 
-### 3.2 `packaging/dsh/package.json`（定稿）
+### 3.2 `packaging/deepseek/package.json`（定稿）
 
 ```json
 {
@@ -269,6 +274,7 @@ dist/govio-dsh-<version>/              # 构建产物（lib/ 已编译，可 npm
   "devDependencies": {
     "@deepseek-ai/cordis": "*",
     "@deepseek-ai/dsh-tools": "*",
+    "@types/node": "*",
     "typescript": "^5.6.0"
   }
 }
@@ -278,9 +284,10 @@ dist/govio-dsh-<version>/              # 构建产物（lib/ 已编译，可 npm
 - `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }` 是 bundle 插件的唯一清单机制（没有 `dsh.plugin.json`）；安装后该 patch 层自动并入 profile 层叠，卸载自动移出——**因此插件行必须写在包自带 patch 里，不让用户手写 profile patch**。
 - `@dsh-external/*` 是第三方社区包命名空间（内核为 `@deepseek-ai/*`）。
 - import 必须用 `@deepseek-ai/cordis`、`@deepseek-ai/dsh-tools`（裸名 `cordis`/`schemastery` 解析不到）。
-- 上述 peerDependencies 范围、发布 files 清单为**研究员推断 + 官方 workspace 约定类比**，T3 以 `dsh plugin add link:packaging/dsh` 实测定稿（待实测）。
+- 上述 peerDependencies 范围、发布 files 清单为**研究员推断 + 官方 workspace 约定类比**；T3 已以真实 `@deepseek-ai/cordis` 4.0.x / `@deepseek-ai/dsh-tools` 0.0.1-rc.x 类型做 strict 编译验证（注册契约收敛，无需降级方案），但 `dsh plugin add link:packaging/deepseek` 安装/卸载回路仍待实测。
+- devDependencies 的 `@types/node` 为 T3 追加（`src/index.ts` 使用 `node:child_process`/`AbortSignal`，编译必需）。
 
-### 3.3 `packaging/dsh/cordis.patch.yml`（定稿）
+### 3.3 `packaging/deepseek/cordis.patch.yml`（定稿）
 
 ```yaml
 # Govio 工具插件挂载行（bundle patch 层，安装后随包进入 profile 层叠）
@@ -295,7 +302,7 @@ dist/govio-dsh-<version>/              # 构建产物（lib/ 已编译，可 npm
 
 （行格式对照官方 `packages/bundle/sdk-minimal/cordis.patch.yml`：`insert` 列表 + `id/name/inject/config/disabled`。）
 
-### 3.4 `packaging/dsh/src/index.ts` 骨架（T3 补全）
+### 3.4 `packaging/deepseek/src/index.ts` 骨架（T3 补全）
 
 ```ts
 /**
@@ -359,13 +366,13 @@ export function apply(ctx: Context, config: GovioToolsConfig) {
 
 要点（`docs/cookbook/adding-a-tool.md` 直接证据）：`execute(args, exec)` 返回**规范 JSON 值**（这里用字符串）；抛错即 `isError`；必须响应 `exec.signal`；注册随插件 fiber 卸载自动撤销；schema 自动进系统提示。若 `defineTool` 导入在实测中有解析问题，降级方案为 `ctx.tools.register()` 直接收 raw JSON-Schema `ToolDefinition`（官方认可的等价路径）。
 
-### 3.5 安装 / 升级 / 卸载流程（写进 `packaging/dsh/README.md` 与 docs/install.md 增补）
+### 3.5 安装 / 升级 / 卸载流程（写进 `packaging/deepseek/README.md` 与 docs/install.md 增补）
 
 ```bash
 # 前置：govio-cli 在 PATH；pnpm 在 PATH；Node ≥ 22（待实测确认版本线）
 
 # 安装（二选一）
-dsh plugin --profile web add link:/path/to/govio/packaging/dsh   # 本地（开发/内网）
+dsh plugin --profile web add link:/path/to/govio/packaging/deepseek   # 本地（开发/内网；实现 README 另推荐从 dist/govio-dsh-<ver> 构建产物安装）
 dsh plugin --profile web add @dsh-external/govio-tools@0.6.0     # npm 发布后
 # 之后重启对应 profile（bundle 变更的生效边界）：重启 `dsh web` / `dsh --profile <name>`
 
@@ -408,41 +415,41 @@ rm -rf ~/.agents/skills/govio*
 
 `package_skills.py`（产出 `dist/govio-skills.zip`）**保持原样**，是 zip 流程的唯一入口。
 
-### 4.2 新增 `package_pi.py`（T2）
+### 4.2 新增 `scripts/package_pi_extension.py`（T2）
 
 ```
-用法: uv run package_pi.py [--version X.Y.Z] [--output dist]
+用法: uv run scripts/package_pi_extension.py [--version X.Y.Z] [--output dist]
 ```
 
 - 读取 `pyproject.toml` 的 `version` 作为默认版本（`--version` 覆盖）。
 - 清理并重建 `dist/govio-pi-<version>/`：
-  1. 复制 `packaging/pi/**`（package.json、README.md、extensions/）；
-  2. 复制 `skills/**` 到 `skills/`，**排除 `skills/govio/assets`**（复用 package_skills.py 的排除规则）；
-  3. 用 `re` 或 json 重写 `package.json` 的 `version` 字段；
-  4. 打印产物绝对路径与文件计数。
-- 文件读写一律 `encoding="utf-8"`；输出用 `logging`（或沿用脚本既有 print 风格——`package_skills.py` 用 print，**为一致性允许打包脚本沿用 print**，但模块不得用 print 做日志）。
+  1. 同步 `skills/**` 到 `packaging/pi/skills/`（生成副本，**排除 `skills/govio/assets`**，供 `pi install ./packaging/pi` 原地加载）；
+  2. 复制 `packaging/pi/**`（package.json、README.md、extensions/、skills 副本）到 `dist/govio-pi-<version>/`；
+  3. 用 json 重写 `package.json` 的 `version` 字段；
+  4. 产物结构自检（6 个 skill、无 assets/缓存、pi manifest、扩展入口、版本注入）并打印产物绝对路径与文件计数。
+- 文件读写一律 `encoding="utf-8"`；打包脚本输出统一用 `logging`（模块不得用 print 做日志）。
 - 退出码：成功 0；源缺失/参数非法非 0 并给出中文错误。
 
-### 4.3 新增 `package_dsh.py`（T3）
+### 4.3 新增 `scripts/package_harness_plugin.py`（T3）
 
 ```
-用法: uv run package_dsh.py [--version X.Y.Z] [--output dist] [--skills-bundle]
+用法: uv run python scripts/package_harness_plugin.py [--version X.Y.Z] [--output dist] [--skills-bundle]
 ```
 
-- 生成 `dist/govio-dsh-<version>/`：复制 `packaging/dsh/**`，重写 `package.json` 版本；
-- 若 TypeScript 编译产物 `lib/` 不在源里，脚本负责调 `npx tsc -p packaging/dsh`（无 Node 环境时给出中文提示并非 0 退出）；
+- 生成 `dist/govio-dsh-<version>/`：复制 `packaging/deepseek/**`，重写 `package.json` 版本，并做产物结构自检；
+- TypeScript 编译产物 `lib/` 保留在源码库；缺失时脚本在 `packaging/deepseek/` 下调 `npx tsc -p .` 自动编译（无 Node/npx 环境时给出中文提示并非 0 退出）；
 - `--skills-bundle`：额外生成 `dist/govio-dsh-skills/`（6 个 skill 目录副本，排除 assets），供 §3.6 安装；
 - 其余约束同 4.2。
 
 ### 4.4 排除规则（两脚本统一）
 
-排除：`skills/govio/assets/**`、`**/__pycache__/**`、`**/*.pyc`、`.DS_Store`。zip/目录内路径用 POSIX 分隔符（沿用 package_skills.py 的 `as_posix()`）。
+排除：`skills/govio/assets/**`、`**/__pycache__/**`、`**/*.pyc`、`.DS_Store`（插件源另排除 `**/node_modules/**` 与 `package-lock.json`）。路径比较/排序用 POSIX 分隔符（沿用 package_skills.py 的 `as_posix()` 风格）。
 
 ## 5. 版本与发布策略
 
 - 三种产物版本号与 `pyproject.toml` 的 `version` 同步（脚本注入）；govio-cli 与壳包允许小版本错位，但 README 声明「壳包版本 x.y 对应 govio-cli ≥ x.y」。
 - 发布渠道：GitHub Releases（沿用现有 zip 渠道）追加 `govio-pi-<ver>.zip` / `govio-dsh-<ver>.zip`（或 npm 包）；git 安装用 tag 钉版本。
-- DSH 为 alpha 快速迭代：壳包**锁定一层胶水**（§0.4），每次 DSH 破坏性变更只改 `packaging/dsh/src/index.ts` 与 patch 格式，不扩散。
+- DSH 为 alpha 快速迭代：壳包**锁定一层胶水**（§0.4），每次 DSH 破坏性变更只改 `packaging/deepseek/src/index.ts` 与 patch 格式，不扩散。
 
 ## 6. 与现有 dist/govio-skills.zip + uv tool 流程的共存
 
@@ -458,25 +465,25 @@ rm -rf ~/.agents/skills/govio*
 ## 7. T2 / T3 实现清单（文件级）
 
 **T2（pi.agent 扩展）——允许改动：**
-- 新增 `packaging/pi/package.json`、`packaging/pi/README.md`、`packaging/pi/extensions/govio-tools.ts`
-- 新增 `package_pi.py`
+- 新增 `packaging/pi/package.json`、`packaging/pi/README.md`、`packaging/pi/extensions/govio-tools.ts`（+ 生成目录 `packaging/pi/skills/`，.gitignore）
+- 新增 `scripts/package_pi_extension.py`
 - 增补 `docs/install.md`（「pi.agent 集成」章节）与 `docs/specs/README.md`（如视作分发/构建变更）
-- 测试：`tests/test_package_pi.py`（打包排除规则、版本注入、产物结构断言）
+- 测试：`tests/test_package_pi_extension.py`（打包排除规则、版本注入、幂等、自检失败路径）——V2 已补齐（8 用例；T2 首轮以脚本内置自检 + pi 1.4.0 实测替代的缺口已消解）
 
 **T3（DeepSeek Harness 插件）——允许改动：**
-- 新增 `packaging/dsh/package.json`、`packaging/dsh/cordis.patch.yml`、`packaging/dsh/src/index.ts`、`packaging/dsh/tsconfig.json`、`packaging/dsh/README.md`
-- 新增 `package_dsh.py`
+- 新增 `packaging/deepseek/package.json`、`packaging/deepseek/cordis.patch.yml`、`packaging/deepseek/src/index.ts`、`packaging/deepseek/tsconfig.json`、`packaging/deepseek/README.md`（+ `lib/` 编译产物保留入库）
+- 新增 `scripts/package_harness_plugin.py`
 - 增补 `docs/install.md`（「DeepSeek Harness 集成」章节）与 `docs/specs/README.md`
-- 测试：`tests/test_package_dsh.py`（同上）
-- 实测清单：`dsh plugin add link:packaging/dsh` 走通安装/卸载；补 Missing 证据（peerDependencies/files 契约）
+- 测试：`tests/test_package_harness_plugin.py`（8 用例）——V3 已从 `docs/tasks/T3-harness-plugin/` 迁入 `tests/`，被 `uv run pytest tests/` 收录（原位置漂移缺口已消解）
+- 实测清单：`dsh plugin add link:packaging/deepseek` 走通安装/卸载；补 Missing 证据（peerDependencies/files 契约）——**未执行**（T3 环境未装 dsh/pnpm；已以真实 @deepseek-ai/* 类型 strict 编译验证注册契约）
 
 **共同约束**：不改 `src/govio/**`、不改 `skills/**` 内容（skills 仅被复制）；不做无关重构；实现后按 AGENTS.md 文档同步规则更新对应 spec。
 
 ## 8. 风险与开放问题（残余）
 
 1. **DSH API 破坏性变更**（developer preview 明示）：壳层单点收敛已预留；T3 需在 README 标注适配的 dsh 版本基线。
-2. **pi git 子目录源 / 包内 assets 更新行为**（待实测）：R1/R2 方案 README 双写，实测后定稿。
-3. **DSH 第三方发布契约**（peerDependencies/files）未经官方第三方发布文档确认（待实测）。
-4. **govio `mcp` 依赖用途未知**：若确认已有/计划 MCP server，可增开「形态 C」（pi `registerMcpServer` + DSH `dsh-mcp-client` patch），两 runtime 承接机制均已调研就绪。
+2. **pi git 子目录源 / 包内 assets 更新行为**（待实测）：R1/R2 方案 README 双写，实测后定稿。T2 实测仅覆盖工具链（pi 1.4.0 加载/调用），这两项仍未实测，缺口在 `packaging/pi/README.md`「待实测」与 docs/install.md 如实保留。
+3. **DSH 第三方发布契约**（peerDependencies/files）未经官方第三方发布文档确认（待实测）。T3 已以真实 @deepseek-ai/* 类型 strict 编译验证注册契约，`dsh plugin add link:` 安装/卸载回路仍未实测。
+4. **govio `mcp` 依赖用途未知**（V1 全库 grep 确认 `src/` 中无 mcp 引用，依赖仅为 `pyproject.toml` 声明）：若确认已有/计划 MCP server，可增开「形态 C」（pi `registerMcpServer` + DSH `dsh-mcp-client` patch），两 runtime 承接机制均已调研就绪。
 5. **`allowed-tools` 在 DSH 的告警行为**未知（可能仅警告，不阻断加载）。
 6. shell 命令示例中的路径分隔符（Windows/POSIX）在 README 需给出双平台写法（实现时注意 UTF-8 与 cp936 陷阱，见 AGENTS.md）。

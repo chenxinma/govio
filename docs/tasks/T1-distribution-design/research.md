@@ -105,7 +105,7 @@
 ## Missing evidence（未验证项）
 
 1. DSH 第三方插件**发布到 npm 的确切约束**（peerDependencies 范围、files 清单、locale/i18n 要求是否适用于社区包）：仓库内 `adding-a-package.md` 是 workspace 内部包清单（`private: true`），不适用于对外发布包。→ T3 实现时用 `dsh plugin add link:...` 本地实测收敛。
-2. govio `mcp` 依赖的实际用途（是否藏有 MCP server 实现）未证实（无 shell 工具，未能 grep 全库）。
+2. govio `mcp` 依赖的实际用途未证实（T1 时无 shell 工具未能 grep；V1 已全库 grep 确认 `src/` 中无 mcp 引用，依赖仅为 `pyproject.toml` 声明，仍无 MCP server 实现）。
 3. pi 包（npm 安装）目录下 skills/assets 的**更新擦除行为**未实测：包更新后包内 assets 是否被清除、需要重新 `meta graph`（assets 为可再生派生数据，风险可控）。
 4. DSH skill 的 `allowed-tools`（govio 主 skill 使用）在 DSH 本地 provider 的行为（忽略或告警）未验证；DSH 文档仅说明其读取 `disable-model-invocation`/`user-invocable`。
 5. `npx @deepseek-ai/dsh` 的实际 Node 版本要求（第三方称 Node 22.19+）未获官方原文确认。
@@ -136,6 +136,6 @@
 
 ## Next steps（最有用的后续）
 
-1. T3 用 `dsh plugin add link:packaging/dsh` 实测第三方包 manifest/peerDependencies 要求（补 Missing #1）。
-2. grep 确认 govio `mcp` 依赖用途（补 Missing #2），决定是否启用"形态 C：MCP server"（两 runtime 均有官方 MCP 承接机制）。
-3. T2 实测 pi 包安装后 assets 落位与更新行为（补 Missing #3），在 design.md 的 R1/R2 中定稿其一。
+1. 用 `dsh plugin add link:packaging/deepseek` 实测第三方包 manifest/peerDependencies 要求（补 Missing #1；T3 仅完成真实 @deepseek-ai/* 类型 strict 编译验证，link: 安装回路未实测）。
+2. grep 确认 govio `mcp` 依赖用途（补 Missing #2；V1 已 grep：src/ 无 mcp 引用），决定是否启用"形态 C：MCP server"（两 runtime 均有官方 MCP 承接机制）。
+3. 实测 pi 包安装后 assets 落位与更新行为（补 Missing #3；T2 实测未覆盖，缺口如实保留），在 design.md 的 R1/R2 中定稿其一。
