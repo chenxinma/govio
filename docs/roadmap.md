@@ -19,7 +19,7 @@
 - [x] 实现 `StandardLoader` 读取数据标准与贯标关系
 - [x] 实现 `RelationshipLoader` 从 JSON 读取表间关系
 - [x] 实现 `MetricLoader` 从 JSON 读取指标/维度定义，生成血缘边
-- [x] 实现 `Recommender` 数据标准推荐（k-NN 协同过滤）
+- [x] 实现 `StandardRecommender` 数据标准推荐（k-NN 协同过滤）
 - [x] 实现 `NetworkXGraph`（GML 文件读写、schema 内省）
 - [x] 实现 `FalkorDBGraph`（Cypher 查询、schema 内省）
 - [x] 实现 `LadybugGraph`（嵌入式 `.lbdb`，Cypher 兼容）
@@ -48,9 +48,10 @@
 **已完成：**
 - [x] `govio-cli observe load` 从数据源加载 DataFrame
 - [x] `govio-cli observe explore` 探查表间关系（列名相似性 + 值重叠推断）
+- [x] `govio-cli observe visualize-relations` 生成关系图谱（networkx/JSON）
 - [x] `govio-cli observe compare` 比对两个 DataFrame（datacompy）
-- [x] `govio-cli observe chart` 生成关系图谱可视化（matplotlib）
-- [x] `govio-cli observe list` 列出已加载的数据源
+- [x] `govio-cli observe chart` 从 DataFrame 生成图表 PNG（bar/line）
+- [x] `govio-cli observe info` 数据源/DataFrame 信息查询（合并原 show-datasource / list / show）
 - [x] `govio-cli observe release` 释放 DataFrame
 - [x] `govio-cli sql build` 指标 SQL 组装（从 JSON 规格生成标准 SQL）
 - [x] DataFrameStore 内存存储管理
@@ -122,10 +123,10 @@
 ### SQL 组装增强
 **目标：** 覆盖更复杂的指标查询场景，提升 SQL 生成的准确率和表达力。
 
-- [ ] 多指标组合查询（一次请求多个指标共享维度过滤）
+- [x] 多指标组合查询（一次请求多个指标共享维度过滤，UNION ALL 合并）
 - [ ] 环比/同比分析（自动生成时间偏移 JOIN）
-- [ ] 派生指标递归展开（`DERIVED_FROM` 链自动拆解为 CTE）
-- [ ] 聚合排序与 Top-N（`ORDER BY metric_value DESC LIMIT N`）
+- [ ] 派生指标递归展开（`DERIVED_FROM` 链自动拆解为 CTE）——单层派生已实现（derived CTE），派生引用派生的递归展开未支持
+- [x] 聚合排序与 Top-N（`ORDER BY metric_value DESC LIMIT N`，`sql build` 支持 order_by/limit）
 - [ ] 维度枚举值自动补全（从图谱中查询维度可选值）
 
 ### 数据质量检核

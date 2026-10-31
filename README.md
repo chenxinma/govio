@@ -56,8 +56,8 @@ Govio 将企业元数据转化为知识图谱，支持三种图数据库后端�
 
 ```
 ┌───────────────────────────────────┐    ┌─────────────────────────────┐
-│  元数据源                          │    │  数据源 (observe 用)          │
-│  TDS(KunDB/MySQL) / DuckDB / Both │    │  MySQL / DuckDB ...          │
+│  元数据源                         │    │  数据源 (observe 用)        │
+│  TDS(KunDB/MySQL) / DuckDB / Both │    │  MySQL / DuckDB ...         │
 └────────────────┬──────────────────┘    └──────────────┬──────────────┘
                  │                                      │
                  │ govio-cli meta <子命令>               │ govio-cli onboard
@@ -65,13 +65,13 @@ Govio 将企业元数据转化为知识图谱，支持三种图数据库后端�
                  ▼                                      ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │  ① meta meta/std/compliance/rel/metric -> CSV（增量合并）            │
-│  ② meta graph --mode update -> 更新图库 -> 生成 assets                │
+│  ② meta graph --mode update -> 更新图库 -> 生成 assets               │
 └────────────────────────────────┬─────────────────────────────────────┘
                                  │
                                  ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│                  图数据库后端 (govio-cli onboard 选择)                 │
-│      NetworkX (GML)   │   FalkorDB   │   Ladybug (.lbdb 嵌入式)       │
+│                  图数据库后端 (govio-cli onboard 选择)               │
+│      NetworkX (GML)   │   FalkorDB   │   Ladybug (.lbdb 嵌入式)      │
 └────────────────────────────────────────┬─────────────────────────────┘
                                          │
                                          ▼
@@ -149,7 +149,6 @@ $ govio-cli meta graph --output ./data/meta --mode update
 
 正在生成 assets...
 ✓ Assets 已生成到: D:\Work\gov-io\govio\.agents\skills\govio\assets
-  （路径由当前工作目录的 .agents/skills/govio/assets 解析而来，可用 --assets-dir 指定其他目录；如与应用读取的 assets 目录不一致，请自行合并）
 
 ✅ graph 更新完成！
 ```
@@ -157,7 +156,7 @@ $ govio-cli meta graph --output ./data/meta --mode update
 `--schemas` 写错或源库无表时命令直接失败，不写任何 CSV，并列出该库可导入的 schema：
 
 ```bash
-$ govio-cli meta meta --source duckdb --db ./data/sales.duckdb --schemas sales --output ./data/meta
+$ govio-cli meta meta --source duckdb --db ./data/sales.duckdb --datasource sales --schemas sales --output ./data/meta
 ❌ 未发现任何表: schema [sales] 在元数据源中不存在或为空（未写入任何 CSV）
    ./data/sales.duckdb 可导入的 schema: main(5 张表)
    请确认 --schemas 后重试
@@ -271,7 +270,7 @@ govio-cli query -c "result = [n for n, d in g.nodes(data=True) if d.get('node_ty
 ```
 skills/govio/
 ├── SKILL.md              # 技能定义（AI Agent 使用）
-├── assets/               # 资源文件（meta graph 自动生成）
+├── assets/               # 资源文件（meta graph 默认生成到 .agents/skills/govio/assets）
 │   ├── schema.md         # 图数据库模式
 │   ├── metrics_index.md  # 指标索引（原子/派生分组）
 │   ├── ontology.gml      # NetworkX GML 数据文件
