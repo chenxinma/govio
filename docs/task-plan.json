@@ -510,5 +510,45 @@
         "completedAt": "2026-10-30"
       }
     ]
+  },
+  "round4": {
+    "goal": "修复 main 合入回归：补齐 tests/regression/data 测试数据并对齐 CLI 行为契约，使合并后测试套件全绿",
+    "execution": "单任务，subagent 实现，父代理验收并回写计划；分支 fix/regression-tests",
+    "tasks": [
+      {
+        "id": "I2",
+        "dir": "docs/tasks/I2-regression-fix",
+        "title": "补齐回归测试数据并对齐 7 项 CLI 行为契约",
+        "status": "done",
+        "summary": "重建 tests/regression/data（seed.sql + graph_csv 5 个 CSV），tests/regression 原 20 个失败（13 ERROR + 7 FAILED）清零；query.py _fail 报错文案双路输出（stdout 原文 + stderr ❌）并对非法 Cypher 放行 ValueError 传播；L06/L07/L08 退出码断言按 I1 契约 0→1（契约冲突最小改测试，父代理已认可）；cli.md query 退出码契约表同步；全量 342 passed, 18 skipped（含 test_exit_codes.py 14 个不破坏），ruff 通过",
+        "files": [
+          "tests/regression/data/seed.sql",
+          "tests/regression/data/graph_csv/PhysicalTable.csv",
+          "tests/regression/data/graph_csv/Col.csv",
+          "tests/regression/data/graph_csv/Datasource.csv",
+          "tests/regression/data/graph_csv/HAS_COLUMN.csv",
+          "tests/regression/data/graph_csv/OWNS.csv",
+          "tests/regression/test_load_cli.py",
+          "src/govio/cli/query.py",
+          "docs/specs/cli.md",
+          "docs/tasks/I2-regression-fix/progress.md",
+          "docs/tasks/I2-regression-fix/status.json"
+        ],
+        "ownFiles": [
+          "tests/regression/",
+          "src/govio/cli/query.py",
+          "src/govio/cli/observe.py",
+          "src/govio/observe_data/tools/load_dataframe.py",
+          "docs/specs/cli.md",
+          "docs/specs/observe-data.md",
+          "docs/tasks/I2-regression-fix/"
+        ],
+        "findings": [
+          "根因 A：tests/regression/data/ 被 .gitignore 全局 data/ 规则吞掉未入库（已由编排侧改为根锚定 /data/），13 个用例因缺 seed.sql/graph_csv 报错",
+          "根因 B：7 个行为断言与并行实现存在报错文案/输出契约偏差；回归测试（owner 编写）为验收规格，实现向测试对齐"
+        ],
+        "completedAt": "2026-10-31"
+      }
+    ]
   }
 }

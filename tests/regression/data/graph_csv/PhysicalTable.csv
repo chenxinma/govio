@@ -1,0 +1,3 @@
+:ID(PhysicalTable),full_table_name,schema,table_name,name,comment,data_entity_type,database_name
+pt00000001,local.main.customers,main,customers,customers,客户信息表,TABLE,sample
+pt00000002,local.main.orders,main,orders,orders,订单明细表,TABLE,sample

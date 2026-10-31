@@ -1,0 +1,18 @@
+{
+  "task": "I2",
+  "status": "done",
+  "summary": "重建 tests/regression/data（seed.sql + graph_csv 5 个 CSV），tests/regression 原 20 个失败（13 ERROR + 7 FAILED）清零；query.py _fail 报错文案双路输出（stdout 原文 + stderr ❌）并对非法 Cypher 放行 ValueError 传播；L06/L07/L08 退出码断言按 I1 契约 0→1（契约冲突最小改测试，父代理已认可）；cli.md query 退出码契约表同步；全量 342 passed, 18 skipped（含 test_exit_codes.py 14 个不破坏），ruff 通过",
+  "files": [
+    "tests/regression/data/seed.sql",
+    "tests/regression/data/graph_csv/PhysicalTable.csv",
+    "tests/regression/data/graph_csv/Col.csv",
+    "tests/regression/data/graph_csv/Datasource.csv",
+    "tests/regression/data/graph_csv/HAS_COLUMN.csv",
+    "tests/regression/data/graph_csv/OWNS.csv",
+    "tests/regression/test_load_cli.py",
+    "src/govio/cli/query.py",
+    "docs/specs/cli.md",
+    "docs/tasks/I2-regression-fix/progress.md",
+    "docs/tasks/I2-regression-fix/status.json"
+  ]
+}

@@ -152,7 +152,8 @@ def test_l06_memory_without_loaded_data(write_config, run_cli) -> None:
     code, out, _err = run_cli(
         "observe", "load", "--name", "x", "--memory", "--sql", "SELECT 1"
     )
-    assert code == 0
+    # 加载失败退出 1（docs/specs/cli.md 退出码契约；退出 0 与契约表及 test_exit_codes 冲突）
+    assert code == 1
     result = json.loads(out)
     assert result["success"] is False
     assert "没有已加载的 DataFrame" in result["error"]
@@ -178,7 +179,8 @@ def test_l07_bad_sql_returns_error(
         "--sql",
         "SELECT * FROM not_exist",
     )
-    assert code == 0
+    # 加载失败退出 1（docs/specs/cli.md 退出码契约；退出 0 与契约表及 test_exit_codes 冲突）
+    assert code == 1
     result = json.loads(out)
     assert result["success"] is False
     assert result["error"].startswith("SQL 执行错误")
@@ -200,7 +202,8 @@ def test_l08_unknown_datasource_returns_error(
         "--sql",
         "SELECT 1",
     )
-    assert code == 0
+    # 加载失败退出 1（docs/specs/cli.md 退出码契约；退出 0 与契约表及 test_exit_codes 冲突）
+    assert code == 1
     result = json.loads(out)
     assert result["success"] is False
     assert "数据源不存在" in result["error"]

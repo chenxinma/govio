@@ -1,0 +1,2 @@
+:ID(Datasource),datasource_name,comment,source_type,filter
+ds00000001,local,本地 DuckDB 数据源,duckdb,"{""schemas"": [""main""]}"
