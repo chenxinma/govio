@@ -7,6 +7,7 @@ import json
 import logging
 import sys
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -55,9 +56,12 @@ def output_result(data, columns: list[str] | None = None):
     if not isinstance(data, list):
         data = [data]
 
-    # to_json 往返统一 NaN→null、Decimal→str，保证 stdout / 文件的 JSON 都合法
+    # to_json 往返统一 NaN→null，保证 stdout / 文件的 JSON 都合法
+    # pandas 会把 Decimal 直接序列化为 float（822 -> 822.0），与「Decimal->str」契约不符，
+    # 故在往返前显式转 str
     # shortcut: RETURN 别名重复时 records 同名键会合并，出现真实需求再处理
     df = pd.DataFrame(data, columns=columns)
+    df = df.map(lambda v: str(v) if isinstance(v, Decimal) else v)
     records = json.loads(
         df.to_json(
             orient="records",
