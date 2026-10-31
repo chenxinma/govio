@@ -1,0 +1,16 @@
+{
+  "task": "T6",
+  "status": "done",
+  "summary": "meta meta --source 接入 mysql/postgres/trino（--db 为连接 URL，解析为各 Loader 构造参数），observe 查询执行经 SQLAlchemy scheme 归一统一支持 mysql/postgresql/trino，新增 32 个打桩用例全过，三份 spec 已同步",
+  "files": [
+    "src/govio/cli/meta.py",
+    "src/govio/observe_data/core/database.py",
+    "tests/test_meta_cli_sources.py",
+    "tests/test_observe_multi_db.py",
+    "docs/specs/metadata.md",
+    "docs/specs/cli.md",
+    "docs/specs/observe-data.md",
+    "docs/tasks/T6-query-cli-integration/progress.md",
+    "docs/tasks/T6-query-cli-integration/status.json"
+  ]
+}

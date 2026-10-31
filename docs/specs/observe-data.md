@@ -77,16 +77,35 @@ DatabaseManager(datasources: dict[str, DataSourceConfig])
 ```
 
 - DuckDB URLs: `duckdb://path` -- supports file and directory modes
-- Other URLs: SQLAlchemy engines
+- Other URLs: SQLAlchemy engines（scheme 先经 `_resolve_sqlalchemy_target` 归一）
 - Connections are lazy: the constructor only records configs, each datasource is connected on first `execute_sql` / `get_engine` call (`_ensure(name)`). Listing datasources never opens a connection.
 - `duckdb` / `sqlalchemy` / `pandas` are imported on demand, not at module import.
+
+### URL Scheme Normalization
+
+```python
+_resolve_sqlalchemy_target(url: str) -> tuple[str, dict[str, Any]]
+# 返回 (归一后的 SQLAlchemy URL, 追加的 connect_args)；其余 URL 原样返回
+```
+
+| Config URL scheme | 实际连接 | 说明 |
+|---|---|---|
+| `duckdb://` | duckdb 原生连接 | 文件 / 目录两种模式，不走 SQLAlchemy |
+| `mysql://` | `mysql+pymysql://` | 归一到 pymysql（默认 mysqldb 驱动未安装） |
+| `mysql+pymysql://` | 同左 | 原样 |
+| `postgresql://` / `postgres://` | `postgresql+psycopg://` | 归一到 psycopg3 |
+| `postgresql+psycopg://` | 同左 | 原样 |
+| `trino://` | trino.sqlalchemy 方言（trino-python-client 自带） | 原样；URL 含密码时方言自动构造 BasicAuthentication |
+| `trino+https://` | `trino://` + `connect_args.http_scheme="https"` | HTTPS；`config.connect_args` 同名键优先 |
 
 ### Methods
 
 ```python
 get_engine(datasource: str) -> Engine      # Raises ValueError if not SQLAlchemy
-execute_sql(datasource: str, sql: str) -> pd.DataFrame  # DuckDB or SQLAlchemy
+execute_sql(datasource: str, sql: str) -> pd.DataFrame  # DuckDB 或 pandas.read_sql（统一执行路径）
 ```
+
+mysql / postgresql / trino 的查询执行统一走 SQLAlchemy 引擎 + `pandas.read_sql`，`load_dataframe` 无需按后端分支；trino 的 http_scheme / 证书等高级连接参数可经 `config.connect_args` 透传（合并时 config 显式配置优先）。
 
 ---
 

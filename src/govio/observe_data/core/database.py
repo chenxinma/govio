@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from govio.observe_data.config import DataSourceConfig
 
@@ -15,6 +15,33 @@ if TYPE_CHECKING:
     import pandas as pd
     from duckdb import DuckDBPyConnection
     from sqlalchemy import Engine
+
+# 需要归一的 SQLAlchemy scheme：无驱动限定的默认方言未随项目安装，
+# trino 的 HTTPS 由 dbapi 的 http_scheme 控制（trino 方言只注册 trino 驱动）
+_SQLALCHEMY_URL_ALIASES: dict[str, str] = {
+    "mysql": "mysql+pymysql",
+    "postgres": "postgresql+psycopg",
+    "postgresql": "postgresql+psycopg",
+}
+
+
+def _resolve_sqlalchemy_target(url: str) -> tuple[str, dict[str, Any]]:
+    """归一 SQLAlchemy 连接目标：返回 (URL, 追加的 connect_args)。
+
+    mysql:// -> mysql+pymysql://（默认 mysqldb 驱动未安装）；
+    postgresql:// / postgres:// -> postgresql+psycopg://（项目使用 psycopg3）；
+    trino+https:// -> trino:// + connect_args http_scheme=https；
+    其余 URL（含已限定驱动写法）原样返回。
+    """
+    scheme, sep, rest = url.partition("://")
+    if not sep:
+        return url, {}
+    normalized = _SQLALCHEMY_URL_ALIASES.get(scheme.lower())
+    if normalized:
+        return f"{normalized}://{rest}", {}
+    if scheme.lower() == "trino+https":
+        return f"trino://{rest}", {"http_scheme": "https"}
+    return url, {}
 
 
 class DatabaseManager:
@@ -55,8 +82,10 @@ class DatabaseManager:
                     self._duckdb_conns[name] = conn
                     self._duckdb_dirs[name] = str(Path(db_path).parent)
             else:
+                sa_url, extra_connect_args = _resolve_sqlalchemy_target(url)
                 self._engines[name] = create_engine(
-                    url, connect_args=config.connect_args
+                    sa_url,
+                    connect_args={**extra_connect_args, **config.connect_args},
                 )
         except Exception as e:
             raise RuntimeError(f"初始化数据源 '{name}' 失败: {e}") from e

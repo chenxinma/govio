@@ -74,11 +74,103 @@ list_schemas() -> list[tuple[str, int]]  # Read-only (schema 名, 表数量)，�
 
 ---
 
+## MysqlLoader
+
+`mysql_loader.py`
+
+从 MySQL 实例读取 `information_schema.tables` / `information_schema.columns`（仅 BASE TABLE，不含视图），表/列注释取 `TABLE_COMMENT` / `COLUMN_COMMENT`。产出与 DuckDBLoader 相同列结构的 DataFrame，`data_entity_type = "MYSQL_TABLE"` / `"MYSQL_COLUMN"`。
+
+### Constructor
+
+```python
+MysqlLoader(
+    host: str,
+    schemas: list[str],
+    port: int = 3306,
+    user: str = "root",
+    password: str = "",
+    database: str = "",
+    datasource_name: str = "",
+)
+```
+
+`schemas` 为非 TDS 导入路径的实际过滤参数（MySQL 中 schema 即库，`TABLE_SCHEMA IN (...)` 参数化过滤）；`datasource_name` 用于生成全限定标识与 `Datasource` / `OWNS` 归属。CLI 接入见 [cli.md](cli.md#data-sources)（`--source mysql`，`--db` 为连接 URL）。
+
+### Methods
+
+```python
+load_tables() -> pd.DataFrame    # information_schema.tables（BASE TABLE，含表注释）
+load_columns() -> pd.DataFrame   # information_schema.columns（含列注释与类型解析）
+```
+
+类型解析（`_parse_type`，取 `COLUMN_TYPE`）：`decimal(p,s)` → precision/scale，`varchar(n)` / `char(n)` → size，其余 → (0,0,0)。注释为空（NULL / ""）时 `name` 回退为表名/列名；`order_no` 取 `ORDINAL_POSITION`。
+
+---
+
+## PostgresLoader
+
+`postgres_loader.py`
+
+表与列来自 `information_schema.tables` / `information_schema.columns`，注释来自 pg_catalog：表注释 `obj_description(oid, 'pg_class')`、列注释 `col_description(oid, attnum)`。产出与 DuckDBLoader 相同列结构的 DataFrame，`data_entity_type = "POSTGRES_TABLE"` / `"POSTGRES_COLUMN"`。
+
+### Constructor
+
+```python
+PostgresLoader(
+    host: str,
+    schemas: list[str],
+    dbname: str = "postgres",
+    port: int = 5432,
+    user: str = "postgres",
+    password: str = "",
+    datasource_name: str = "",
+)
+```
+
+`schemas` 过滤为 `table_schema = ANY(%s)` 参数化；`datasource_name` 语义与 MysqlLoader 一致。CLI 接入见 [cli.md](cli.md#data-sources)（`--source postgres`，`--db` 为连接 URL）。
+
+### Methods
+
+```python
+load_tables() -> pd.DataFrame    # information_schema.tables + obj_description 表注释
+load_columns() -> pd.DataFrame   # information_schema.columns + col_description 列注释
+```
+
+类型解析（`_parse_type`）：`character varying` / `character` / `bit(n)` → size，`numeric` / `decimal` → precision/scale，其余 → (0,0,0)（整型 `numeric_precision` 是位宽语义，不计入 precision）。`order_no` 按 `ordinal_position` 排序后每表从 1 连续递增（删列导致 attnum 空洞时重排，保证 `recommender.py` 依赖的 `order_no == 1` 首列语义）。
+
+---
+
 ## TrinoLoader
 
 `trino_loader.py`
 
-Loads metadata from a Trino database connector. 与 `DuckDBLoader` 相同，构造参数末尾可传 `datasource_name: str = ""` 生成全限定标识与 `Datasource` / `OWNS` 归属。
+Loads metadata from a Trino database connector. 使用 Trino 原生 `SHOW TABLES` / `SHOW COLUMNS` 语句（不依赖 `information_schema` 的 comment 列），产出与 DuckDBLoader 相同列结构的 DataFrame，`data_entity_type = "TRINO_TABLE"` / `"TRINO_COLUMN"`。
+
+### Constructor
+
+```python
+TrinoLoader(
+    host: str,
+    catalog: str,
+    schemas: list[str],
+    port: int = 8080,
+    user: str = "trino",
+    http_scheme: str = "http",
+    auth: object | None = None,
+    datasource_name: str = "",
+)
+```
+
+`auth` 传 trino 认证对象（如 `trino.auth.BasicAuthentication`）；CLI 接入见 [cli.md](cli.md#data-sources)（`--source trino`，`--db` 为连接 URL，路径一段即 catalog）。
+
+### Methods
+
+```python
+load_tables() -> pd.DataFrame    # 逐 schema SHOW TABLES FROM catalog.schema
+load_columns() -> pd.DataFrame   # 逐表 SHOW COLUMNS FROM catalog.schema.table
+```
+
+SHOW TABLES 不返回表注释，`name` 回退为 table_name；SHOW COLUMNS 的注释列非空时作为列展示名。
 
 ---
 
