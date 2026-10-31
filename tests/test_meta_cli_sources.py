@@ -298,10 +298,30 @@ def test_trino_url_with_password_builds_basic_auth(loader_calls, tmp_path):
     assert kwargs["port"] == 8443
 
 
-def test_trino_url_missing_user_with_password_rejected(loader_calls, tmp_path):
-    """trino URL 有密码无 user 时报错。"""
-    with pytest.raises(SystemExit):
+def test_trino_url_missing_user_with_password_rejected(loader_calls, tmp_path, capsys):
+    """trino URL 有密码无 user 时退出码 1，报错含「必须同时指定 user」。"""
+    with pytest.raises(SystemExit) as exc:
         _cmd("trino", "trino://:pw@trino.example.com:8080/hive", tmp_path)
+    assert exc.value.code == 1
+    assert "必须同时指定 user" in capsys.readouterr().err
+
+
+def test_url_scheme_match_is_case_insensitive(loader_calls, tmp_path):
+    """URL scheme 大小写不敏感（MySQL:// 等写法与 observe 的 scheme.lower() 一致）。"""
+    _cmd("mysql", "MySQL://u:pw@h:3306/db", tmp_path)
+    assert "mysql" in loader_calls
+    _cmd("postgres", "PostgreSQL://u:pw@h:5432/db", tmp_path)
+    assert "postgres" in loader_calls
+    _cmd("trino", "TRINO://analyst@trino.example.com:8080/hive", tmp_path)
+    assert "trino" in loader_calls
+
+
+def test_trino_uppercase_https_scheme_builds_https_auth(loader_calls, tmp_path):
+    """TRINO+HTTPS://（大写）仍解析出 https 并构造 BasicAuthentication。"""
+    _cmd("trino", "TRINO+HTTPS://analyst:pw@trino.example.com:8443/hive", tmp_path)
+    kwargs = loader_calls["trino"]["kwargs"]
+    assert kwargs["http_scheme"] == "https"
+    assert isinstance(kwargs["auth"], BasicAuthentication)
 
 
 # ---------------------------------------------------------------------------

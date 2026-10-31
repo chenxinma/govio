@@ -73,12 +73,15 @@ datasources:
 
 ## Datasource URL Formats
 
+scheme 匹配大小写不敏感；归一规则由 `_resolve_sqlalchemy_target` 统一处理，与 [observe-data.md](observe-data.md#url-scheme-normalization) 的归一表一致。
+
 | Type | URL Pattern | Notes |
 |---|---|---|
-| MySQL | `mysql+pymysql://user:pass@host/db` | Via SQLAlchemy |
-| DuckDB file | `duckdb://path/to/file.duckdb` | Direct DuckDB connection |
-| DuckDB dir | `duckdb://path/to/directory` | Uses `SET file_search_path` |
-| Trino | `trino://user@host/catalog/schema` | Via trino-python-client |
+| MySQL | `mysql://user:pass@host:3306/db` 或 `mysql+pymysql://...` | 经 SQLAlchemy；裸 `mysql://` 归一为 `mysql+pymysql://`（默认 mysqldb 驱动未安装） |
+| PostgreSQL | `postgresql://user:pass@host:5432/db`、`postgres://...` 或 `postgresql+psycopg://...` | 经 SQLAlchemy；`postgresql://` / `postgres://` 归一为 `postgresql+psycopg://`（项目使用 psycopg3） |
+| DuckDB file | `duckdb://path/to/file.duckdb` | DuckDB 直连 |
+| DuckDB dir | `duckdb://path/to/directory` | 使用 `SET file_search_path` |
+| Trino | `trino://user@host/catalog/schema`、`trino+http://...`、`trino+https://...` | 经 trino-python-client；`trino+http(s)://` 归一为 `trino://` 并以 `connect_args.http_scheme` 指定协议（`config.connect_args` 同名键优先） |
 
 ## Observe Store Paths
 

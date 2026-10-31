@@ -340,7 +340,8 @@ def _build_metadata_loader(
     except Exception as e:
         raise ValueError(f"--db 不是合法的连接 URL: {db}（{e}）") from e
 
-    if url.drivername not in SOURCE_URL_SCHEMES[source]:
+    # scheme 匹配大小写不敏感（与 observe 的 scheme.lower() 归一行为一致）
+    if url.drivername.lower() not in SOURCE_URL_SCHEMES[source]:
         expected = " / ".join(sorted(SOURCE_URL_SCHEMES[source]))
         raise ValueError(
             f"--db 的 URL scheme '{url.drivername}' 与 --source {source} 不匹配"
@@ -391,7 +392,7 @@ def _build_metadata_loader(
         schemas=schemas,
         port=port,
         user=user,
-        http_scheme="https" if url.drivername == "trino+https" else "http",
+        http_scheme="https" if url.drivername.lower() == "trino+https" else "http",
         auth=auth,
         datasource_name=datasource_name,
     )

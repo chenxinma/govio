@@ -1,7 +1,7 @@
 """observe 查询执行多数据库链路测试。
 
 覆盖：
-1. `_resolve_sqlalchemy_target` 的 scheme 归一（mysql / postgres / trino+https）
+1. `_resolve_sqlalchemy_target` 的 scheme 归一（mysql / postgres / trino+http(s)）
 2. `DatabaseManager` 把归一后的 URL 与合并后的 connect_args 传给 create_engine
 3. `execute_sql` 对 postgresql / trino / mysql 走统一 SQLAlchemy 引擎路径
 4. `load_dataframe` 查询执行链路打桩验证
@@ -58,14 +58,24 @@ from govio.observe_data.tools.load_dataframe import load_dataframe
             {},
         ),
         (
+            "trino+http://u@h:8080/catalog",
+            "trino://u@h:8080/catalog",
+            {"http_scheme": "http"},
+        ),
+        (
             "trino+https://u@h:8443/catalog",
             "trino://u@h:8443/catalog",
             {"http_scheme": "https"},
         ),
+        (
+            "TRINO+HTTP://u@h:8080/catalog",
+            "trino://u@h:8080/catalog",
+            {"http_scheme": "http"},
+        ),
     ],
 )
 def test_resolve_sqlalchemy_target(url, expected_url, expected_args):
-    """无驱动限定的 scheme 归一到已安装驱动，其余原样返回。"""
+    """无驱动限定的 scheme 归一到已安装驱动，trino+http(s) 归一为 trino://，其余原样返回。"""
     assert _resolve_sqlalchemy_target(url) == (expected_url, expected_args)
 
 
@@ -146,6 +156,22 @@ def test_create_engine_trino_https_merges_connect_args(engine_calls):
     manager.get_engine("trino")
     assert engine_calls["url"] == "trino://u@h:8443/catalog"
     assert engine_calls["connect_args"] == {"http_scheme": "https", "verify": False}
+
+
+def test_create_engine_trino_http_merges_connect_args(engine_calls):
+    """trino+http 归一为 trino:// 并注入 http_scheme=http，config.connect_args 显式值优先。"""
+    manager = DatabaseManager(
+        {
+            "trino": DataSourceConfig(
+                url="trino+http://u@h:8080/catalog",
+                connect_args={"http_scheme": "https"},
+            )
+        }
+    )
+    manager.get_engine("trino")
+    assert engine_calls["url"] == "trino://u@h:8080/catalog"
+    # config.connect_args 同名键覆盖归一注入值
+    assert engine_calls["connect_args"] == {"http_scheme": "https"}
 
 
 def test_create_engine_mysql_alias_without_driver_suffix(engine_calls):

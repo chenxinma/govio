@@ -17,11 +17,18 @@ if TYPE_CHECKING:
     from sqlalchemy import Engine
 
 # 需要归一的 SQLAlchemy scheme：无驱动限定的默认方言未随项目安装，
-# trino 的 HTTPS 由 dbapi 的 http_scheme 控制（trino 方言只注册 trino 驱动）
+# trino 的 http/https 由 dbapi 的 http_scheme 控制（trino 方言只注册 trino 驱动，
+# trino+http / trino+https 直接交给 create_engine 会触发 NoSuchModuleError）
 _SQLALCHEMY_URL_ALIASES: dict[str, str] = {
     "mysql": "mysql+pymysql",
     "postgres": "postgresql+psycopg",
     "postgresql": "postgresql+psycopg",
+}
+
+# trino+http / trino+https 归一为 trino:// 并以 connect_args.http_scheme 指定协议
+_TRINO_URL_HTTP_SCHEMES: dict[str, str] = {
+    "trino+http": "http",
+    "trino+https": "https",
 }
 
 
@@ -30,7 +37,8 @@ def _resolve_sqlalchemy_target(url: str) -> tuple[str, dict[str, Any]]:
 
     mysql:// -> mysql+pymysql://（默认 mysqldb 驱动未安装）；
     postgresql:// / postgres:// -> postgresql+psycopg://（项目使用 psycopg3）；
-    trino+https:// -> trino:// + connect_args http_scheme=https；
+    trino+http:// / trino+https:// -> trino:// + connect_args http_scheme
+    （trino 方言只注册 trino 驱动）；
     其余 URL（含已限定驱动写法）原样返回。
     """
     scheme, sep, rest = url.partition("://")
@@ -39,8 +47,9 @@ def _resolve_sqlalchemy_target(url: str) -> tuple[str, dict[str, Any]]:
     normalized = _SQLALCHEMY_URL_ALIASES.get(scheme.lower())
     if normalized:
         return f"{normalized}://{rest}", {}
-    if scheme.lower() == "trino+https":
-        return f"trino://{rest}", {"http_scheme": "https"}
+    http_scheme = _TRINO_URL_HTTP_SCHEMES.get(scheme.lower())
+    if http_scheme:
+        return f"trino://{rest}", {"http_scheme": http_scheme}
     return url, {}
 
 

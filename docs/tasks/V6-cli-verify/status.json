@@ -1,0 +1,16 @@
+{
+  "task": "V6",
+  "status": "done",
+  "summary": "P2-a scheme 不对称修复（trino+http 归一 + meta.py drivername 大小写不敏感）；P2-g 测试补退出码与报错文案断言；P2-c config.md URL 格式表补齐归一语义；真实库 trino:483/mysql:8/postgres:17 端到端验证 DatabaseManager.execute_sql 统一路径与 meta meta 三源 CSV 抽取，固化 tests/test_real_observe.py（integration 默认 skip），容器已全部清理",
+  "files": [
+    "src/govio/observe_data/core/database.py",
+    "src/govio/cli/meta.py",
+    "tests/test_meta_cli_sources.py",
+    "tests/test_observe_multi_db.py",
+    "tests/test_real_observe.py",
+    "docs/specs/config.md",
+    "docs/specs/observe-data.md",
+    "docs/tasks/V6-cli-verify/progress.md",
+    "docs/tasks/V6-cli-verify/status.json"
+  ]
+}

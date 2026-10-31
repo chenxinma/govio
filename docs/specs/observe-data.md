@@ -96,6 +96,7 @@ _resolve_sqlalchemy_target(url: str) -> tuple[str, dict[str, Any]]
 | `postgresql://` / `postgres://` | `postgresql+psycopg://` | 归一到 psycopg3 |
 | `postgresql+psycopg://` | 同左 | 原样 |
 | `trino://` | trino.sqlalchemy 方言（trino-python-client 自带） | 原样；URL 含密码时方言自动构造 BasicAuthentication |
+| `trino+http://` | `trino://` + `connect_args.http_scheme="http"` | HTTP；`config.connect_args` 同名键优先 |
 | `trino+https://` | `trino://` + `connect_args.http_scheme="https"` | HTTPS；`config.connect_args` 同名键优先 |
 
 ### Methods
