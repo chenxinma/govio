@@ -1,6 +1,6 @@
 {
   "name": "govio-evolution",
-  "version": 1,
+  "version": 2,
   "created": "2026-10-30",
   "branch": "experiment/new-work-mode",
   "goal": "让 govio 成为可插拔于任意 Agent Runtime 的数据治理工具：①扩展分发形态（pi.agent 扩展、DeepSeek harness 插件，与现有 skill 压缩包 + uv tool 共存）；②数据加载支持 mysql / postgresql，对齐 trino 的元数据抽取与查询执行能力；③面向未来探索更优架构与精简功能，修正路线图。",
@@ -210,5 +210,148 @@
         "全量 uv run pytest tests/ 与 uv run ruff check src/ tests/ 通过"
       ]
     }
-  ]
+  ],
+  "round2": {
+    "goal": "按 T1→T7 验收顺序逐任务核验并同步修复 review 发现的问题；真实数据库测试启用 wslc 容器环境；完成后针对性复审",
+    "rulings": {
+      "query.py 越界修改": "可行（保留已提交的 Decimal 序列化修复）",
+      "真实数据库测试": "使用 wslc（WSL 容器 CLI，类 docker）运行镜像 mysql:8 / postgres:17 / trino:483 建立测试环境；镜像已本地存在；宿主端口映射约定 13306→3306、15432→5432、18080→8080；用完 wslc stop/remove 清理容器",
+      "query.py 大结果集性能优化": "延后（语义正确，后续迭代）"
+    },
+    "execution": "严格按 T1→T7 顺序串行（后任务依赖前任务修复成果：V6 真实库端到端用到 V4/V5 的 loader 修复）；每任务后 recorder 回写本计划；最后一名 reviewer 做针对性复审（3 问：P1 是否解决/修复是否引入新缺陷/其余备注是否仍成立）",
+    "tasks": [
+      {
+        "id": "V1",
+        "verifies": "T1",
+        "dir": "docs/tasks/V1-design-consistency",
+        "title": "核验设计-实现-文档三方一致性（T1 归属）",
+        "status": "done",
+        "summary": "完成 T1 设计-实现-文档三方一致性核验：23 项核验表全部落定（打包产物结构/skills 接线/govio_cli+govio_query 注册契约/assets 契约/安装升级卸载流程均一致；pi git 子目录源与 R2 assets 更新两处 T1 已知缺口在 packaging/pi/README.md、docs/install.md、design.md、research.md 如实保留）；以实现为准修正 design.md 23 处漂移（脚本/目录命名、pi manifest 定稿、打包脚本接口、devDependencies、§7 测试交付缺口标注、§8 风险注记）与 research.md 4 处注记；未改代码与 install.md",
+        "files": [
+          "docs/tasks/T1-distribution-design/design.md",
+          "docs/tasks/T1-distribution-design/research.md",
+          "docs/tasks/V1-design-consistency/progress.md",
+          "docs/tasks/V1-design-consistency/status.json"
+        ],
+        "completedAt": "2026-10-30",
+        "ownFiles": ["docs/tasks/T1-distribution-design/", "docs/tasks/V1-design-consistency/"],
+        "findings": ["设计 vs packaging/pi、packaging/deepseek、scripts、docs/install.md 漂移核验；T1 已知缺口标注完整性"]
+      },
+      {
+        "id": "V2",
+        "verifies": "T2",
+        "dir": "docs/tasks/V2-pi-fixes",
+        "title": "核验 pi 扩展 + 修复（取消信号预检、打包脚本测试）",
+        "status": "done",
+        "summary": "修复第 2 轮评审两项发现：P2-d 在 packaging/pi/extensions/govio-tools.ts 补 aborted 预检（照搬 deepseek 范式，预 abort 信号立即终止子进程而非跑满超时）；P2 为 scripts/package_pi_extension.py 新建 8 个自动化测试（版本注入、排除规则、重复执行幂等、产物自检失败路径，tmp_path/monkeypatch 不依赖网络）。pytest 8 passed、ruff 通过、node TS 语法通过、打包脚本连跑两次自检通过且产物逐文件哈希一致",
+        "files": [
+          "packaging/pi/extensions/govio-tools.ts",
+          "tests/test_package_pi_extension.py",
+          "docs/tasks/V2-pi-fixes/progress.md",
+          "docs/tasks/V2-pi-fixes/status.json"
+        ],
+        "completedAt": "2026-10-30",
+        "ownFiles": ["packaging/pi/", "scripts/package_pi_extension.py", "tests/test_package_pi_extension.py", "docs/tasks/V2-pi-fixes/"],
+        "findings": ["P2-d govio-tools.ts:44 取消信号缺 aborted 预检", "P2-6 scripts/package_pi_extension.py 无自动化测试"]
+      },
+      {
+        "id": "V3",
+        "verifies": "T3",
+        "dir": "docs/tasks/V3-dsh-fixes",
+        "title": "核验 DSH 插件 + 修复（测试迁入 tests/、生成物忽略）",
+        "status": "done",
+        "summary": "修复第 2 轮评审两项发现：P1-2 把 docs/tasks/T3-harness-plugin/test_package_harness_plugin.py（8 用例）迁入 tests/test_package_harness_plugin.py（REPO_ROOT 改 parents[1]，删除原文件），uv run pytest tests/ 常规覆盖且 8 用例全绿（全套 286 passed, 1 skipped）；P2-e .gitignore 新增 packaging/deepseek/node_modules/ 与 package-lock.json 忽略规则，scripts/package_harness_plugin.py 排除集补 package-lock.json（自检复用 is_excluded 自动同步），README 补说明。打包脚本重跑自检通过且产物无 node_modules/lockfile（源目录临时放置生成物验证后已清理），ruff check/format 通过",
+        "files": [
+          "tests/test_package_harness_plugin.py",
+          "docs/tasks/T3-harness-plugin/test_package_harness_plugin.py",
+          ".gitignore",
+          "scripts/package_harness_plugin.py",
+          "packaging/deepseek/README.md",
+          "docs/tasks/V3-dsh-fixes/progress.md",
+          "docs/tasks/V3-dsh-fixes/status.json"
+        ],
+        "completedAt": "2026-10-30",
+        "ownFiles": ["tests/test_package_harness_plugin.py", "docs/tasks/T3-harness-plugin/test_package_harness_plugin.py", ".gitignore", "scripts/package_harness_plugin.py", "packaging/deepseek/README.md", "docs/tasks/V3-dsh-fixes/"],
+        "findings": ["P1-2 测试在 docs/tasks 下，打包脚本零常规覆盖", "P2-e npm install 生成物未忽略且 package-lock.json 会混入 dist"]
+      },
+      {
+        "id": "V4",
+        "verifies": "T4",
+        "dir": "docs/tasks/V4-mysql-verify",
+        "title": "核验 MysqlLoader + 修复 + 真实库 mysql:8 验证",
+        "status": "done",
+        "summary": "MysqlLoader 修复 P2-f（_parse_type 剥离 unsigned/zerofill 后缀，decimal(10,2) unsigned 恢复 precision/scale）与 P2（BASE TABLE 过滤补桩测试钉住 load_tables/load_columns 两处谓词）；真实库 mysql:8 验证列契约/注释/类型解析/order_no（删列后 ORDINAL_POSITION 自动重排、首列 order_no==1 未破坏、无需重排修复），固化为 tests/test_real_mysql.py integration 用例（默认 skip），容器已 stop+remove 清理。",
+        "files": [
+          "src/govio/metadata/mysql_loader.py",
+          "tests/test_mysql_loader.py",
+          "tests/test_real_mysql.py",
+          "docs/tasks/V4-mysql-verify/progress.md",
+          "docs/tasks/V4-mysql-verify/status.json"
+        ],
+        "completedAt": "2026-10-30",
+        "ownFiles": ["src/govio/metadata/mysql_loader.py", "tests/test_mysql_loader.py", "tests/test_real_mysql.py", "docs/tasks/V4-mysql-verify/"],
+        "findings": ["P2-f _TYPE_RE 不剥 unsigned/zerofill 后缀", "P2-4 BASE TABLE 过滤无测试保护", "真实库验证 + 删列后 order_no 语义核验（recommender.py:344 首列契约）"]
+      },
+      {
+        "id": "V5",
+        "verifies": "T5",
+        "dir": "docs/tasks/V5-postgres-verify",
+        "title": "核验 PostgresLoader + 修复 + 真实库 postgres:17 验证",
+        "status": "done",
+        "summary": "PostgresLoader 修复 P1-1（_parse_type 两个分支判空改用 pd.notna，混合列 + NULL 属性被 pandas 推断为 float64 NaN 后不再抛 ValueError，含经 _fetch→DataFrame 推断的回归测试与真实库复现）与 P2（FakePostgresConn 加 closed 标志并断言连接关闭）；真实库 postgres:17 验证列契约/注释/类型解析（裸 varchar/numeric → 0,0,0）/order_no（attnum 空洞重排）/视图与外表导出全部通过，固化为 tests/test_real_postgres.py integration 用例（默认 skip），容器已 stop+remove 清理。",
+        "files": [
+          "src/govio/metadata/postgres_loader.py",
+          "tests/test_postgres_loader.py",
+          "tests/test_real_postgres.py",
+          "docs/tasks/V5-postgres-verify/progress.md",
+          "docs/tasks/V5-postgres-verify/status.json"
+        ],
+        "completedAt": "2026-10-30",
+        "ownFiles": ["src/govio/metadata/postgres_loader.py", "tests/test_postgres_loader.py", "tests/test_real_postgres.py", "docs/tasks/V5-postgres-verify/"],
+        "findings": ["P1-1 _parse_type 对 pandas NaN 崩溃（近必现）", "P2-5 连接关闭无断言", "真实库验证（必须覆盖 P1-1 复现场景）"]
+      },
+      {
+        "id": "V6",
+        "verifies": "T6",
+        "dir": "docs/tasks/V6-cli-verify",
+        "title": "核验 CLI/查询执行 + 修复 + 真实库 trino:483 端到端",
+        "status": "done",
+        "summary": "P2-a scheme 不对称修复（trino+http 归一 + meta.py drivername 大小写不敏感）；P2-g 测试补退出码与报错文案断言；P2-c config.md URL 格式表补齐归一语义；真实库 trino:483/mysql:8/postgres:17 端到端验证 DatabaseManager.execute_sql 统一路径与 meta meta 三源 CSV 抽取，固化 tests/test_real_observe.py（integration 默认 skip），容器已全部清理",
+        "files": [
+          "src/govio/observe_data/core/database.py",
+          "src/govio/cli/meta.py",
+          "tests/test_meta_cli_sources.py",
+          "tests/test_observe_multi_db.py",
+          "tests/test_real_observe.py",
+          "docs/specs/config.md",
+          "docs/specs/observe-data.md",
+          "docs/tasks/V6-cli-verify/progress.md",
+          "docs/tasks/V6-cli-verify/status.json"
+        ],
+        "completedAt": "2026-10-30",
+        "ownFiles": ["src/govio/observe_data/core/database.py", "src/govio/cli/meta.py", "tests/test_meta_cli_sources.py", "tests/test_observe_multi_db.py", "tests/test_real_observe.py", "docs/specs/config.md", "docs/specs/observe-data.md", "docs/tasks/V6-cli-verify/"],
+        "findings": ["P2-a trino+http 归一缺失 + scheme 大小写不对称", "P2-g 断言强度不足", "P2-c config.md Datasource URL Formats 表未同步（AGENTS 合规）", "真实库端到端（observe execute_sql + meta meta --source 三库）"]
+      },
+      {
+        "id": "V7",
+        "verifies": "T7",
+        "dir": "docs/tasks/V7-docs-final",
+        "title": "核验文档整合 + 修复 + 全量验证",
+        "status": "done",
+        "summary": "文档整合与收尾核验完成：P2-b 修复 docs/specs/README.md Packaging 行失效链接（../../install.md → ../install.md，仓库根无 install.md 已证实）；P2 修复 install.md 示例路径语义两处（cp 步骤加注 assets 已在 <skills-root>/govio/assets 时跳过并以绝对路径为源，meta graph --output 统一为 ./output 并注明目录须已存在的前置条件，与 cmd_graph 退出行为核对一致）；收尾核验 V2~V6 回写：roadmap 补记打包测试/真实库集成测试并勾选已完成迁入项、修正 assets 默认目录过时描述，install.md 补 URL scheme 归一说明，越界 1 行小修 metadata.md（unsigned/zerofill 剥离语义）与 design.md §4.4（package-lock.json 排除）；全量验证 ruff 通过、pytest 303 passed 18 skipped（integration 默认 skip）",
+        "files": [
+          "docs/specs/README.md",
+          "docs/install.md",
+          "docs/roadmap.md",
+          "docs/specs/metadata.md",
+          "docs/tasks/T1-distribution-design/design.md",
+          "docs/tasks/V7-docs-final/progress.md",
+          "docs/tasks/V7-docs-final/status.json"
+        ],
+        "completedAt": "2026-10-30",
+        "ownFiles": ["docs/install.md", "docs/roadmap.md", "docs/specs/README.md", "docs/tasks/V7-docs-final/"],
+        "findings": ["P2-b specs/README.md 相对链接失效", "P2-12 install.md 示例路径语义两处", "V2-V6 修复回写核对 + 全量 pytest/ruff"]
+      }
+    ]
+  }
 }
