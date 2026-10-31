@@ -1,0 +1,18 @@
+{
+  "name": "@govio/pi-package",
+  "version": "0.6.0",
+  "description": "Govio 数据治理知识图谱 — Pi 工具与技能包",
+  "keywords": ["pi-package"],
+  "type": "module",
+  "pi": {
+    "extensions": ["extensions/govio-tools.ts"],
+    "skills": ["skills", "!skills/govio/assets/**"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  }
+}

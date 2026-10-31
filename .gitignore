@@ -18,6 +18,9 @@ assets/
 .iflow
 .worktrees/
 
+# 打包脚本生成的 skills 副本（单一真源为 skills/）
+packaging/pi/skills/
+
 # observe DataFrame storage
 .govio/observe/
 
