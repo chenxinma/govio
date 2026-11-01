@@ -12,6 +12,15 @@ const SUBCOMMANDS = new Set(['meta', 'query', 'observe', 'sql', 'backend']);
 const DEFAULT_TIMEOUT_MS = 120_000;
 /** 错误信息中 stderr 摘要的长度上限 */
 const STDERR_EXCERPT_LIMIT = 2000;
+/** 防御性 kill：spawn 失败/进程已退出/重复 kill 时 child.kill 可能抛异常（如 EINVAL），收尾路径一律不抛 */
+function killChildQuietly(child) {
+    try {
+        child.kill();
+    }
+    catch {
+        // 子进程处于未启动/无效状态时 kill 抛错属预期场景，忽略即可，由 close/error 事件收尾
+    }
+}
 /** 运行 govio-cli 子进程并收集 UTF-8 输出 */
 async function runGovioCli(cli, args, signal, timeoutMs) {
     return new Promise((resolve, reject) => {
@@ -22,11 +31,11 @@ async function runGovioCli(cli, args, signal, timeoutMs) {
         let aborted = false;
         const timer = setTimeout(() => {
             timedOut = true;
-            child.kill();
+            killChildQuietly(child);
         }, timeoutMs);
         const onAbort = () => {
             aborted = true;
-            child.kill();
+            killChildQuietly(child);
         };
         if (signal.aborted) {
             onAbort();

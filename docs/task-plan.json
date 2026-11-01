@@ -550,5 +550,63 @@
         "completedAt": "2026-10-31"
       }
     ]
+  },
+  "round5": {
+    "goal": "onAbort 取消竞态加固 + observe 其余子命令失败退出码统一（其余延后项继续暂缓）",
+    "execution": "两任务串行（J1 与 J2 均改 src/govio/cli/observe.py 所属链路，部分所有权重叠不可并行）；subagent 实现，父代理验收并回写计划；分支 fix/observe-exit-and-abort",
+    "tasks": [
+      {
+        "id": "J1",
+        "dir": "docs/tasks/J1-onabort-hardening",
+        "title": "onAbort child.kill() 竞态加固（pi 扩展 + DSH 插件两处）",
+        "status": "done",
+        "summary": "onAbort child.kill() 竞态加固：定位两处子进程胶水（packaging/pi/extensions/govio-tools.ts 与 packaging/deepseek/src/index.ts）各 2 个 kill 调用点（setTimeout 超时收尾 + onAbort 取消收尾），spawn 失败/进程已退出/重复 kill 时 child.kill() 可抛 EINVAL 等异常。两处各加等价防御函数 killChildQuietly（try/catch 包裹 kill，抛错忽略，收尾仍由 error/close 事件驱动），全部 kill 调用改经该函数，任何路径不抛、无未捕获异常/未处理 rejection，两处行为一致；风格随各自文件（Pi 双引号+分号、DSH 单引号无分号）。packaging/deepseek 下 npm install 后 npx tsc -p . 零错误，lib/index.js 已同步（diff 11+/2-，与 src 对应），lib/types/index.d.ts 内容不变（哈希与 index 一致）。验证：node --check 通过；npx tsc 零错误；uv run python -m pytest tests/ -q 342 passed, 18 skipped 与基线一致；手测（假 CLI + 心跳文件）两处胶水 5 场景全 PASS——spawn 失败+入口即 abort（原始竞态）不再抛 EINVAL，立即 abort 约 10ms 即杀子进程不跑满超时，超时/正常路径不受影响。打包脚本与 docs/specs/ 未改（契约未变），README 无需补充。",
+        "files": [
+          "packaging/pi/extensions/govio-tools.ts",
+          "packaging/deepseek/src/index.ts",
+          "packaging/deepseek/lib/index.js",
+          "docs/tasks/J1-onabort-hardening/progress.md",
+          "docs/tasks/J1-onabort-hardening/status.json"
+        ],
+        "ownFiles": [
+          "packaging/pi/extensions/govio-tools.ts",
+          "packaging/deepseek/src/index.ts",
+          "packaging/deepseek/lib/",
+          "docs/tasks/J1-onabort-hardening/"
+        ],
+        "findings": [
+          "V2 遗留：onAbort 内 child.kill() 在 spawn 失败（govio-cli 缺失）时抛 EINVAL；「入口即 abort + spawn 失败」窄场景下收尾异常；两处胶水（pi/DSH）行为应一致"
+        ],
+        "completedAt": "2026-10-31"
+      },
+      {
+        "id": "J2",
+        "dir": "docs/tasks/J2-observe-exit-codes",
+        "title": "observe 其余子命令失败退出码统一（compare/explore/chart 等）",
+        "status": "done",
+        "summary": "observe 全部子命令（compare/explore/chart/info/show/release/visualize-relations）失败退出码统一：失败（success:false、参数非法、文件不存在、执行错误、后端异常）→ stdout 保留结构化 error JSON（字段契约向后兼容）+ stderr ❌ + 退出码 1；成功（含空结果/无匹配）退出 0。新增 _fail 统一失败出口；工具层（load_dataframe/render_chart/release_dataframe/visualize_relations）契约不变，CLI 层转换退出码。tests/test_exit_codes.py 新增 27 个打桩用例（各子命令 成功/失败/空结果），全量 369 passed, 18 skipped（基线 342+18 只增不减），ruff 全绿；docs/specs/cli.md 与 docs/specs/observe-data.md 已同步。",
+        "files": [
+          "src/govio/cli/observe.py",
+          "tests/test_exit_codes.py",
+          "docs/specs/cli.md",
+          "docs/specs/observe-data.md",
+          "docs/tasks/J2-observe-exit-codes/progress.md",
+          "docs/tasks/J2-observe-exit-codes/status.json"
+        ],
+        "ownFiles": [
+          "src/govio/cli/observe.py",
+          "src/govio/observe_data/tools/visualize_relations.py",
+          "tests/test_exit_codes.py",
+          "docs/specs/observe-data.md",
+          "docs/specs/cli.md",
+          "docs/tasks/J2-observe-exit-codes/"
+        ],
+        "findings": [
+          "I1 范围裁决只做 query/observe load；compare/explore/chart/info/show/release 等失败仍可能 exit 0（success:false 不转退出码）",
+          "与 I1 同款契约：失败→❌ stderr + 非 0；成功但空结果→0；stdout 结果契约向后兼容"
+        ],
+        "completedAt": "2026-10-31"
+      }
+    ]
   }
 }
