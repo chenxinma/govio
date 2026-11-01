@@ -2,7 +2,7 @@
  * Govio 工具扩展 — 将 govio-cli 包装为 Pi custom tools
  * 所有操作通过 govio-cli 子进程完成（argv 数组，无 shell），符合 skills 全局约束
  */
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 
 import { Type } from "@earendil-works/pi-ai";
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -17,6 +17,15 @@ interface CliResult {
 	code: number | null;
 	stdout: string;
 	stderr: string;
+}
+
+/** 防御性 kill：spawn 失败/进程已退出/重复 kill 时 child.kill 可能抛异常（如 EINVAL），收尾路径一律不抛 */
+function killChildQuietly(child: ChildProcess): void {
+	try {
+		child.kill();
+	} catch {
+		// 子进程处于未启动/无效状态时 kill 抛错属预期场景，忽略即可，由 close/error 事件收尾
+	}
 }
 
 /** 运行 govio-cli 子进程并收集 UTF-8 输出 */
@@ -35,11 +44,11 @@ async function runGovioCli(
 		// 超时与取消信号统一转发为 kill，由 close 事件收尾
 		const timer = setTimeout(() => {
 			timedOut = true;
-			child.kill();
+			killChildQuietly(child);
 		}, timeoutMs);
 		const onAbort = () => {
 			aborted = true;
-			child.kill();
+			killChildQuietly(child);
 		};
 		// aborted 预检：监听注册前已 abort 的信号不会触发事件，需立即终止而非跑满超时
 		if (signal.aborted) {

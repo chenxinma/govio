@@ -1,0 +1,12 @@
+{
+  "task": "J1",
+  "status": "done",
+  "summary": "onAbort child.kill() 竞态加固：定位两处子进程胶水（packaging/pi/extensions/govio-tools.ts 与 packaging/deepseek/src/index.ts）各 2 个 kill 调用点（setTimeout 超时收尾 + onAbort 取消收尾），spawn 失败/进程已退出/重复 kill 时 child.kill() 可抛 EINVAL 等异常。两处各加等价防御函数 killChildQuietly（try/catch 包裹 kill，抛错忽略，收尾仍由 error/close 事件驱动），全部 kill 调用改经该函数，任何路径不抛、无未捕获异常/未处理 rejection，两处行为一致；风格随各自文件（Pi 双引号+分号、DSH 单引号无分号）。packaging/deepseek 下 npm install 后 npx tsc -p . 零错误，lib/index.js 已同步（diff 11+/2-，与 src 对应），lib/types/index.d.ts 内容不变（哈希与 index 一致）。验证：node --check 通过；npx tsc 零错误；uv run python -m pytest tests/ -q 342 passed, 18 skipped 与基线一致；手测（假 CLI + 心跳文件）两处胶水 5 场景全 PASS——spawn 失败+入口即 abort（原始竞态）不再抛 EINVAL，立即 abort 约 10ms 即杀子进程不跑满超时，超时/正常路径不受影响。打包脚本与 docs/specs/ 未改（契约未变），README 无需补充。",
+  "files": [
+    "packaging/pi/extensions/govio-tools.ts",
+    "packaging/deepseek/src/index.ts",
+    "packaging/deepseek/lib/index.js",
+    "docs/tasks/J1-onabort-hardening/progress.md",
+    "docs/tasks/J1-onabort-hardening/status.json"
+  ]
+}

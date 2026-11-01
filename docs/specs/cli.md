@@ -400,13 +400,19 @@ Supports `bar` and `line` chart types. Includes Chinese font fallback chain.
 
 When `-o/--output` is specified, writes DataFrame content as JSON (records orientation, UTF-8, indented) to the specified file path.
 
-### 退出码契约（observe load）
+### 退出码契约（observe 全部子命令）
 
 | 场景 | 退出码 | 输出 |
 |---|---|---|
-| 加载成功（含 0 行结果） | 0 | stdout 结果 JSON（`success: true`） |
-| SQL 错误 / 连接失败 / 内存加载失败 | 1 | stdout 保留结果 JSON（`success: false, error: ...`，契约向后兼容）+ `❌ {error}` → stderr |
-| 参数缺失（如 `--datasource` 未设且非 `--memory`） | 1 | `❌ ...` → stderr |
+| 成功（含空结果/无匹配/无差异：0 行 DataFrame、空关系列表、`released: []`、空概览） | 0 | stdout 结果 JSON（`success: true` 或列表/概览 JSON） |
+| load：SQL 错误 / 连接失败 / 内存加载失败 | 1 | stdout 保留结果 JSON（`success: false, error: ...`，契约向后兼容）+ `❌ {error}` → stderr |
+| compare / explore / chart / show（info --name）：DataFrame 不存在 | 1 | stdout 保留 `{"success": false, "error": ...}`（字段契约不变）+ `❌ {error}` → stderr |
+| compare：比对执行错误（如 join 列不存在）；explore：探查执行错误 | 1 | stdout `{"success": false, "error": "比对执行错误: ..."}` + `❌ ...` → stderr |
+| chart：列不存在 / 图表类型非法（render_chart 返回 success:false）/ 渲染异常 | 1 | stdout 保留 `{"success": false, "error": ...}` + `❌ {error}` → stderr |
+| show：`--rows` 为负数（参数非法） | 1 | `❌ 样本行数不能为负数: ...` → stderr |
+| release：`--name` 指定的 DataFrame 不存在 | 1 | stdout 保留 `{"success": false, "error": ...}` + `❌ {error}` → stderr |
+| release：缺 `--name` 且缺 `--all`，或两者同时指定（参数非法） | 1 | `❌ ...` → stderr |
+| visualize-relations：关系文件不存在 / JSON 解析失败 / 关系数据非法 | 1 | stdout 保留 `{"success": false, "error": ...}` + `❌ {error}` → stderr |
 | 未预期异常（observe 入口兜底） | 1 | `❌ 执行失败: ...` → stderr（不裸奔 traceback） |
 
-约定与 query 一致：成功 0 / 失败非 0；`load` 失败时 stdout 的 result JSON 契约不变，仅额外向 stderr 输出 `❌` 错误并以退出码 1 结束。其余 observe 子命令（compare/explore/chart 等）本次不在退出码改造范围内。
+约定与 query 一致：成功 0 / 失败非 0（统一 1）。失败时 stdout 的结果 JSON 契约向后兼容——保留既有字段（`success: false, error: ...`），仅额外向 stderr 输出 `❌` 错误并以退出码 1 结束；stdout 不出现 `❌` 前缀。工具层（`load_dataframe` / `render_chart` / `release_dataframe` / `visualize_relations` 等）保持 `{'success': True/False}` 返回契约不变，由 CLI 层统一把 `success: false` 转换为退出码 1。

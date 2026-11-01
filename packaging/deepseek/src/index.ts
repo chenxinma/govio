@@ -2,7 +2,7 @@
  * Govio 工具插件 — 将 govio-cli 包装为 DSH tools
  * 所有操作通过 govio-cli 子进程完成（argv 数组，无 shell），符合 skills 全局约束
  */
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -36,6 +36,15 @@ interface CliRunResult {
 	aborted: boolean
 }
 
+/** 防御性 kill：spawn 失败/进程已退出/重复 kill 时 child.kill 可能抛异常（如 EINVAL），收尾路径一律不抛 */
+function killChildQuietly(child: ChildProcess): void {
+	try {
+		child.kill()
+	} catch {
+		// 子进程处于未启动/无效状态时 kill 抛错属预期场景，忽略即可，由 close/error 事件收尾
+	}
+}
+
 /** 运行 govio-cli 子进程并收集 UTF-8 输出 */
 async function runGovioCli(
 	cli: string,
@@ -52,11 +61,11 @@ async function runGovioCli(
 
 		const timer = setTimeout(() => {
 			timedOut = true
-			child.kill()
+			killChildQuietly(child)
 		}, timeoutMs)
 		const onAbort = () => {
 			aborted = true
-			child.kill()
+			killChildQuietly(child)
 		}
 		if (signal.aborted) {
 			onAbort()
