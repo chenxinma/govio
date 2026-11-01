@@ -229,6 +229,8 @@ or `{"success": false, "error": "..."}` on failure.
 | `visualize-relations` | `--relations-file FILE` | Generate visualization |
 | `chart` | `--name`, `--type bar\|line`, `--x`, `--y`, `-o OUTPUT` | Generate PNG chart |
 
-### load 失败语义与退出码
+### 失败语义与退出码（全部 observe 子命令）
 
-`load_dataframe` / `load_from_memory` 保持 `{'success': True/False, 'error': ...}` 契约不变（向后兼容）。`observe load` 在 `success: false` 时：stdout 仍输出完整结果 JSON（含 `error` 字段），另向 stderr 打印 `❌ {error}` 并以退出码 1 结束；成功（含 0 行结果）退出 0。详见 `docs/specs/cli.md`「退出码契约（observe load）」。
+工具层保持 `{'success': True/False, 'error': ...}` 契约不变（向后兼容）：`load_dataframe` / `load_from_memory` / `render_chart` / `release_dataframe` / `visualize_relations` 失败时均返回 `{'success': False, 'error': ...}`。
+
+CLI 层统一把失败转换为退出码 1（与 load 一致）：`success: false`、DataFrame 不存在、参数非法（如 `--rows` 负数、release 同时给 `--name` 与 `--all`）、文件不存在、比对/探查/渲染执行错误、后端异常 → stdout 仍输出结果 JSON（含 `error` 字段，既有字段不变），另向 stderr 打印 `❌ {error}` 并以退出码 1 结束；成功（含 0 行结果、空关系列表、`released: []` 等空结果）退出 0。未预期异常由 `observe()` 入口兜底为 `❌ 执行失败: ...` + 退出码 1（不裸奔 traceback）。详见 `docs/specs/cli.md`「退出码契约（observe 全部子命令）」。

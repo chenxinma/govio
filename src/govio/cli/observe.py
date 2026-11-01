@@ -8,7 +8,7 @@ DataFrame 持久化到 .govio/observe/ 目录。
 import argparse
 import json
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from .config import ConfigManager
 
@@ -38,6 +38,27 @@ def get_db_manager(config: dict) -> "DatabaseManager":
         for name, ds in datasources.items()
     }
     return DatabaseManager(ds_configs)
+
+
+def _fail(message: str, output_json: bool = True) -> NoReturn:
+    """失败统一出口：stdout 保留结构化错误 JSON，stderr 输出 ❌ 错误并以退出码 1 结束
+
+    Args:
+        message: 错误信息（不带 ❌ 前缀）
+        output_json: 是否向 stdout 输出 {"success": false, "error": ...} JSON；
+            结果 JSON 已经打印过时传 False（仅补 stderr 并退出）
+
+    Returns:
+        NoReturn: 总是以退出码 1 结束
+    """
+    if output_json:
+        print(
+            json.dumps(
+                {"success": False, "error": message}, ensure_ascii=False, indent=2
+            )
+        )
+    print(f"❌ {message}", file=sys.stderr)
+    sys.exit(1)
 
 
 def cmd_show_datasource(config: dict, detail: bool = False) -> None:
@@ -108,6 +129,8 @@ def cmd_release(config: dict, name: str | None, release_all: bool) -> None:
     else:
         result = release_dataframe(store=store, name=name) # pyright:ignore
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("success"):
+        _fail(result.get("error", "释放失败"), output_json=False)
 
 
 def cmd_compare(
@@ -118,18 +141,19 @@ def cmd_compare(
 
     source = store.get(source_df)
     if source is None:
-        print(json.dumps({"success": False, "error": f"DataFrame '{source_df}' 不存在"}))
-        return
+        _fail(f"DataFrame '{source_df}' 不存在")
 
     target = store.get(target_df)
     if target is None:
-        print(json.dumps({"success": False, "error": f"DataFrame '{target_df}' 不存在"}))
-        return
+        _fail(f"DataFrame '{target_df}' 不存在")
 
     from ..observe_data.core.comparator import TableComparator
 
-    comparator = TableComparator()
-    result = comparator.compare(source, target, join_columns)
+    try:
+        comparator = TableComparator()
+        result = comparator.compare(source, target, join_columns)
+    except Exception as e:
+        _fail(f"比对执行错误: {e!s}")
     print(json.dumps({"success": True, **result}, ensure_ascii=False, indent=2))
 
 
@@ -145,14 +169,16 @@ def cmd_explore(config: dict, dataframes: list[str] | None = None) -> None:
     for name in dataframes:
         df = store.get(name)
         if df is None:
-            print(json.dumps({"success": False, "error": f"DataFrame '{name}' 不存在"}))
-            return
+            _fail(f"DataFrame '{name}' 不存在")
         df_dict[name] = df
 
     from ..observe_data.core.explorer import RelationExplorer
 
-    explorer = RelationExplorer()
-    result = explorer.explore(df_dict)
+    try:
+        explorer = RelationExplorer()
+        result = explorer.explore(df_dict)
+    except Exception as e:
+        _fail(f"关系探查执行错误: {e!s}")
     print(json.dumps({"success": True, **result}, ensure_ascii=False, indent=2))
 
 
@@ -162,16 +188,19 @@ def cmd_visualize(config: dict, relations_file: str) -> None:
         with open(relations_file, encoding="utf-8") as f:
             relations = json.load(f)
     except FileNotFoundError:
-        print(json.dumps({"success": False, "error": f"关系文件不存在: {relations_file}"}))
-        return
+        _fail(f"关系文件不存在: {relations_file}")
     except json.JSONDecodeError as e:
-        print(json.dumps({"success": False, "error": f"JSON 解析失败: {e}"}))
-        return
+        _fail(f"JSON 解析失败: {e!s}")
 
     from ..observe_data.tools.visualize_relations import visualize_relations
 
-    result = visualize_relations(relations=relations)
+    try:
+        result = visualize_relations(relations=relations)
+    except Exception as e:
+        _fail(f"关系可视化执行错误: {e!s}")
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("success"):
+        _fail(result.get("error", "关系可视化失败"), output_json=False)
 
 
 def cmd_chart(
@@ -186,19 +215,23 @@ def cmd_chart(
     store = ObserveStore()
     df = store.get(name)
     if df is None:
-        print(json.dumps({"success": False, "error": f"DataFrame '{name}' 不存在"}))
-        return
+        _fail(f"DataFrame '{name}' 不存在")
 
     from ..observe_data.core.chart import render_chart
 
-    result = render_chart(
-        df=df,
-        chart_type=chart_type,
-        x_col=x,
-        y_col=y,
-        output_path=output,
-    )
+    try:
+        result = render_chart(
+            df=df,
+            chart_type=chart_type,
+            x_col=x,
+            y_col=y,
+            output_path=output,
+        )
+    except Exception as e:
+        _fail(f"图表生成执行错误: {e!s}")
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    if not result.get("success"):
+        _fail(result.get("error", "图表生成失败"), output_json=False)
 
 
 def cmd_info(config: dict, args: argparse.Namespace) -> None:
@@ -231,8 +264,9 @@ def cmd_show(config: dict, name: str, rows: int) -> None:
     store = ObserveStore()
     df = store.get(name)
     if df is None:
-        print(json.dumps({"success": False, "error": f"DataFrame '{name}' 不存在"}))
-        return
+        _fail(f"DataFrame '{name}' 不存在")
+    if rows < 0:
+        _fail(f"样本行数不能为负数: {rows}")
 
     schema = [{"column": col, "dtype": str(df[col].dtype)} for col in df.columns]
     sample = json.loads(df.head(rows).to_json(orient="records", force_ascii=False))
@@ -361,6 +395,9 @@ def observe():
             case "release":
                 if not args.all and not args.name:
                     print("❌ 请指定 --name 或 --all", file=sys.stderr)
+                    sys.exit(1)
+                if args.all and args.name:
+                    print("❌ 请不要同时指定 --name 和 --all", file=sys.stderr)
                     sys.exit(1)
                 cmd_release(config, args.name, args.all)
             case "compare":

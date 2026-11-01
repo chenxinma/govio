@@ -1,0 +1,13 @@
+{
+  "task": "J2",
+  "status": "done",
+  "summary": "observe 全部子命令（compare/explore/chart/info/show/release/visualize-relations）失败退出码统一：失败（success:false、参数非法、文件不存在、执行错误、后端异常）→ stdout 保留结构化 error JSON（字段契约向后兼容）+ stderr ❌ + 退出码 1；成功（含空结果/无匹配）退出 0。新增 _fail 统一失败出口；工具层（load_dataframe/render_chart/release_dataframe/visualize_relations）契约不变，CLI 层转换退出码。tests/test_exit_codes.py 新增 27 个打桩用例（各子命令 成功/失败/空结果），全量 369 passed, 18 skipped（基线 342+18 只增不减），ruff 全绿；docs/specs/cli.md 与 docs/specs/observe-data.md 已同步。",
+  "files": [
+    "src/govio/cli/observe.py",
+    "tests/test_exit_codes.py",
+    "docs/specs/cli.md",
+    "docs/specs/observe-data.md",
+    "docs/tasks/J2-observe-exit-codes/progress.md",
+    "docs/tasks/J2-observe-exit-codes/status.json"
+  ]
+}
