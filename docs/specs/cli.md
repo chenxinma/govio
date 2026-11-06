@@ -255,6 +255,8 @@ merge_node_csv(new_df, csv_path, node_type, key_col) -> pd.DataFrame
 merge_edge_csv(new_df, csv_path, dedup_cols) -> pd.DataFrame
 ```
 
+Merge 时按业务键把本次输入与已有 CSV 对比分类（新增/更新/跳过），累计写入 `<output>/import-delta.json`，供下文「校验报告」的 `changes` 使用。
+
 ### `schema` Subcommand
 
 `govio-cli meta schema {metric|relationship|datasource}` — 输出标准 JSON Schema（UTF-8），供外部 agent 生成可被 `meta metric` / `meta rel` / `meta meta` 导入的标准数据。
@@ -291,6 +293,31 @@ Graph backend config is read from `~/.govio/config.yaml` (`graph` section). Supp
 - Ladybug: upsert/import/delete
 - NetworkX: incremental/rebuild GML/delete
 
+`meta graph` 在图数据更新失败时打印 `❌ graph 更新失败（未生成校验报告）` 并退出码 1（不再误报 ✅）。
+
+### 校验报告（import-report.json）
+
+`meta graph` / `meta import-schema` 在图库更新成功后产出机器可读的校验报告：
+
+| Argument | Required | Default | Description |
+|---|---|---|---|
+| `--report` | No | `<output>/import-report.json` | 报告输出路径 |
+
+报告字段：
+
+| 字段 | 内容 |
+|---|---|
+| `import_counts` | 各节点/边类型导入行数（`nodes` / `edges`） |
+| `changes` | 本次新增/更新/跳过数（`nodes` / `edges` 按类型 + `totals`） |
+| `checks` | 三项校验：`duplicate_node_ids` / `missing_required` / `orphan_edges`，每项含 `status`/`count`/`examples`（样例最多 5 条） |
+| `summary` | `status`（pass/fail）与计数汇总 |
+| 其它 | `report_version` / `generated_at` / `csv_dir` / `mode` / `backend` |
+
+- `changes` 口径与图后端无关：merge 时按业务键分类（新增=键不存在 / 更新=键存在但值变化 / 跳过=键存在且值相同，值按字符串比较、NaN 视为空串），计入 `<output>/import-delta.json`；graph 同步成功后 fold 进报告并清零
+- 图更新失败时**不写报告**（不留半截），`meta graph` / `meta import-schema` 退出码 1
+- stdout 保留原有 ✓/行数体验，追加 `✓ 校验报告已写入: <path>（校验结果: pass/fail）`
+- 重复导入幂等（同批输入两轮导入后图库状态一致、第二轮 changes 全为 skipped）由 `tests/test_meta_idempotent.py` 固化；报告/校验的单元测试见 `tests/test_import_report.py`
+
 ### `import-schema` Subcommand
 
 Shortcut that combines `meta meta` + `meta graph` for DuckDB datasources already configured via `govio-cli onboard`. Reads the datasource URL from `~/.govio/config.yaml`, validates it is `duckdb://`, extracts the file path, then runs the full pipeline: CSV export → graph update → assets generation.
@@ -307,6 +334,7 @@ govio-cli meta import-schema --datasource mydb --schemas main --output ./data --
 | `--output` | No | `./output` | CSV intermediate directory |
 | `--assets-dir` | No | `.agents/skills/govio/assets` | Assets output directory |
 | `--mode` | No | `update` | `update` / `rebuild` / `clear` |
+| `--report` | No | `<output>/import-report.json` | 校验报告输出路径（见「校验报告」） |
 
 Only supports DuckDB datasources (`duckdb://` URL). Non-DuckDB datasources cause exit with code 1.
 

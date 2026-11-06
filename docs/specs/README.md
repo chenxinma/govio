@@ -12,7 +12,7 @@ Govio (Governance + IO) is a data governance knowledge graph platform. It extrac
 | Module | Spec | Description |
 |---|---|---|
 | `govio.graph` | [graph.md](graph.md) | Graph backends (NetworkX, FalkorDB, Ladybug) |
-| `govio.metadata` | [metadata.md](metadata.md) | Metadata loading (TDS/DuckDB/MySQL/PostgreSQL/Trino loaders), recommendation, metric definition, node ID generation |
+| `govio.metadata` | [metadata.md](metadata.md) | Metadata loading (TDS/DuckDB/MySQL/PostgreSQL/Trino loaders), recommendation, metric definition, node ID generation, import validation report |
 | `govio.core` | [core.md](core.md) | Graph factory, asset generation, SQL builder |
 | `govio.cli` | [cli.md](cli.md) | CLI entry points and subcommands |
 | `govio.observe_data` | [observe-data.md](observe-data.md) | Data observation, comparison, exploration, charting |
