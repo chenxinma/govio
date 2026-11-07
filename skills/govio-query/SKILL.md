@@ -160,6 +160,19 @@ govio-cli sql build -f query.json -o output.sql
 cat query.json | govio-cli sql build
 ```
 
+### 口径自检（caliber）
+
+生成/执行取数 SQL 后，用 `govio-cli sql caliber` 校验 SQL 口径是否与图谱指标定义一致（黄色警示类场景的权威比对入口）：
+
+```bash
+govio-cli sql caliber --sql "SELECT SUM(amount) FROM orders" --metric m_sales_amount
+govio-cli sql caliber --sql-file query.sql --metric m_sales_amount --metric m_order_count
+```
+
+输出单行 JSON `{"results": [{"metric", "status", "differences"}]}`；
+`status` 为 `consistent`/`conflict`/`unknown`（宁可 unknown 不误报）；
+`--metric` 接指标 code 或节点 ID，可重复。退出码：比对完成 0，坏输入/配置/图后端错误 1。
+
 #### JSON 请求格式
 
 ```json
