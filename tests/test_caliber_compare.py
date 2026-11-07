@@ -243,13 +243,18 @@ def test_read_metric_caliber_networkx():
 
 
 def test_read_metric_caliber_cypher():
-    metric_rows = [["ME00000002", None, "m_orders", "订单数", "COUNT(order_id)",
+    metric_rows = [["ME00000002", "m_orders", "订单数", "COUNT(order_id)",
                     "订单笔数", None, None]]
-    col_rows = [["ME00000002", None, "m_orders", "order_id", "ds.main.orders.order_id", "measure"]]
+    col_rows = [["ME00000002", "m_orders", "order_id", "ds.main.orders.order_id", "measure"]]
 
     class StubGraph:
         def query(self, query: str, params: dict | None = None):
+            # 回归护栏（BUGFIX-caliber-cypher）：属性名必须取 schema.md（id/code）；
+            # 把 CSV 装载列名（如 `:ID(Metric)`）写进 Cypher 会触发真实图库 Binder exception。
+            assert ":ID(" not in query, f"Cypher 引用了非 schema.md 属性: {query}"
             if "REFERS_COLUMN" in query:
+                # `column` 是保留字，必须反引号（真实图库 Parser exception 回归护栏）
+                assert "c.`column`" in query, f"Col.column 未反引号: {query}"
                 return col_rows
             return metric_rows
 

@@ -425,13 +425,15 @@ def _read_metric_networkx(graph: Any, ref: str) -> CaliberMetric | None:
 
 
 def _read_metric_cypher(graph: Any, ref: str) -> CaliberMetric | None:
+    # 属性名一律取 schema.md（Metric 主键 id、code）；CSV 装载列名（如 `:ID(Metric)`）
+    # 不是图库属性，写进 Cypher 会触发 Binder exception（BUGFIX-caliber-cypher）。
     rows = graph.query(
-        "MATCH (m:Metric) RETURN m.id, m.`:ID(Metric)`, m.code, m.name, m.formula, "
+        "MATCH (m:Metric) RETURN m.id, m.code, m.name, m.formula, "
         "m.business_definition, m.statistical_scope, m.time_scope"
     )
     target: tuple[Any, ...] | None = None
     for row in rows:
-        if _match_ref(ref, row[0], row[1], row[2]):
+        if _match_ref(ref, row[0], row[1]):
             target = row
             break
     if target is None:
@@ -440,21 +442,22 @@ def _read_metric_cypher(graph: Any, ref: str) -> CaliberMetric | None:
     columns: list[MetricColumn] = []
     for row in graph.query(
         "MATCH (m:Metric)-[r:REFERS_COLUMN]->(c:Col) "
-        "RETURN m.id, m.`:ID(Metric)`, m.code, c.column_name, c.column, r.role"
+        # `column` 是 Cypher 保留字，必须反引号（Parser exception，见 BUGFIX-caliber-cypher）
+        "RETURN m.id, m.code, c.column_name, c.`column`, r.role"
     ):
-        if not _match_ref(ref, row[0], row[1], row[2]):
+        if not _match_ref(ref, row[0], row[1]):
             continue
-        name = row[3] or str(row[4] or "").rsplit(".", 1)[-1]
-        columns.append(MetricColumn(column_name=str(name), role=str(row[5] or "")))
+        name = row[2] or str(row[3] or "").rsplit(".", 1)[-1]
+        columns.append(MetricColumn(column_name=str(name), role=str(row[4] or "")))
 
     attrs = {
-        "id": target[0] or target[1],
-        "code": target[2],
-        "name": target[3],
-        "formula": target[4],
-        "business_definition": target[5],
-        "statistical_scope": target[6],
-        "time_scope": target[7],
+        "id": target[0],
+        "code": target[1],
+        "name": target[2],
+        "formula": target[3],
+        "business_definition": target[4],
+        "statistical_scope": target[5],
+        "time_scope": target[6],
     }
     return _metric_from_attrs(str(attrs["id"]), attrs, columns)
 
