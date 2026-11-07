@@ -440,6 +440,28 @@ JSON Schema (draft-07) for metric definitions:
 
 ---
 
+## caliber.py
+
+口径冲突检测（`govio.cli.sql._caliber` 的比对内核，纯 stdlib、可单测）：
+
+```python
+extract_sql_facts(sql) -> SqlFacts            # 聚合调用/引用列/WHERE 条件/时间窗
+compare_metric(metric, facts) -> dict         # {metric, status, differences}
+check_caliber(metrics, sql) -> dict           # {results: [...]}
+read_metric_caliber(graph, ref) -> CaliberMetric | None  # code 或节点 ID
+```
+
+- 比对维度：`aggregation`（formula 显式聚合 vs SQL 聚合签名，含 DISTINCT）、
+  `filter`（定义中剔除类限定 vs SQL WHERE）、`time_scope`（定义明确时间窗 vs SQL
+  时间窗字面量）、`column`（REFERS_COLUMN(role) 列 + 聚合参数列 vs SQL 引用列）。
+- 判定纪律：**宁可 unknown 不误报 conflict**。conflict 仅在证据确定时给出
+  （聚合签名不匹配 / 明确时间窗不相交 / 计量列缺失且无 `*` 展开）；中文语义提示
+  （合计/均值…）、剔除类限定、COUNT(*) 等弱证据一律降级 unknown。
+- `read_metric_caliber` 接收调用方注入的图对象（GraphFactory 产物）：NetworkXGraph
+  走 `.G`，FalkorDBGraph/LadybugGraph 走 `.query`；本模块不建连。
+
+---
+
 ## Relationship Schema (`relationship_schema.json`)
 
 JSON Schema (draft-07) for table relationship definitions（文件路径 `src/govio/metadata/relationship_schema.json`）：

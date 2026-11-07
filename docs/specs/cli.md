@@ -316,13 +316,14 @@ Only supports DuckDB datasources (`duckdb://` URL). Non-DuckDB datasources cause
 
 ## sql.py
 
-Metric SQL assembly: `govio-cli sql build`.
+Metric SQL assembly: `govio-cli sql build`. Caliber conflict check: `govio-cli sql caliber`.
 
 ### Subcommands
 
 | Subcommand | Arguments | Description |
 |---|---|---|
 | `build` | `-f/--file JSON_FILE`, `-o/--output SQL_FILE` | Assemble metric SQL from JSON spec |
+| `caliber` | `--sql SQL_TEXT` \| `--sql-file SQL_FILE`, `-m/--metric REF` (repeatable) | Compare SQL against graph metric definitions (caliber conflict check) |
 
 ### Usage
 
@@ -336,6 +337,31 @@ govio-cli sql build -f query.json -o output.sql
 # From stdin
 cat query.json | govio-cli sql build
 ```
+
+### `caliber` Subcommand
+
+口径冲突检测：SQL 与图谱指标定义（formula/business_definition/statistical_scope/time_scope/REFERS_COLUMN）比对，
+输出机器可读 JSON。指标可按 `code` 或节点 ID 指定（`--metric` 可重复）。
+
+```bash
+govio-cli sql caliber --sql "SELECT SUM(amount) FROM orders" --metric m_sales_amount
+govio-cli sql caliber --sql-file query.sql --metric m_sales_amount --metric m_order_count
+```
+
+Output（stdout 单行 JSON，ensure_ascii 转义）：
+
+```json
+{"results": [{"metric": {"id": "ME...", "code": "m_sales_amount", "name": "销售额"}, "status": "consistent", "differences": []}]}
+```
+
+- `status`：`consistent`（一致）| `conflict`（确定冲突）| `unknown`（无法判定）。
+  判定纪律：**宁可 unknown 不误报 conflict**。
+- `differences[]`：`{aspect, expected, found, detail?}`，aspect 取
+  `aggregation`（聚合口径）| `filter`（过滤/统计范围）| `time_scope`（时间窗）|
+  `column`（引用列）| `metric`（指标未找到）| `sql`（SQL 无法解析）。
+- 退出码：比对完成（含 conflict/unknown 结果）退出 0；坏输入（缺 SQL / 缺
+  `--metric` / 文件不存在）、配置或图后端错误退出 1（错误只落 stderr）。
+  图谱中查不到的指标按单指标 `status: "unknown"` 降级，不视为命令失败。
 
 ---
 
