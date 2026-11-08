@@ -1,0 +1,325 @@
+{
+  "version": "2.0",
+  "description": "Govio 技能评估提示词集 - 支持 govio 主控 + govio-metadata + govio-metrics 三层架构",
+  "categories": {
+    "routing": "路由测试 - 测试主控 govio 的需求路由能力",
+    "metadata_explicit": "元数据查询 - 显式调用 govio-metadata",
+    "metadata_implicit": "元数据查询 - 隐式调用",
+    "metrics_explicit": "指标问数 - 显式调用 govio-metrics",
+    "metrics_implicit": "指标问数 - 隐式调用",
+    "metrics_derived": "指标问数 - 派生指标",
+    "negative_control": "负向控制 - 不应触发任何 govio 技能",
+    "edge_case": "边界情况"
+  },
+  "prompts": [
+    {
+      "id": "route-01",
+      "category": "routing",
+      "prompt": "查询所有应用列表",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "test_focus": ["O-5", "E-5"]
+    },
+    {
+      "id": "route-02",
+      "category": "routing",
+      "prompt": "本月账单收入是多少",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "test_focus": ["O-5", "E-5"]
+    },
+    {
+      "id": "route-03",
+      "category": "routing",
+      "prompt": "按部门统计签约覆盖率",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "test_focus": ["O-5", "E-5"]
+    },
+    {
+      "id": "route-04",
+      "category": "routing",
+      "prompt": "AEP 有哪些表",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "test_focus": ["O-5", "E-5"]
+    },
+    {
+      "id": "route-05",
+      "category": "routing",
+      "prompt": "签署覆盖率怎么计算的",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "test_focus": ["O-5", "E-5"]
+    },
+    {
+      "id": "route-06",
+      "category": "routing",
+      "prompt": "帮我比对两个表的数据差异",
+      "expected_skill": null,
+      "should_trigger": false,
+      "test_focus": ["O-5"]
+    },
+    {
+      "id": "meta-explicit-01",
+      "category": "metadata_explicit",
+      "prompt": "使用 $govio-metadata 查询元数据，列出所有应用",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "15 个应用：PDM, IHRM, IHRO, HPM, PO, PAYPRO, SQC, AEP, SSOP, IOMS, SPRT, NHRS, CDPS, ITS, BILL",
+      "test_focus": ["P-1", "P-2", "O-1", "O-5", "S-3", "E-1", "E-4"]
+    },
+    {
+      "id": "meta-explicit-02",
+      "category": "metadata_explicit",
+      "prompt": "用 $govio-metadata 查询会计引擎应用有哪些表",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "AEP 应用下 50 张表",
+      "test_focus": ["P-1", "P-2", "O-1", "S-3"]
+    },
+    {
+      "id": "meta-explicit-03",
+      "category": "metadata_explicit",
+      "prompt": "使用 $govio-metadata 查询 ITS_USER.T_INVOICE 表有哪些字段",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "T_INVOICE 表字段列表，含 INV_NO, SELLER_TAX_NO, BUYER_NAME, TAX_AMOUNT 等",
+      "test_focus": ["P-1", "P-3", "P-5", "S-1", "S-2"]
+    },
+    {
+      "id": "meta-implicit-01",
+      "category": "metadata_implicit",
+      "prompt": "查询元数据，列出所有应用",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "15 个应用列表",
+      "test_focus": ["O-5", "P-1", "P-2"]
+    },
+    {
+      "id": "meta-implicit-02",
+      "category": "metadata_implicit",
+      "prompt": "查询元数据，列出金额相关的字段",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "金额相关字段，涉及多个应用",
+      "test_focus": ["O-5", "P-1", "P-2", "P-4"]
+    },
+    {
+      "id": "meta-implicit-03",
+      "category": "metadata_implicit",
+      "prompt": "我想知道报价单中心系统里有哪些数据表",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "SQC 下 29 张表",
+      "test_focus": ["O-5", "P-3", "P-2"]
+    },
+    {
+      "id": "meta-implicit-04",
+      "category": "metadata_implicit",
+      "prompt": "财务管理领域的应用有哪些？",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "3 个应用：AEP(会计引擎), ITS(发票管理), CDPS(收付费管理)",
+      "test_focus": ["O-5", "P-1", "P-2", "S-3"]
+    },
+    {
+      "id": "meta-implicit-05",
+      "category": "metadata_implicit",
+      "prompt": "帮我看看外包雇员管理系统和外包项目管理系统各自用了多少张表",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "IHRM 有 67 张表，IHRO 有 403 张表",
+      "test_focus": ["O-5", "P-3", "P-2", "E-3"]
+    },
+    {
+      "id": "metrics-explicit-01",
+      "category": "metrics_explicit",
+      "prompt": "使用 $govio-metrics 查询本月账单收入",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "本月账单收入数值，单位：万元",
+      "test_focus": ["P-6", "P-7", "P-8", "O-3", "S-5"]
+    },
+    {
+      "id": "metrics-explicit-02",
+      "category": "metrics_explicit",
+      "prompt": "用 $govio-metrics 按销售单元统计签约覆盖率",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "按 sales_unit 分组的签约覆盖率列表",
+      "test_focus": ["P-6", "P-7", "P-8", "O-3", "S-5"]
+    },
+    {
+      "id": "metrics-explicit-03",
+      "category": "metrics_explicit",
+      "prompt": "使用 $govio-metrics 查询 YTD 账单收入前 5 的部门",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "按 bill_income_amt_ytd 降序排列的前 5 个部门",
+      "test_focus": ["P-6", "P-7", "P-8", "O-3"]
+    },
+    {
+      "id": "metrics-explicit-04",
+      "category": "metrics_explicit",
+      "prompt": "用 $govio-metrics 查询签约额的月度趋势",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "按 report_ym 分组的签约额列表",
+      "test_focus": ["P-6", "P-7", "P-8", "O-3", "S-5"]
+    },
+    {
+      "id": "metrics-implicit-01",
+      "category": "metrics_implicit",
+      "prompt": "本月账单收入是多少",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "本月账单收入数值",
+      "test_focus": ["O-5", "P-6", "P-7", "P-8"]
+    },
+    {
+      "id": "metrics-implicit-02",
+      "category": "metrics_implicit",
+      "prompt": "按部门统计当月签约额",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "按 sales_dept 分组的 signed_amt 列表",
+      "test_focus": ["O-5", "P-6", "P-7", "P-8"]
+    },
+    {
+      "id": "metrics-implicit-03",
+      "category": "metrics_implicit",
+      "prompt": "华东区的签约覆盖率是多少",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "华东区的 book_to_bill 数值",
+      "test_focus": ["O-5", "P-6", "P-7", "P-8"]
+    },
+    {
+      "id": "metrics-implicit-04",
+      "category": "metrics_implicit",
+      "prompt": "最近 6 个月的账单收入趋势",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "最近 6 个月的 bill_income_amt 趋势",
+      "test_focus": ["O-5", "P-6", "P-7", "P-8", "S-5"]
+    },
+    {
+      "id": "metrics-implicit-05",
+      "category": "metrics_implicit",
+      "prompt": "签约覆盖率这个指标怎么算的",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "签约覆盖率 = signed_amt / bill_income_amt",
+      "test_focus": ["O-5", "P-6"]
+    },
+    {
+      "id": "metrics-derived-01",
+      "category": "metrics_derived",
+      "prompt": "计算本月签约覆盖率",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "本月签约覆盖率数值",
+      "test_focus": ["P-6", "P-7", "P-8", "O-3"]
+    },
+    {
+      "id": "metrics-derived-02",
+      "category": "metrics_derived",
+      "prompt": "查询存量消耗额",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "存量消耗额数值",
+      "test_focus": ["P-6", "P-7", "P-8", "O-3"]
+    },
+    {
+      "id": "metrics-derived-03",
+      "category": "metrics_derived",
+      "prompt": "账单收入全年预测是多少",
+      "expected_skill": "govio-metrics",
+      "should_trigger": true,
+      "expected_output": "账单收入全年预测数值",
+      "test_focus": ["P-6", "P-7", "P-8", "O-3"]
+    },
+    {
+      "id": "negative-01",
+      "category": "negative_control",
+      "prompt": "帮我写一个 Python 脚本把 MySQL 数据迁移到 PostgreSQL",
+      "expected_skill": null,
+      "should_trigger": false,
+      "test_focus": ["N-1", "N-2", "N-3"]
+    },
+    {
+      "id": "negative-02",
+      "category": "negative_control",
+      "prompt": "帮我修复代码里的一个 bug，pandas DataFrame 合并后列名丢失",
+      "expected_skill": null,
+      "should_trigger": false,
+      "test_focus": ["N-1", "N-2", "N-3"]
+    },
+    {
+      "id": "negative-03",
+      "category": "negative_control",
+      "prompt": "在我们的应用里新增一个用户管理模块",
+      "expected_skill": null,
+      "should_trigger": false,
+      "test_focus": ["N-1", "N-2", "N-3"]
+    },
+    {
+      "id": "negative-04",
+      "category": "negative_control",
+      "prompt": "帮我比对两个表的数据差异",
+      "expected_skill": null,
+      "should_trigger": false,
+      "test_focus": ["N-1", "N-2", "N-3"]
+    },
+    {
+      "id": "edge-01",
+      "category": "edge_case",
+      "prompt": "外服内部机构管理系统有几个表？",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "2 张表",
+      "test_focus": ["P-1", "P-2", "O-1"]
+    },
+    {
+      "id": "edge-02",
+      "category": "edge_case",
+      "prompt": "查询应用表中所有由埃森哲维护的应用",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "7 个应用：PDM, NHRS, AEP, HPM, SQC, SPRT, BILL",
+      "test_focus": ["P-1", "P-3", "S-3"]
+    },
+    {
+      "id": "edge-03",
+      "category": "edge_case",
+      "prompt": "帮我查一下所有应用中，哪些表名是空的（没有中文名称）",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "表名为空的 PhysicalTable 列表",
+      "test_focus": ["P-1", "P-2", "O-1"]
+    },
+    {
+      "id": "edge-04",
+      "category": "edge_case",
+      "prompt": "列出所有应用及其表数量，按表数量从多到少排序",
+      "expected_skill": "govio-metadata",
+      "should_trigger": true,
+      "expected_output": "IHRO(403) > SSOP(383) > PDM(123) > ...",
+      "test_focus": ["P-2", "S-2", "S-3", "E-3"]
+    }
+  ],
+  "statistics": {
+    "total": 34,
+    "by_category": {
+      "routing": 6,
+      "metadata_explicit": 3,
+      "metadata_implicit": 5,
+      "metrics_explicit": 4,
+      "metrics_implicit": 5,
+      "metrics_derived": 3,
+      "negative_control": 4,
+      "edge_case": 4
+    }
+  }
+}
