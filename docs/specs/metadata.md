@@ -442,7 +442,7 @@ JSON Schema (draft-07) for metric definitions:
 
 ## caliber.py
 
-口径冲突检测（`govio.cli.sql._caliber` 的比对内核，纯 stdlib、可单测）：
+口径冲突检测（`govio.cli.sql._caliber` 的比对内核，可单测）：
 
 ```python
 extract_sql_facts(sql) -> SqlFacts            # 聚合调用/引用列/WHERE 条件/时间窗
@@ -450,6 +450,11 @@ compare_metric(metric, facts) -> dict         # {metric, status, differences}
 check_caliber(metrics, sql) -> dict           # {results: [...]}
 read_metric_caliber(graph, ref) -> CaliberMetric | None  # code 或节点 ID
 ```
+
+- SQL 事实提取基于 [sqlparse](https://pypi.org/project/sqlparse/) 分词（不依赖方言语义
+  分析）：聚合调用走 `Function` 节点递归（支持 `SUM(COALESCE(x,0))` 嵌套参数）、
+  WHERE 走 `Where` 节点（子查询内的 `GROUP BY` 不再截断外层 WHERE）、星号展开 vs
+  乘号由 `Token.Wildcard` vs `Token.Operator` 区分。
 
 - 比对维度：`aggregation`（formula 显式聚合 vs SQL 聚合签名，含 DISTINCT）、
   `filter`（定义中剔除类限定 vs SQL WHERE）、`time_scope`（定义明确时间窗 vs SQL

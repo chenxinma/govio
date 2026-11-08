@@ -2,7 +2,7 @@
 
 Govio (Governance + IO) is a data governance knowledge graph platform. It extracts metadata from relational databases, builds graph structures, and provides data standard recommendation via collaborative filtering.
 
-- **Version**: 0.7.1
+- **Version**: 0.7.2
 - **Python**: >= 3.13
 - **Build**: hatchling
 - **CLI**: `govio-cli` -> `govio.cli:main`
@@ -59,3 +59,4 @@ Govio ships with AI assistant skills under `skills/`:
 | psycopg[binary] | PostgreSQL database connector (psycopg3) |
 | dotenv | Environment variable loading (.env) |
 | cryptography | Password encryption for config |
+| sqlparse | SQL tokenizer for metric caliber conflict check (aggregate/WHERE/star extraction) |

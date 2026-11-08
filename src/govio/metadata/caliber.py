@@ -2,7 +2,7 @@
 govio.metadata.caliber
 口径冲突检测（T2.3）：SQL 与图谱指标定义的最小维度比对。
 
-纯 stdlib 模块（只依赖 re/dataclasses），不触图后端、不连库：
+SQL 事实提取基于 sqlparse 分词（不依赖方言语法分析），不触图后端、不连库：
 - `extract_sql_facts`：从 SQL 文本提取可比对事实（聚合调用/引用列/WHERE 条件/时间窗）；
 - `check_caliber` / `compare_metric`：逐指标比对，输出结构化 JSON 形态
   `{results: [{metric, status, differences}]}`；
@@ -19,25 +19,15 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+import sqlparse
+import sqlparse.sql as S
+from sqlparse import tokens as T
+
 # ---------------------------------------------------------------------------
 # SQL 事实提取
 # ---------------------------------------------------------------------------
 
 _COMMENT_RE = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
-_STRING_RE = re.compile(r"'(?:[^']|'')*'|\"[^\"]*\"")
-_AGG_RE = re.compile(
-    r"\b(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(DISTINCT\s+)?([^()]*)\)", re.IGNORECASE
-)
-_IDENT_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
-# SELECT 列表（到首个顶层 FROM 为止；无 FROM 则到结尾）——星号判定只看列表内
-_SELECT_LIST_RE = re.compile(r"\bSELECT\b(.*?)(?=\bFROM\b|\Z)", re.IGNORECASE | re.DOTALL)
-# `t.*` / `tbl.*` 全表展开
-_TABLE_STAR_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\s*\.\s*\*")
-# count(*) 内的星号不计入 has_star（计数对象不可确认由 has_count_star 表达）
-_COUNT_STAR_RE = re.compile(r"\bCOUNT\s*\(\s*\*\s*\)", re.IGNORECASE)
-_WHERE_END_RE = re.compile(
-    r"\b(GROUP\s+BY|ORDER\s+BY|HAVING|LIMIT|OFFSET|UNION|EXCEPT|INTERSECT)\b", re.IGNORECASE
-)
 # SQL 侧时间窗：`INTERVAL '7' DAY`、`INTERVAL 30 DAY`、`DATE_SUB(..., 7 DAY)` 等
 _SQL_WINDOW_RE = re.compile(
     r"\b(\d+)\s*'?\s*(DAY|DAYS|WEEK|WEEKS|MONTH|MONTHS|YEAR|YEARS|HOUR|HOURS)\b", re.IGNORECASE
@@ -68,16 +58,8 @@ _PROSE_AGG_HINTS: tuple[tuple[str, str], ...] = (
     ("最小", "MIN"),
 )
 
-_SQL_KEYWORDS = {
-    "SELECT", "FROM", "WHERE", "AND", "OR", "NOT", "IN", "ON", "AS", "JOIN",
-    "LEFT", "RIGHT", "INNER", "OUTER", "FULL", "CROSS", "GROUP", "BY", "ORDER",
-    "HAVING", "LIMIT", "OFFSET", "UNION", "ALL", "DISTINCT", "INSERT", "INTO",
-    "VALUES", "UPDATE", "SET", "DELETE", "CREATE", "TABLE", "ALTER", "DROP",
-    "INDEX", "VIEW", "IF", "EXISTS", "BETWEEN", "LIKE", "IS", "NULL", "CASE",
-    "WHEN", "THEN", "ELSE", "END", "ASC", "DESC", "WITH", "RECURSIVE", "OVER",
-    "PARTITION", "CAST", "COALESCE", "INTERVAL", "CURRENT_DATE", "CURRENT_TIMESTAMP",
-    "TRUE", "FALSE", "COUNT", "SUM", "AVG", "MIN", "MAX", "DATE", "TIMESTAMP",
-}
+# sqlparse Function 节点中命中该集合的聚合函数才记录为一次聚合调用
+_AGG_FUNCS = frozenset({"COUNT", "SUM", "AVG", "MIN", "MAX"})
 
 _UNIT_DAYS = {
     "HOUR": 1 / 24, "HOURS": 1 / 24,
@@ -111,85 +93,142 @@ class SqlFacts:
     window_days: set[int] = field(default_factory=set)
 
 
-def _strip_literals(sql: str) -> str:
-    """字符串字面量替换为等长空白：保留偏移（raw/stripped 同位对齐）与 SQL 结构，
-    引号内容不参与标识符/聚合解析，但 WHERE 原文仍可按同位切回供限定词搜索。"""
-    return _STRING_RE.sub(lambda m: " " * len(m.group(0)), sql)
-
-
 def _window_days(value: str, unit: str) -> int:
     return round(int(value) * _UNIT_DAYS.get(unit.upper(), _UNIT_DAYS.get(unit, 1)))
 
 
-def _split_select_items(select_list: str) -> list[str]:
-    """按顶层逗号切分 SELECT 列表（括号内逗号不切）"""
-    items: list[str] = []
-    depth = 0
-    buf: list[str] = []
-    for ch in select_list:
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth = max(depth - 1, 0)
-        if ch == "," and depth == 0:
-            items.append("".join(buf))
-            buf = []
-            continue
-        buf.append(ch)
-    items.append("".join(buf))
-    return items
+def _agg_from_function(func: S.Function) -> AggCall | None:
+    """从 sqlparse Function 节点提取聚合调用。
+
+    直接取外层 Parenthesis 的原文作为参数，天然支持嵌套表达式
+    （`SUM(COALESCE(x, 0))`），规避旧正则 `[^()]*` 在嵌套括号处漏掉聚合的问题。
+    """
+    name = (func.get_name() or "").upper()
+    if name not in _AGG_FUNCS:
+        return None
+    for child in func.tokens:
+        if isinstance(child, S.Parenthesis):
+            inner = str(child)[1:-1].strip()
+            distinct = bool(re.match(r"^\s*DISTINCT\s+", inner, re.IGNORECASE))
+            arg = re.sub(r"^\s*DISTINCT\s+", "", inner, count=1, flags=re.IGNORECASE).strip()
+            return AggCall(func=name, distinct=distinct, arg=arg)
+    return AggCall(func=name, distinct=False, arg="")
 
 
-def _has_select_star(stripped: str) -> bool:
+def _collect(
+    node: Any,
+    aggs: list[AggCall],
+    columns: set[str],
+    excluded: set[str],
+) -> None:
+    """递归遍历 token 树：收集聚合调用与标识符。
+
+    引号字面量/注释是独立 token 类型，不会混入标识符；函数名与内置名
+    （INTERVAL/INT 等 Token.Name.Builtin）进 excluded，最终从引用列中剔除。
+    """
+    for tok in getattr(node, "tokens", []) or []:
+        if isinstance(tok, S.Function):
+            agg = _agg_from_function(tok)
+            if agg is not None:
+                aggs.append(agg)
+            if tok.get_name():
+                excluded.add(tok.get_name().lower())
+            _collect(tok, aggs, columns, excluded)
+        elif tok.ttype is T.Name:
+            columns.add(tok.value.lower())
+        elif tok.ttype is T.Name.Builtin:
+            excluded.add(tok.value.lower())
+        else:
+            _collect(tok, aggs, columns, excluded)
+
+
+def _detect_select_star(stmt: Any) -> bool:
     """SELECT 列表是否含裸星号展开（`SELECT *` / `SELECT t.*`）。
 
-    只在 SELECT 列表内识别，且排除：
-    - 乘法/算术运算（`price_per_box * boxes_shipped`、`SUM(price*boxes)`）——
-      旧实现 `"*" in sql` 把乘号当星号展开，令计量列缺失只能判 unknown，
-      口径冲突永远报不出来；
-    - `COUNT(*)`——计数对象不可确认属存疑（has_count_star 表达）。
+    只扫描 SELECT 关键字到首个顶层 FROM 之间的选择项；乘号 `a * b` 是
+    Token.Operator、星号展开是 Token.Wildcard，分词层天然区分，`COUNT(*)`
+    作为 Function 整体跳过（计数对象由 has_count_star 单独表达）。
     """
-    m = _SELECT_LIST_RE.search(stripped)
-    if not m:
-        return False
-    select_list = _COUNT_STAR_RE.sub("COUNT(_)", m.group(1))
-    if _TABLE_STAR_RE.search(select_list):
-        return True
-    return any(
-        re.fullmatch(r"\s*(?:DISTINCT\s+)?\*\s*", item, re.IGNORECASE)
-        for item in _split_select_items(select_list)
-    )
+    seen_select = False
+    for tok in getattr(stmt, "tokens", []) or []:
+        if tok.is_whitespace:
+            continue
+        if not seen_select:
+            if tok.ttype is T.Keyword.DML and tok.value.upper() == "SELECT":
+                seen_select = True
+            continue
+        if tok.is_keyword and tok.value.upper() == "FROM":
+            break
+        if isinstance(tok, S.Function):
+            continue
+        if any(sub.ttype is T.Wildcard for sub in tok.flatten()):
+            return True
+    return False
+
+
+def _find_where(stmt: Any) -> S.Where | None:
+    for tok in getattr(stmt, "tokens", []) or []:
+        if isinstance(tok, S.Where):
+            return tok
+    return None
+
+
+def _where_body_tokens(where: S.Where) -> list[Any]:
+    """WHERE 关键字之后的顶层 token（子查询作为整体保留，不误切其内 GROUP BY 等）"""
+    start = 0
+    for i, tok in enumerate(where.tokens):
+        if tok.is_keyword and tok.value.upper() == "WHERE":
+            start = i + 1
+            break
+    return where.tokens[start:]
+
+
+def _where_text(where: S.Where) -> str:
+    raw = "".join(tok.value for tok in _where_body_tokens(where))
+    return _COMMENT_RE.sub(" ", raw).strip()
+
+
+def _split_where_segments(where: S.Where) -> list[str]:
+    """按顶层 AND/OR 切分 WHERE 条件（子查询内的 AND/OR 不切）"""
+    segments: list[str] = []
+    buf: list[str] = []
+    for tok in _where_body_tokens(where):
+        if tok.is_keyword and tok.value.upper() in ("AND", "OR"):
+            seg = "".join(buf).strip()
+            if seg:
+                segments.append(_COMMENT_RE.sub(" ", seg).strip())
+            buf = []
+        else:
+            buf.append(tok.value)
+    seg = "".join(buf).strip()
+    if seg:
+        segments.append(_COMMENT_RE.sub(" ", seg).strip())
+    return segments
 
 
 def extract_sql_facts(sql: str) -> SqlFacts:
-    """从 SQL 文本提取比对事实（纯文本解析，不做完整 SQL 语法分析）"""
+    """从 SQL 文本提取比对事实（sqlparse 分词，不做方言语义分析）"""
     facts = SqlFacts()
+    statements = sqlparse.parse(sql or "")
+    if not statements:
+        return facts
+    stmt = statements[0]
+
+    aggs: list[AggCall] = []
+    columns: set[str] = set()
+    excluded: set[str] = set()
+    _collect(stmt, aggs, columns, excluded)
+    facts.aggs = aggs
+    facts.referenced_columns = columns - excluded
+    facts.has_star = _detect_select_star(stmt)
+    facts.has_count_star = any(a.func == "COUNT" and a.arg == "*" for a in aggs)
+
+    where = _find_where(stmt)
+    if where is not None:
+        facts.where_text = _where_text(where)
+        facts.where_segments = _split_where_segments(where)
+
     raw = _COMMENT_RE.sub(" ", sql or "")
-    stripped = _strip_literals(raw)
-
-    for m in _AGG_RE.finditer(stripped):
-        facts.aggs.append(
-            AggCall(func=m.group(1).upper(), distinct=bool(m.group(2)), arg=m.group(3).strip())
-        )
-
-    for token in _IDENT_RE.findall(stripped):
-        if token.upper() not in _SQL_KEYWORDS:
-            facts.referenced_columns.add(token.lower())
-
-    facts.has_star = _has_select_star(stripped)
-    facts.has_count_star = _COUNT_STAR_RE.search(stripped) is not None
-
-    where_m = re.search(r"\bWHERE\b", stripped, re.IGNORECASE)
-    if where_m:
-        rest = stripped[where_m.end():]
-        end_m = _WHERE_END_RE.search(rest)
-        facts.where_text = raw[where_m.end(): where_m.end() + (end_m.start() if end_m else len(rest))].strip()
-        facts.where_segments = [
-            seg.strip()
-            for seg in re.split(r"\b(?:AND|OR)\b", facts.where_text, flags=re.IGNORECASE)
-            if seg.strip()
-        ]
-
     for m in _SQL_WINDOW_RE.finditer(raw):
         facts.window_days.add(_window_days(m.group(1), m.group(2)))
 
