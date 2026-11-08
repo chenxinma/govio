@@ -217,6 +217,22 @@ def test_extract_sql_facts_where_and_window():
     assert len(facts.where_segments) == 2
 
 
+def test_extract_sql_facts_nested_aggregate():
+    # 旧正则 [^()]* 在嵌套括号处漏掉 SUM，sqlparse 分词后应完整提取
+    facts = extract_sql_facts("SELECT SUM(COALESCE(amount, 0)) FROM orders")
+    assert any(a.func == "SUM" and a.arg == "COALESCE(amount, 0)" for a in facts.aggs)
+
+
+def test_extract_sql_facts_where_with_subquery():
+    # 子查询内的 GROUP BY 不应截断外层 WHERE 提取
+    facts = extract_sql_facts(
+        "SELECT a FROM t WHERE x IN (SELECT b FROM u GROUP BY b) AND c = 1"
+    )
+    assert "c = 1" in facts.where_text
+    assert len(facts.where_segments) == 2
+    assert any("c = 1" in s for s in facts.where_segments)
+
+
 def test_star_not_confused_with_multiplication():
     # 乘号不是星号展开：否则计量列缺失只能判 unknown，口径冲突永远报不出来
     facts = extract_sql_facts(
