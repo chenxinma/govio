@@ -12,6 +12,7 @@ import networkx as nx
 from govio.metadata.caliber import (
     CaliberMetric,
     MetricColumn,
+    _canonical_expr,
     check_caliber,
     compare_metric,
     extract_sql_facts,
@@ -66,6 +67,64 @@ def test_consistent_parameterized_period_no_window_expectation():
         business_definition="统计周期内所有订单的销售金额（amount）合计",
     )
     sql = "SELECT SUM(amount) FROM orders WHERE dt >= CURRENT_DATE - INTERVAL '7' DAY"
+    assert check_caliber([metric], sql)["results"][0]["status"] == "consistent"
+
+
+# ---------------------------------------------------------------------------
+# 表达式等价（不同写法实质相同）与 measure-first 降噪
+# ---------------------------------------------------------------------------
+
+
+def test_canonical_expr_treats_display_wrappers_as_equivalent():
+    # 展示层包装（ROUND/CAST/::type）与表限定不影响口径语义
+    assert _canonical_expr("ROUND(SUM(f.amount), 2)") == _canonical_expr("sum(amount)")
+    assert _canonical_expr("CAST(SUM(f.amount) AS DECIMAL(18,2))") == _canonical_expr("sum(amount)")
+    assert _canonical_expr("SUM(f.amount)::numeric") == _canonical_expr("sum(amount)")
+    assert _canonical_expr("SUM(chocolate.fact_sales.amount)") == _canonical_expr("sum(amount)")
+    # 真正的表达式差异不被抹平
+    assert _canonical_expr("SUM(f.amount * (1 - f.discount_pct/100))") != _canonical_expr("sum(amount)")
+    assert _canonical_expr("SUM(price_per_box * boxes_shipped)") != _canonical_expr("sum(amount)")
+
+
+def test_consistent_wrapped_formula_and_dimension_refs_ignored():
+    # measure-first：维度引用列（dimension_ref）未用不产差异，正确口径可达 consistent
+    metric = _metric(
+        formula="sum(amount)",
+        columns=[
+            MetricColumn("amount", "measure"),
+            MetricColumn("order_date", "dimension_ref"),
+            MetricColumn("product_id", "dimension_ref"),
+            MetricColumn("channel_id", "dimension_ref"),
+        ],
+    )
+    sql = (
+        "SELECT c.country_name, ROUND(SUM(f.amount), 2) AS revenue_amount "
+        "FROM fact_sales f JOIN dim_country c ON f.country_id = c.country_id GROUP BY 1"
+    )
+    result = check_caliber([metric], sql)["results"][0]
+    assert result["status"] == "consistent"
+    assert result["differences"] == []
+
+
+def test_conflict_measure_expression_distorted():
+    # 回归：计量列在但被算术修饰（旧实现只比 func/distinct → 漏判为 unknown）
+    metric = _metric(formula="sum(amount)", columns=[MetricColumn("amount", "measure")])
+    sql = (
+        "SELECT ROUND(SUM(f.amount * (1 - f.discount_pct/100)), 2) AS revenue_calc "
+        "FROM fact_sales f GROUP BY 1"
+    )
+    result = check_caliber([metric], sql)["results"][0]
+    assert result["status"] == "conflict"
+    diff = next(d for d in result["differences"] if d["aspect"] == "aggregation")
+    assert "聚合参数" in diff["detail"] and "amount" in diff["expected"]
+
+
+def test_consistent_distinct_count_with_qualifier():
+    # COUNT(DISTINCT f.order_id) 与 formula count(distinct order_id) 等价
+    metric = _metric(
+        formula="count(distinct order_id)", columns=[MetricColumn("order_id", "measure")]
+    )
+    sql = "SELECT COUNT(DISTINCT f.order_id) AS order_count FROM fact_sales f"
     assert check_caliber([metric], sql)["results"][0]["status"] == "consistent"
 
 

@@ -330,12 +330,76 @@ def _agg_signature(call: AggCall) -> tuple[str, bool]:
     return (call.func, call.distinct)
 
 
+# 展示层包装（不影响口径语义）：ROUND(x, n) / CAST(x AS t) / x::t
+_DISPLAY_WRAP_RE = re.compile(
+    r"^\s*(ROUND|CAST)\s*\((.*)\)\s*(?:::\s*[A-Za-z][A-Za-z0-9_ (),]*)?\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
+_QUALIFIER_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\s*\.\s*")
+# 尾随类型强转（PostgreSQL `expr::numeric`），不影响口径语义
+_CAST_SUFFIX_RE = re.compile(r"::\s*[A-Za-z_][A-Za-z0-9_ (),\[\]]*$")
+
+
+def _strip_display_wrapper(expr: str) -> str:
+    """剥掉展示层包装：ROUND(x, 2) / CAST(x AS DECIMAL(18,2)) / x::int → x"""
+    e = expr.strip()
+    while True:
+        m = _DISPLAY_WRAP_RE.match(e)
+        if not m:
+            return e
+        inner = m.group(2)
+        func = (m.group(1) or "").upper()
+        if func == "ROUND":
+            # 去 ROUND 的第二参数（精度），只留待舍入表达式
+            depth, cut = 0, None
+            for i, ch in enumerate(inner):
+                if ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                elif ch == "," and depth == 0:
+                    cut = i
+                    break
+            if cut is not None:
+                inner = inner[:cut]
+        else:  # CAST(x AS type) → x
+            parts = re.split(r"\s+AS\s+", inner, maxsplit=1, flags=re.IGNORECASE)
+            if len(parts) == 2:
+                inner = parts[0]
+        e = inner.strip()
+
+
+def _canonical_expr(expr: str) -> str:
+    """表达式规范化（用于「不同写法实质相同」的判定）：
+    剥展示包装 → 去表/库限定 → 压空白 → 小写。
+
+    `ROUND(SUM(f.amount), 2)` 与 `sum(amount)` 归一后相同；
+    `SUM(f.amount * (1 - f.discount_pct/100))` 归一后不同（口径被修饰）。
+    只做字面层归一（不做代数化简，避免误报）。
+    """
+    e = _strip_display_wrapper(expr)
+    e = _QUALIFIER_RE.sub("", e)
+    e = re.sub(r"\s+", "", e)
+    e = e.lower()
+    # `sum(amount)::numeric` 与 `sum(amount)` 同为展示层强转
+    while _CAST_SUFFIX_RE.search(e):
+        e = _CAST_SUFFIX_RE.sub("", e)
+    return e
+
+
 def _compare_aggregation(
     metric: CaliberMetric, facts: SqlFacts
 ) -> list[tuple[dict[str, Any], bool]]:
-    """聚合口径比对。返回 (差异, 是否确定) 列表：显式 FUNC(...) 证据为确定，中文语义提示为存疑。"""
+    """聚合口径比对。返回 (差异, 是否确定) 列表：显式 FUNC(...) 证据为确定，中文语义提示为存疑。
+
+    两类确定差异：
+    1. 聚合结构不一致（函数名/DISTINCT 不同）；
+    2. **聚合参数表达式不一致**（同函数名但参数被修饰，如指标要 `sum(amount)`，
+       SQL 给 `SUM(amount*(1-discount_pct/100))`）——旧实现只比 (func, distinct)，
+       这类「列在但表达式被扭曲」漏判。参数按 `_canonical_expr` 归一后比对，
+       因此 `SUM(f.amount)`、`ROUND(SUM(amount),2)`、`sum(amount)` 视为同一口径。
+    """
     explicit, prose = _expected_aggs(metric)
-    found_sigs = {_agg_signature(c) for c in facts.aggs}
     found_desc = ", ".join(
         sorted({f"{c.func}({'DISTINCT ' if c.distinct else ''}{c.arg})" for c in facts.aggs})
     ) or "无聚合函数"
@@ -344,9 +408,29 @@ def _compare_aggregation(
     ) or ", ".join(prose)
 
     if explicit:
-        if any(_agg_signature(c) not in found_sigs for c in explicit):
-            return [(_diff("aggregation", expected_desc, found_desc, "SQL 聚合结构与 formula 不一致"), True)]
-        return []
+        diffs: list[tuple[dict[str, Any], bool]] = []
+        for expected in explicit:
+            same_sig = [a for a in facts.aggs if _agg_signature(a) == _agg_signature(expected)]
+            if not same_sig:
+                diffs.append((_diff("aggregation", expected_desc, found_desc,
+                                    "SQL 聚合结构与 formula 不一致"), True))
+                continue
+            if expected.arg and not any(
+                _canonical_expr(a.arg) == _canonical_expr(expected.arg) for a in same_sig
+            ):
+                # COUNT(*) 的计数对象不可确认（可能是同一列）→ 存疑，不误报
+                if any(a.arg.strip() == "*" for a in same_sig):
+                    diffs.append((_diff(
+                        "aggregation", expected_desc, found_desc,
+                        f"SQL 使用 COUNT(*)，计数对象无法确认（期望 {expected.func}({expected.arg})）",
+                    ), False))
+                else:
+                    diffs.append((_diff(
+                        "aggregation", expected_desc, found_desc,
+                        f"聚合参数与 formula 不一致（期望 {expected.func}({expected.arg})）",
+                    ), True))
+        return diffs
+    found_sigs = {_agg_signature(c) for c in facts.aggs}
     if prose and any(
         (f, False) not in found_sigs and (f, True) not in found_sigs for f in prose
     ):
@@ -397,11 +481,16 @@ def _compare_time_scope(
 def _compare_columns(
     metric: CaliberMetric, facts: SqlFacts
 ) -> list[tuple[dict[str, Any], bool]]:
-    """引用列比对：REFERS_COLUMN（role）列 + 显式聚合参数列 vs SQL 实际引用列。
+    """引用列比对（measure-first）：只对 measure 列给出差异。
 
-    measure 列缺失且 SQL 无 * 展开 → 确定 conflict；其余缺失/无法解析 → 存疑 unknown。
+    measure 列缺失且 SQL 无 * 展开/COUNT(*) → 确定 conflict；否则存疑 unknown。
+
+    `dimension_ref`（维度引用列，如 product_id/channel_id）缺失**不再产差异**：
+    星型模型里一个指标几乎不可能同时引用所有维度引用列，旧实现因此把每一项
+    都打成存疑，令 `consistent` 对正常 SQL 不可达（正确口径也只能 unknown），
+    口径信号被稀释。维度引用是否使用属查询自由度，不是口径偏差。
     """
-    expected_cols = list(metric.columns)
+    expected_cols = [c for c in metric.columns if c.role == "measure"]
     # formula/定义中显式聚合的参数列按 measure 计入期望
     explicit, _prose = _expected_aggs(metric)
     for c in explicit:
@@ -424,16 +513,13 @@ def _compare_columns(
     for col in expected_cols:
         if col.column_name.lower() in facts.referenced_columns:
             continue
-        if col.role == "measure" and not ambiguous_expansion:
+        if not ambiguous_expansion:
             diffs.append((_diff("column", expected_desc, found_desc,
                                 f"计量列 {col.column_name} 未在 SQL 中引用"), True))
-        elif col.role == "measure":
+        else:
             reason = "SQL 含 * 展开无法确认" if facts.has_star else "SQL 含 COUNT(*) 计数对象无法确认"
             diffs.append((_diff("column", expected_desc, found_desc,
                                 f"计量列 {col.column_name} 未显式引用，{reason}"), False))
-        else:
-            diffs.append((_diff("column", expected_desc, found_desc,
-                                f"{col.role} 列 {col.column_name} 未在 SQL 中引用，可能经由其它表达式实现"), False))
     return diffs
 
 
