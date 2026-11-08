@@ -32,7 +32,7 @@ description: 知识图谱维护命令组。当需要导入元数据、推荐数�
 - **只跑本次有新输入的子命令**，不需要走完整 7 步
 - `--output` 必须指向既有 CSV 目录（单次一次性导入除外，见下节）：指错目录等于丢掉历史增量
 - CSV 目录是子命令之间唯一的共享状态；`graph` 只认目录里的固定文件名
-- `--mode update` 是增量 upsert，可反复执行
+- `--mode update` 是增量 upsert，可反复执行（幂等已固化：同批输入重复导入，第二轮校验报告 changes 全为 skipped）
 
 | 本次新增的输入 | 跑哪条 | 产出 CSV |
 |---|---|---|
@@ -83,7 +83,7 @@ rm -rf "$tmp"
 | `meta rel` | 导入表关系（RELATES_TO 边） |
 | `meta metric` | 导入指标维度（Metric, Dimension + 5 种边） |
 | `meta schema` | 输出标准 JSON Schema（metric / relationship / datasource） |
-| `meta graph` | 更新/重建/清空图数据库 + 生成 assets |
+| `meta graph` | 更新/重建/清空图数据库 + 生成 assets + 校验报告 |
 | `meta recommend` | 为非标字段推荐匹配的数据标准 |
 | `meta import-schema` | 从已配置的 DuckDB 数据源导入元数据到图库（meta + graph 一步完成） |
 
@@ -129,7 +129,7 @@ govio-cli meta schema datasource
 govio-cli meta import-schema --datasource mydb --schemas main --output ./data/meta
 ```
 
-`meta graph --mode`：`update` 增量 MERGE（默认）· `rebuild` 全量重建 · `clear` 只清空不导入。
+`meta graph --mode`：`update` 增量 MERGE（默认）· `rebuild` 全量重建 · `clear` 只清空不导入。`--report <path>` 可改校验报告输出位置（默认 `<output>/import-report.json`）。
 
 ## 首次全量导入
 
@@ -153,8 +153,24 @@ meta → std → compliance → rel → metric → graph
 
 - `meta meta` 等子命令：`✓ 元数据已导出: D 个数据源, N 张表, M 个字段` + CSV 目录
 - `meta graph`：各 CSV 导入行数、图后端与库文件路径
+- `meta graph` / `meta import-schema` 末尾的 **校验报告路径**（`✓ 校验报告已写入: ...`）与校验结果，以及报告落盘位置
 - `meta graph` 末尾打印的 **assets 绝对路径**；若与应用读取的 assets 目录不一致，提示用户自行合并
 - 失败时：原样转述 `❌` 错误信息与其中的可用 schema 列表，然后停止
+
+## 校验报告（import-report.json）
+
+`meta graph` / `meta import-schema` 成功后自动在 `--output` 目录落盘 `import-report.json`（`--report <path>` 可指定别处）：
+
+- **import_counts**：各节点/边类型导入行数
+- **changes**：本次新增/更新/跳过数（自上次 graph 同步以来；同批输入重复导入的第二轮应为 新增=0 / 更新=0 / 全部跳过，即幂等证据）
+- **checks**：`duplicate_node_ids` / `missing_required` / `orphan_edges` 三项校验；`status: fail` 时看 `examples` 定位
+- **summary**：`status`（pass/fail）汇总
+
+解读与汇报：
+
+- 向用户汇报时带上报告路径与 `summary.status`；checks 有 fail 时把 `examples` 原样转告用户，不要自行修 CSV（约束 2），修正输入后重跑子命令 + `meta graph`
+- 图更新失败时**不会生成报告**（CLI 打印 `❌ ...（未生成校验报告）`）；失败先排查，处理后重跑
+- 读取/转述本报告**不算**约束 4 的「导入后二次校验」；除此之外仍禁止自行重算 node_id / pandas 复核 CSV / query 计数比对
 
 
 

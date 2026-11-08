@@ -30,6 +30,14 @@ from govio.metadata.datasource import (
     make_datasource_def,
 )
 from govio.metadata.duckdb_loader import DuckDBLoader
+from govio.metadata.import_report import (
+    REPORT_FILE,
+    build_import_report,
+    classify_rows,
+    record_merge_delta,
+    take_merge_delta,
+    write_import_report,
+)
 from govio.metadata.metric import MetricLoader
 from govio.metadata.mysql_loader import MysqlLoader
 from govio.metadata.node_id import assign_node_ids, write_node_csv
@@ -93,6 +101,7 @@ def merge_node_csv(
     Returns:
         合并后的 DataFrame（已重置索引，含 node_id 列）
     """
+    existing = None
     if csv_path.exists():
         existing = pd.read_csv(csv_path)
         # 已有 CSV 的第一列是 :ID(NodeType)，重命名为 node_id 以统一
@@ -115,8 +124,10 @@ def merge_node_csv(
     else:
         merged = new_df
 
+    delta = classify_rows(new_df, existing, [key_col])
     merged = merged.reset_index(drop=True)
     write_node_csv(merged, csv_path, node_type)
+    record_merge_delta(csv_path.parent, "nodes", node_type, delta)
     return merged
 
 
@@ -130,6 +141,7 @@ def merge_edge_csv(
     Returns:
         合并后的 DataFrame
     """
+    existing = None
     if csv_path.exists():
         existing = pd.read_csv(csv_path)
         combined = pd.concat([existing, new_df], ignore_index=True)
@@ -145,8 +157,10 @@ def merge_edge_csv(
     else:
         merged = new_df
 
+    delta = classify_rows(new_df, existing, dedup_cols)
     merged = merged.reset_index(drop=True)
     merged.to_csv(csv_path, index=False)
+    record_merge_delta(csv_path.parent, "edges", csv_path.stem, delta)
     return merged
 
 
@@ -277,6 +291,29 @@ def _clear_graph(assets_dir: Path) -> bool:
     else:
         print("提示: 未配置 graph backend，跳过")
     return True
+
+
+def _write_import_report(output: Path, graph_mode: str, report_arg: str | None) -> None:
+    """生成并落盘校验报告，stdout 输出报告路径与校验结果。
+
+    默认写入 <output>/import-report.json，`--report` 可指定别处。
+    增量计数取自 import-delta.json（自上次 graph 同步以来的 merge 分类），
+    取走即清零。
+
+    Args:
+        output: 导入任务的 CSV 目录
+        graph_mode: graph 更新模式（update / rebuild）
+        report_arg: --report 指定的报告路径（缺省写入 output 目录）
+    """
+    graph_config = ConfigManager().load()
+    backend = (graph_config.get("graph") or {}).get("backend") or "none"
+    changes = take_merge_delta(output)
+    report = build_import_report(
+        output, mode=graph_mode, backend=backend, changes=changes
+    )
+    path = Path(report_arg) if report_arg else output / REPORT_FILE
+    write_import_report(report, path)
+    print(f"\n✓ 校验报告已写入: {path}（校验结果: {report['summary']['status']}）")
 
 
 def _generate_assets(assets_dir: Path) -> None:
@@ -917,8 +954,11 @@ def cmd_graph(args: argparse.Namespace) -> None:
         print(f"❌ 输出目录不存在: {output}", file=sys.stderr)
         sys.exit(1)
 
-    _update_graph(output, graph_mode, assets_dir)
+    if not _update_graph(output, graph_mode, assets_dir):
+        print("❌ graph 更新失败（未生成校验报告）", file=sys.stderr)
+        sys.exit(1)
     _generate_assets(assets_dir)
+    _write_import_report(output, graph_mode, getattr(args, "report", None))
 
     print("\n✅ graph 更新完成！")
 
@@ -1034,8 +1074,11 @@ def cmd_import_schema(args: argparse.Namespace) -> None:
     if result is None:
         sys.exit(1)
 
-    _update_graph(output, args.mode, assets_dir)
+    if not _update_graph(output, args.mode, assets_dir):
+        print("❌ import-schema 图数据更新失败（未生成校验报告）", file=sys.stderr)
+        sys.exit(1)
     _generate_assets(assets_dir)
+    _write_import_report(output, args.mode, getattr(args, "report", None))
     print("\n✅ import-schema 完成！")
 
 
@@ -1172,6 +1215,11 @@ def meta():
         default="update",
         help="更新模式: update=增量, rebuild=重建, clear=清空",
     )
+    p_graph.add_argument(
+        "--report",
+        type=str,
+        help="校验报告输出路径（默认 <output>/import-report.json）",
+    )
     p_graph.set_defaults(func=cmd_graph)
 
     # --- 数据标准推荐 ---
@@ -1230,6 +1278,11 @@ def meta():
         choices=["update", "rebuild", "clear"],
         default="update",
         help="更新模式: update=增量, rebuild=重建, clear=清空",
+    )
+    p_import.add_argument(
+        "--report",
+        type=str,
+        help="校验报告输出路径（默认 <output>/import-report.json）",
     )
     p_import.set_defaults(func=cmd_import_schema)
 

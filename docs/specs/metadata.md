@@ -440,6 +440,28 @@ JSON Schema (draft-07) for metric definitions:
 
 ---
 
+## caliber.py
+
+口径冲突检测（`govio.cli.sql._caliber` 的比对内核，纯 stdlib、可单测）：
+
+```python
+extract_sql_facts(sql) -> SqlFacts            # 聚合调用/引用列/WHERE 条件/时间窗
+compare_metric(metric, facts) -> dict         # {metric, status, differences}
+check_caliber(metrics, sql) -> dict           # {results: [...]}
+read_metric_caliber(graph, ref) -> CaliberMetric | None  # code 或节点 ID
+```
+
+- 比对维度：`aggregation`（formula 显式聚合 vs SQL 聚合签名，含 DISTINCT）、
+  `filter`（定义中剔除类限定 vs SQL WHERE）、`time_scope`（定义明确时间窗 vs SQL
+  时间窗字面量）、`column`（REFERS_COLUMN(role) 列 + 聚合参数列 vs SQL 引用列）。
+- 判定纪律：**宁可 unknown 不误报 conflict**。conflict 仅在证据确定时给出
+  （聚合签名不匹配 / 明确时间窗不相交 / 计量列缺失且无 `*` 展开）；中文语义提示
+  （合计/均值…）、剔除类限定、COUNT(*) 等弱证据一律降级 unknown。
+- `read_metric_caliber` 接收调用方注入的图对象（GraphFactory 产物）：NetworkXGraph
+  走 `.G`，FalkorDBGraph/LadybugGraph 走 `.query`；本模块不建连。
+
+---
+
 ## Relationship Schema (`relationship_schema.json`)
 
 JSON Schema (draft-07) for table relationship definitions（文件路径 `src/govio/metadata/relationship_schema.json`）：
@@ -483,6 +505,37 @@ When `incremental=True`, merges new CSV data into existing GML graph instead of 
 
 Supported node CSVs: Datasource, PhysicalTable, Col, Standard, Metric, Dimension
 Supported edge CSVs: HAS_COLUMN, OWNS, COMPLIES_WITH, RELATES_TO, USES_TABLE, REFERS_COLUMN, DERIVED_FROM, DIMENSION_USED, SUPERSEDES
+
+---
+
+## import_report.py
+
+导入校验报告与增量统计（`meta graph` / `meta import-schema` 的报告产出，与图后端无关）。
+
+```python
+classify_rows(new_df, existing_df, key_cols) -> dict[str, int]
+# 按业务键把本次输入与已有数据分类：{"added", "updated", "skipped"}
+
+record_merge_delta(csv_dir, category, name, delta) -> None
+# 把一次 merge 的分类计数累计进 <csv_dir>/import-delta.json（category: "nodes" / "edges"）
+
+take_merge_delta(csv_dir) -> dict[str, dict]
+# 读取并清零增量累计，返回 changes 结构（nodes/edges 按类型 + totals）
+
+collect_import_counts(csv_dir) -> dict[str, dict[str, int]]
+# 各节点/边类型导入行数（只统计表头符合约定的固定文件名 CSV）
+
+run_validation_checks(csv_dir) -> list[dict]
+# 三项校验：duplicate_node_ids / missing_required / orphan_edges
+# 每项 {name, status: "pass"/"fail", count, examples}（样例最多 5 条）
+
+build_import_report(csv_dir, mode, backend, changes=None) -> dict
+write_import_report(report, path) -> Path  # 整体序列化后单次写入，失败不留半截
+```
+
+- 报告默认写入 `<output>/import-report.json`（`--report` 可覆盖），字段契约见 [cli.md](cli.md#校验报告import-reportjson)
+- 增量分类口径：新增=键不存在 / 更新=键存在但值变化 / 跳过=键存在且值相同（值按字符串比较，NaN 视为空串）；graph 同步成功后 fold 进报告并清零 `import-delta.json`
+- 校验口径：`duplicate_node_ids` = 同一节点 CSV 内 `:ID(...)` 重复；`missing_required` = 节点缺 node_id 或 name（有 name 列时）、边缺端点 ID；`orphan_edges` = 边端点不在任何节点 CSV 中（空端点只计 missing_required）
 
 ---
 
