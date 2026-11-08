@@ -29,6 +29,12 @@ _AGG_RE = re.compile(
     r"\b(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(DISTINCT\s+)?([^()]*)\)", re.IGNORECASE
 )
 _IDENT_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+# SELECT 列表（到首个顶层 FROM 为止；无 FROM 则到结尾）——星号判定只看列表内
+_SELECT_LIST_RE = re.compile(r"\bSELECT\b(.*?)(?=\bFROM\b|\Z)", re.IGNORECASE | re.DOTALL)
+# `t.*` / `tbl.*` 全表展开
+_TABLE_STAR_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\s*\.\s*\*")
+# count(*) 内的星号不计入 has_star（计数对象不可确认由 has_count_star 表达）
+_COUNT_STAR_RE = re.compile(r"\bCOUNT\s*\(\s*\*\s*\)", re.IGNORECASE)
 _WHERE_END_RE = re.compile(
     r"\b(GROUP\s+BY|ORDER\s+BY|HAVING|LIMIT|OFFSET|UNION|EXCEPT|INTERSECT)\b", re.IGNORECASE
 )
@@ -115,6 +121,46 @@ def _window_days(value: str, unit: str) -> int:
     return round(int(value) * _UNIT_DAYS.get(unit.upper(), _UNIT_DAYS.get(unit, 1)))
 
 
+def _split_select_items(select_list: str) -> list[str]:
+    """按顶层逗号切分 SELECT 列表（括号内逗号不切）"""
+    items: list[str] = []
+    depth = 0
+    buf: list[str] = []
+    for ch in select_list:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(depth - 1, 0)
+        if ch == "," and depth == 0:
+            items.append("".join(buf))
+            buf = []
+            continue
+        buf.append(ch)
+    items.append("".join(buf))
+    return items
+
+
+def _has_select_star(stripped: str) -> bool:
+    """SELECT 列表是否含裸星号展开（`SELECT *` / `SELECT t.*`）。
+
+    只在 SELECT 列表内识别，且排除：
+    - 乘法/算术运算（`price_per_box * boxes_shipped`、`SUM(price*boxes)`）——
+      旧实现 `"*" in sql` 把乘号当星号展开，令计量列缺失只能判 unknown，
+      口径冲突永远报不出来；
+    - `COUNT(*)`——计数对象不可确认属存疑（has_count_star 表达）。
+    """
+    m = _SELECT_LIST_RE.search(stripped)
+    if not m:
+        return False
+    select_list = _COUNT_STAR_RE.sub("COUNT(_)", m.group(1))
+    if _TABLE_STAR_RE.search(select_list):
+        return True
+    return any(
+        re.fullmatch(r"\s*(?:DISTINCT\s+)?\*\s*", item, re.IGNORECASE)
+        for item in _split_select_items(select_list)
+    )
+
+
 def extract_sql_facts(sql: str) -> SqlFacts:
     """从 SQL 文本提取比对事实（纯文本解析，不做完整 SQL 语法分析）"""
     facts = SqlFacts()
@@ -130,8 +176,8 @@ def extract_sql_facts(sql: str) -> SqlFacts:
         if token.upper() not in _SQL_KEYWORDS:
             facts.referenced_columns.add(token.lower())
 
-    facts.has_star = "*" in stripped
-    facts.has_count_star = re.search(r"\bCOUNT\s*\(\s*\*", stripped, re.IGNORECASE) is not None
+    facts.has_star = _has_select_star(stripped)
+    facts.has_count_star = _COUNT_STAR_RE.search(stripped) is not None
 
     where_m = re.search(r"\bWHERE\b", stripped, re.IGNORECASE)
     if where_m:
@@ -333,15 +379,19 @@ def _compare_columns(
         return [(_diff("column", expected_desc, found_desc, "SQL 未解析出引用列，无法比对"), False)]
 
     diffs: list[tuple[dict[str, Any], bool]] = []
+    # 星号展开（SELECT *）与 COUNT(*) 都会让「计量列是否真的没用到」不可确认：
+    # 前者可能已展开该列，后者计数对象未知 —— 二者都只给存疑，不误报 conflict。
+    ambiguous_expansion = facts.has_star or facts.has_count_star
     for col in expected_cols:
         if col.column_name.lower() in facts.referenced_columns:
             continue
-        if col.role == "measure" and not facts.has_star:
+        if col.role == "measure" and not ambiguous_expansion:
             diffs.append((_diff("column", expected_desc, found_desc,
                                 f"计量列 {col.column_name} 未在 SQL 中引用"), True))
         elif col.role == "measure":
+            reason = "SQL 含 * 展开无法确认" if facts.has_star else "SQL 含 COUNT(*) 计数对象无法确认"
             diffs.append((_diff("column", expected_desc, found_desc,
-                                f"计量列 {col.column_name} 未显式引用，SQL 含 * 展开无法确认"), False))
+                                f"计量列 {col.column_name} 未显式引用，{reason}"), False))
         else:
             diffs.append((_diff("column", expected_desc, found_desc,
                                 f"{col.role} 列 {col.column_name} 未在 SQL 中引用，可能经由其它表达式实现"), False))

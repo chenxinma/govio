@@ -217,6 +217,42 @@ def test_extract_sql_facts_where_and_window():
     assert len(facts.where_segments) == 2
 
 
+def test_star_not_confused_with_multiplication():
+    # 乘号不是星号展开：否则计量列缺失只能判 unknown，口径冲突永远报不出来
+    facts = extract_sql_facts(
+        "SELECT SUM(price_per_box * boxes_shipped) AS calc_amount FROM sales"
+    )
+    assert facts.has_star is False
+    facts2 = extract_sql_facts("SELECT a * 2 AS b, SUM(x*y) FROM t WHERE z > 1")
+    assert facts2.has_star is False
+
+
+def test_star_detected_in_select_list():
+    assert extract_sql_facts("SELECT * FROM orders").has_star is True
+    assert extract_sql_facts("SELECT DISTINCT * FROM orders").has_star is True
+    assert extract_sql_facts("SELECT o.* FROM orders o").has_star is True
+    assert extract_sql_facts("SELECT a, * FROM orders").has_star is True
+    # WHERE 里的乘号不影响星号判定
+    assert extract_sql_facts("SELECT a FROM t WHERE b * c > 1").has_star is False
+    # 字符串字面量里的星号不算
+    assert extract_sql_facts("SELECT a FROM t WHERE note = 'a * b'").has_star is False
+
+
+def test_conflict_measure_missing_with_multiplication_in_sql():
+    # 回归（BUGFIX-caliber-has-star）：`price*boxes` 计算式取代口径计量列 amount，
+    # 旧实现误判 has_star → unknown；修复后应为确定 conflict
+    metric = _metric(formula="SUM(amount)", columns=[MetricColumn("amount", "measure")])
+    sql = (
+        "SELECT country_id, SUM(price_per_box * boxes_shipped) AS sales_amount "
+        "FROM fact_sales GROUP BY country_id"
+    )
+    result = check_caliber([metric], sql)["results"][0]
+    assert result["status"] == "conflict"
+    diff = next(d for d in result["differences"] if d["aspect"] == "column")
+    assert "amount" in diff["expected"]
+    assert "未在 SQL 中引用" in diff["detail"]
+
+
 # ---------------------------------------------------------------------------
 # 图读取（打桩，不连真实图库）
 # ---------------------------------------------------------------------------
