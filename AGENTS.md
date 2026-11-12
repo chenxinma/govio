@@ -290,16 +290,17 @@ src/govio/
 │   ├── datasource_schema.json  # Datasource declaration JSON Schema
 │   ├── duckdb_loader.py     # DuckDBLoader
 │   ├── gen_networkx.py      # CSV → GML conversion (incremental support)
+│   ├── export.py            # make_csv（TDS 元数据导出编排）
 │   ├── metric.py            # MetricLoader
 │   ├── metric_schema.json   # Metric definition JSON Schema
 │   ├── node_id.py           # Deterministic 10-char string ID generation
+│   ├── recommend_entry.py   # data_standard_recommend（推荐入口）
 │   ├── recommender.py       # StandardRecommender (k-NN)
 │   ├── relationship.py      # RelationshipLoader
 │   ├── relationship_schema.json  # Relationship definition JSON Schema
 │   ├── standard.py          # StandardLoader
 │   ├── trino_loader.py      # TrinoLoader
-│   ├── type_parser.py       # 列类型 -> (size, precision, scale) 共享解析
-│   └── utility.py           # make_csv, data_standard_recommend
+│   └── type_parser.py       # 列类型 -> (size, precision, scale) 共享解析
 └── observe_data/            # Data observation module
     ├── __init__.py
     ├── config.py            # DataSourceConfig, load_config

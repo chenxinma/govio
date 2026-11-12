@@ -288,20 +288,20 @@ def test_metric_edges_use_string_ids(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Utility path tests
+# export.make_csv 老路径测试
 # ---------------------------------------------------------------------------
 
 def test_make_csv_utility_path_uses_string_ids(tmp_path, monkeypatch):
-    """老路径 utility.make_csv 也应产出 string ID 节点 CSV。"""
-    from govio.metadata import utility
+    """老路径 export.make_csv 也应产出 string ID 节点 CSV。"""
+    from govio.metadata import export as metadata_export
 
-    monkeypatch.setattr(utility, "TDSLoader", lambda *a, **k: MagicMock(
+    monkeypatch.setattr(metadata_export, "TDSLoader", lambda *a, **k: MagicMock(
         PhysicalTable=_mock_tds_tables(), Col=_mock_tds_columns()))
-    monkeypatch.setattr(utility, "StandardLoader", lambda *a, **k: MagicMock(
+    monkeypatch.setattr(metadata_export, "StandardLoader", lambda *a, **k: MagicMock(
         Standard=_mock_stds()))
 
     ds_file = _write_datasources_file(tmp_path)
-    utility.make_csv(
+    metadata_export.make_csv(
         output=tmp_path, db="mysql://x", workspace_uuid="ws",
         datasource_file=ds_file,
     )

@@ -574,18 +574,28 @@ write_import_report(report, path) -> Path  # 整体序列化后单次写入，�
 
 ---
 
-## utility.py
+## export.py
 
-CLI orchestration functions.
+TDS 元数据导出编排（老路径 CLI，一类职责：把整条 TDS 管线跑成 CSV）。
 
 ```python
-reorder_index(dfs: list[pd.DataFrame], start: int = 1) -> None
 make_csv(output, db, workspace_uuid, datasource_file,
          relationship_file=None, metric_file=None) -> None
+```
+
+`make_csv` 产出 `PhysicalTable.csv`、`Col.csv`、`HAS_COLUMN.csv`、`Datasource.csv`、`OWNS.csv`，可选追加 `RELATES_TO.csv` 与指标相关 CSV；TDS 抽取范围来自 `datasource_file` 各条目 `filter.schemas` 的并集。节点 CSV 经 `assign_node_ids` / `write_node_csv` 写入确定性 node_id，与 `govio-cli meta` 分步导出（`cli/meta` 的 `step_*_export`）共用同一套 CSV 契约；结束时打印 `falkordb-bulk-insert` 复现命令。
+
+---
+
+## recommend_entry.py
+
+数据标准推荐入口（老路径 CLI，另一类职责：调用推荐器产出贯标边）。被 `govio-cli meta recommend`（经 `cli/std_recommend.py`）调用。
+
+```python
 data_standard_recommend(output, db, workspace_uuid, schemas: list[str],
                         datasource_name: str, csv_dir: Path | None = None) -> None
 ```
 
-`make_csv` 产出 `PhysicalTable.csv`、`Col.csv`、`HAS_COLUMN.csv`、`Datasource.csv`、`OWNS.csv`，可选追加 `RELATES_TO.csv` 与指标相关 CSV；TDS 抽取范围来自 `datasource_file` 各条目 `filter.schemas` 的并集。`schemas` 由调用方从 `Datasource.filter.schemas` 解析后传入；`csv_dir` 为已导入 CSV 目录（读取 `Col.csv` / `Standard.csv`，缺省取 `output`）。
+`schemas` 由调用方从 `Datasource.filter.schemas` 解析后传入；`csv_dir` 为已导入 CSV 目录（读取 `Col.csv` / `Standard.csv`，缺省取 `output`），命中时产出 `COMPLIES_WITH.csv`。
 
 `data_standard_recommend` uses custom weights: `table=0.25, name=0.35, comment=0.25, type=0.05, numeric=0.10`.
