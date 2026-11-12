@@ -565,7 +565,7 @@ make_csv(output, db, workspace_uuid, datasource_file,
          relationship_file=None, metric_file=None) -> None
 ```
 
-`make_csv` 产出 `PhysicalTable.csv`、`Col.csv`、`HAS_COLUMN.csv`、`Datasource.csv`、`OWNS.csv`，可选追加 `RELATES_TO.csv` 与指标相关 CSV；TDS 抽取范围来自 `datasource_file` 各条目 `filter.schemas` 的并集。节点 CSV 经 `assign_node_ids` / `write_node_csv` 写入确定性 node_id，与 `govio-cli meta` 分步导出（`cli/meta` 的 `step_*_export`）共用同一套 CSV 契约；结束时打印 `falkordb-bulk-insert` 复现命令。
+`make_csv` 产出 `PhysicalTable.csv`、`Col.csv`、`HAS_COLUMN.csv`、`Datasource.csv`、`OWNS.csv`，可选追加 `RELATES_TO.csv` 与指标相关 CSV；TDS 抽取范围来自 `datasource_file` 各条目 `filter.schemas` 的并集。节点 CSV 经 `assign_node_ids` / `write_node_csv` 写入确定性 node_id，与 `govio-cli meta` 分步导出（`cli/meta/steps.py` 的 `step_*_export`）共用同一套 CSV 契约；结束时打印 `falkordb-bulk-insert` 复现命令。
 
 ---
 

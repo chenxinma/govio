@@ -265,7 +265,15 @@ src/govio/
 │   ├── __main__.py
 │   ├── config.py            # ConfigManager
 │   ├── main.py              # argparse dispatch
-│   ├── meta.py              # meta command group (sync/recommend/config)
+│   ├── meta/                # meta command group (package, 按子命令域拆分)
+│   │   ├── __init__.py      # re-export meta / cmd_* / step_*_export
+│   │   ├── parser.py        # meta() argparse 装配
+│   │   ├── commands.py      # 各 cmd_*（参数校验、退出码、步骤编排）
+│   │   ├── steps.py         # 各 step_*_export（读源 -> 赋 node_id -> 幂等写 CSV）
+│   │   ├── merge.py         # 节点/边 CSV 增量合并与 import-delta 计数
+│   │   ├── graph_ops.py     # 图后端装载 / assets 生成 / 导入校验报告
+│   │   ├── common.py        # _build_metadata_loader 与数据源 schema 解析
+│   │   └── constants.py     # DEFAULT_ASSETS_DIR 与 --source 映射
 │   ├── observe.py           # observe command group
 │   ├── onboard.py           # interactive setup wizard
 │   ├── query.py             # knowledge graph query

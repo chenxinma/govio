@@ -13,8 +13,8 @@ from unittest.mock import patch
 import duckdb
 import pytest
 
-from govio.cli import meta as meta_mod
 from govio.cli.meta import cmd_meta, step_meta_export
+from govio.cli.meta import graph_ops as meta_graph_ops
 
 
 @pytest.fixture
@@ -144,11 +144,11 @@ def test_generate_assets_prints_absolute_path(tmp_path, capsys, monkeypatch):
     """assets 路径以绝对路径打印，接受 assets_dir 参数。"""
     monkeypatch.chdir(tmp_path)
     assets_dir = Path(".agents/skills/govio/assets")
-    with patch.object(meta_mod, "ConfigManager") as cm, \
-            patch.object(meta_mod, "GraphFactory"), \
-            patch.object(meta_mod, "AssetsGenerator"):
+    with patch.object(meta_graph_ops, "ConfigManager") as cm, \
+            patch.object(meta_graph_ops, "GraphFactory"), \
+            patch.object(meta_graph_ops, "AssetsGenerator"):
         cm.return_value.load.return_value = {"graph": {"backend": "ladybug"}}
-        meta_mod._generate_assets(assets_dir)
+        meta_graph_ops._generate_assets(assets_dir)
 
     out = capsys.readouterr().out
     line = next(ln for ln in out.splitlines() if "Assets 已生成到" in ln)

@@ -139,9 +139,9 @@ def _patched_loaders(tmp_path):
     Yields:
         str: datasource 声明文件路径（TDS 模式需要）
     """
-    with patch("govio.cli.meta.TDSLoader") as tds_m, \
-         patch("govio.cli.meta.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.StandardLoader") as std_m:
+    with patch("govio.cli.meta.steps.TDSLoader") as tds_m, \
+         patch("govio.cli.meta.common.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta.steps.StandardLoader") as std_m:
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = _mock_duck_tables()
@@ -238,9 +238,9 @@ def test_metric_edges_use_string_ids(tmp_path):
     metric_file = tmp_path / "metric.json"
     metric_file.write_text(json.dumps(metric_data, ensure_ascii=False), encoding="utf-8")
 
-    with patch("govio.cli.meta.TDSLoader") as tds_m, \
-         patch("govio.cli.meta.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.StandardLoader") as std_m:
+    with patch("govio.cli.meta.steps.TDSLoader") as tds_m, \
+         patch("govio.cli.meta.common.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta.steps.StandardLoader") as std_m:
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = _mock_duck_tables()
@@ -363,9 +363,9 @@ def test_meta_duckdb_requires_db(tmp_path, monkeypatch, capsys):
 
 def test_duckdb_skips_tds_and_std(tmp_path):
     """DuckDB 模式不调用 TDSLoader 和 StandardLoader，自动声明 Datasource。"""
-    with patch("govio.cli.meta.TDSLoader") as tds_m, \
-         patch("govio.cli.meta.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.StandardLoader") as std_m:
+    with patch("govio.cli.meta.steps.TDSLoader") as tds_m, \
+         patch("govio.cli.meta.common.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta.steps.StandardLoader") as std_m:
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = pd.DataFrame({

@@ -104,7 +104,7 @@
 - [ ] 打包排除规则与版本注入收敛到 `scripts/` 共享模块（三支打包脚本复用）
 - [x] `test_package_harness_plugin.py` 从任务目录迁入 `tests/` 常规集（V3 已完成；同轮补齐 `tests/test_package_pi_extension.py`、`tests/test_package_harness_plugin.py` 打包脚本自动化测试）
 - [x] 真实库集成测试固化：`tests/test_real_mysql.py` / `tests/test_real_postgres.py` / `tests/test_real_observe.py`（`@pytest.mark.integration`，默认 skip，`GOVIO_REAL_DB=1` 才执行；用 wslc 容器 mysql:8 / postgres:17 / trino:483 验证，用后 `wslc stop` + `wslc remove` 清理，保证无容器时 `uv run pytest tests/` 全绿）
-- [ ] `cli/meta.py`（1240 行）按子命令域拆文件（切点 `_build_metadata_loader` / 各 `cmd_*`）
+- [x] `cli/meta.py`（1294 行）按子命令域拆文件（切点 `_build_metadata_loader` / 各 `cmd_*`）→ 拆为 `cli/meta/` 包（parser / commands / steps / merge / graph_ops / common / constants），`--help` 与退出码快照逐字节一致
 - [ ] `metadata/utility.py` 拆分「导出编排 / 推荐入口」两类职责
 - [ ] `metadata/gen_networkx.py`（CSV→GML）归属迁移到 `graph/`，同步 spec
 - [ ] observe_data 的 tools/core 分层说明补进 docs/specs/observe-data.md

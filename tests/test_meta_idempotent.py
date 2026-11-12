@@ -15,7 +15,6 @@ import networkx as nx
 import pandas as pd
 import pytest
 
-from govio.cli import meta as meta_mod
 from govio.cli.meta import (
     cmd_graph,
     cmd_import_schema,
@@ -23,6 +22,8 @@ from govio.cli.meta import (
     step_metric_export,
     step_rel_export,
 )
+from govio.cli.meta import commands as meta_commands
+from govio.cli.meta import graph_ops as meta_graph_ops
 
 
 class StubConfigManager:
@@ -114,7 +115,12 @@ def _stub_config(monkeypatch, tmp_path, extra: dict | None = None):
     }
     if extra:
         config.update(extra)
-    monkeypatch.setattr(meta_mod, "ConfigManager", lambda: StubConfigManager(config))
+    # 配置读取分散在两个子模块：cmd_import_schema 在 commands，图/assets 装载在 graph_ops
+    def _stub_config_manager():
+        return StubConfigManager(config)
+
+    monkeypatch.setattr(meta_graph_ops, "ConfigManager", _stub_config_manager)
+    monkeypatch.setattr(meta_commands, "ConfigManager", _stub_config_manager)
 
 
 def _run_round(out: Path, assets: Path, duck_db, rel_file, metric_file, report=None):
