@@ -282,14 +282,14 @@ src/govio/
 │   ├── falkordb_graph.py
 │   ├── falkordb_loader.py   # CSV bulk import/upsert to FalkorDB
 │   ├── ladybug_graph.py
-│   └── ladybug_loader.py    # CSV bulk import/upsert to Ladybug
+│   ├── ladybug_loader.py    # CSV bulk import/upsert to Ladybug
+│   └── networkx_loader.py   # CSV → GML conversion (incremental support)
 ├── metadata/                # Metadata loading and processing
 │   ├── __init__.py
 │   ├── database.py          # TDSLoader (base: MetadataLoader)
 │   ├── datasource.py        # DatasourceLoader (datasource.json declaration)
 │   ├── datasource_schema.json  # Datasource declaration JSON Schema
 │   ├── duckdb_loader.py     # DuckDBLoader
-│   ├── gen_networkx.py      # CSV → GML conversion (incremental support)
 │   ├── export.py            # make_csv（TDS 元数据导出编排）
 │   ├── metric.py            # MetricLoader
 │   ├── metric_schema.json   # Metric definition JSON Schema

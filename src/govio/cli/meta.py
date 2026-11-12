@@ -184,7 +184,7 @@ def _load_csv_with_node_ids(
 
 def _update_graph(output: Path, graph_mode: str, assets_dir: Path) -> bool:
     """更新图数据库。返回是否成功。"""
-    from govio.metadata.gen_networkx import build_graph
+    from govio.graph.networkx_loader import build_graph
 
     graph_config = ConfigManager().load()
     graph = graph_config.get("graph") or {}

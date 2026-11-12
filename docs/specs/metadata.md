@@ -525,24 +525,6 @@ JSON Schema (draft-07) for datasource declaration files（文件路径 `src/govi
 
 ---
 
-## gen_networkx.py
-
-Converts CSV node/edge files to NetworkX GML format.
-
-```python
-load_nodes(csv_dir: str) -> list[dict]
-load_edges(csv_dir: str) -> pd.DataFrame
-build_graph(csv_dir: str, output_gml: str, incremental: bool = False)
-gml_generate() -> None  # CLI: --csv, -o/--output
-```
-
-When `incremental=True`, merges new CSV data into existing GML graph instead of rebuilding from scratch.
-
-Supported node CSVs: Datasource, PhysicalTable, Col, Standard, Metric, Dimension
-Supported edge CSVs: HAS_COLUMN, OWNS, COMPLIES_WITH, RELATES_TO, USES_TABLE, REFERS_COLUMN, DERIVED_FROM, DIMENSION_USED, SUPERSEDES
-
----
-
 ## import_report.py
 
 导入校验报告与增量统计（`meta graph` / `meta import-schema` 的报告产出，与图后端无关）。

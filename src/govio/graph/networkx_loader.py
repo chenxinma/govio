@@ -1,5 +1,5 @@
 """
-govio.metadata.gen_networkx
+govio.graph.networkx_loader
 读取指定目录的csv文本（包含Node和Edge）构建图并存储为GML文件
 读取内容包含：
 
