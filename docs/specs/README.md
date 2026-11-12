@@ -53,7 +53,6 @@ Govio ships with AI assistant skills under `skills/`:
 | tqdm | Progress bars |
 | questionary | Interactive CLI prompts |
 | matplotlib | Chart rendering (bar/line) |
-| mcp | Model Context Protocol support（当前无代码引用，精简候选，见 roadmap Phase 3） |
 | trino | Trino database connector |
 | pymysql | MySQL database connector |
 | psycopg[binary] | PostgreSQL database connector (psycopg3) |
