@@ -105,6 +105,6 @@
 ## 遗留 / 有意未做
 
 - `datacompy` 依赖漂移（预存在）：代码 `from datacompy.core import Compare`，而 PyPI 最新 1.2.0 已删除 `datacompy.core`。本 worktree 的 `uv.lock`（gitignored）已与主仓对齐锁到 `0.19.5`；建议后续把上限写进 `pyproject.toml`。
-- `ruff format --check src/ tests/ scripts/` 仍有 51 个文件待格式化，与主仓 `main` HEAD 的 51 个完全同集（既有漂移）。新增/移动的 8 个 `cli/meta/*` 模块与 `type_parser.py` / `_packaging_common.py` / `export.py` / `recommend_entry.py` / `networkx_loader.py` 均已格式化干净；不做全仓格式化以免污染本次精简的 diff。
+- `ruff format --check src/ tests/ scripts/` 仍有 50 个文件待格式化（`main` HEAD 为 51 个）。两个集合逐一路对：差异只有 `src/govio/cli/meta.py`（本次删除）与 `metadata/gen_networkx.py` → `graph/networkx_loader.py`（本次重命名，原本就在漂移集里），即本次未引入任何新漂移。集合差已由 `Compare-Object` 核对。新增的 `cli/meta/` 七个模块与 `type_parser.py` / `_packaging_common.py` / `export.py` / `recommend_entry.py` 均格式化干净。不做全仓格式化以免 51 个无关文件的改动污染本次精简的 diff——留给独立的格式化提交更合适。
 - `docs/plans/*`、`docs/tasks/T*/`、`docs/tasks/V*/` 里对 `src/govio/cli/meta.py`、`metadata/utility.py`、`gen_networkx.py` 的引用属历史留档，保持原样不改。
 - 未启动任何容器：`tests/test_real_*.py` 保持默认 skip（`GOVIO_REAL_DB` 未设置）。
