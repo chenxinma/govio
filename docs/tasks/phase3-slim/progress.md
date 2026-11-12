@@ -108,3 +108,27 @@
 - `ruff format --check src/ tests/ scripts/` 仍有 50 个文件待格式化（`main` HEAD 为 51 个）。两个集合逐一路对：差异只有 `src/govio/cli/meta.py`（本次删除）与 `metadata/gen_networkx.py` → `graph/networkx_loader.py`（本次重命名，原本就在漂移集里），即本次未引入任何新漂移。集合差已由 `Compare-Object` 核对。新增的 `cli/meta/` 七个模块与 `type_parser.py` / `_packaging_common.py` / `export.py` / `recommend_entry.py` 均格式化干净。不做全仓格式化以免 51 个无关文件的改动污染本次精简的 diff——留给独立的格式化提交更合适。
 - `docs/plans/*`、`docs/tasks/T*/`、`docs/tasks/V*/` 里对 `src/govio/cli/meta.py`、`metadata/utility.py`、`gen_networkx.py` 的引用属历史留档，保持原样不改。
 - 未启动任何容器：`tests/test_real_*.py` 保持默认 skip（`GOVIO_REAL_DB` 未设置）。
+
+## 收尾验证（全部提交后在 HEAD 上复跑）
+
+- 证据复采：`logs/p3/capture.py logs/p3/final` → 与基线 `logs/p3/before` 用 `logs/p3/compare.py` 对比
+  - `help identical: True`（`meta` 无参 / `--help` / 非法参数 + 9 个子命令 `--help` 的 stdout/stderr/退出码逐字节一致）
+  - 打包：`exit_codes {'harness': 0, 'pi': 0, 'skills': 0}` 一致；`govio-pi-0.7.2` 24、`govio-dsh-0.7.2` 7、`govio-dsh-skills` 21、`govio-skills.zip` 21 条目全 IDENTICAL（唯一文本差异是脚本回显的证据目录绝对路径）
+  - GML：`c1fbd2d7c7add9c186d82b8fdaf78efff33b2557e4eac2cc811f1468f555fa9b`，172 行文本逐字一致
+  - `_parse_type`：`parse_type identical: True`（mysql/trino 30 条串式 × 两方言 + postgres 14 条属性组合）
+- 环境与调用：`uv sync --group dev` 退出 0；`uv run python -c "import govio"` 退出 0；`govio-cli meta recommend --help` 正常
+- 测试：`uv run python -m pytest tests/ -q` → **482 passed, 18 skipped**（基线 435/18，只增不减；新增 47 个 `tests/test_type_parser.py` 用例）
+- 静态检查：`uv run ruff check src/ tests/ scripts/ package_skills.py` → All checks passed（退出 0）；`ruff format --check` 见「遗留」
+- 引用清扫：`mcp` 在 `pyproject.toml`/`src`/`tests`/`scripts`/`docs/specs` 零引用；`metadata.utility` / `gen_networkx` / 方言 `_parse_type` 在 `src`/`tests`/`scripts` 零引用
+- 分支与提交（`git log --oneline main..HEAD`，未合并、未 push）：
+
+| 提交 | 项 |
+|---|---|
+| `d9f39d3 chore(deps): 移除未使用的 mcp 依赖` | 1 |
+| `dd9f82e refactor(metadata): _parse_type 三份方言实现收敛为共享 type_parser` | 2 |
+| `9b7d54d refactor(scripts): 打包排除规则与版本注入收敛到 _packaging_common` | 3 |
+| `bbc1c8c refactor(metadata): utility.py 拆分导出编排与推荐入口两类职责` | 5 |
+| `7fb842b refactor(graph): CSV→GML 生成器从 metadata 归位到 graph/networkx_loader` | 6 |
+| `904ca5f refactor(meta): cli/meta.py 按子命令域拆分为 cli/meta/ 包` | 4 |
+| `342ff49 docs(observe_data,roadmap): Phase 3 收尾 —— tools/core 分层说明与待办勾选` | 7 + roadmap |
+| `b35e393 docs(tasks/phase3-slim): 校正 ruff format 漂移数据到实测集合差` | 过程记录校正 |
