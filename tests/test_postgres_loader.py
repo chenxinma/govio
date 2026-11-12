@@ -7,8 +7,8 @@ from govio.metadata.database import MetadataLoader
 from govio.metadata.postgres_loader import (
     _COLUMNS_SQL,
     PostgresLoader,
-    _parse_type,
 )
+from govio.metadata.type_parser import parse_type_attributes
 
 _TABLE_COLUMNS = [
     "full_table_name",
@@ -423,4 +423,4 @@ def test_postgres_loader_mixed_null_attrs_nan(monkeypatch):
 )
 def test_parse_type(data_type, char_len, num_prec, num_scale, expected):
     """size/precision/scale 从 information_schema 类型属性正确解析。"""
-    assert _parse_type(data_type, char_len, num_prec, num_scale) == expected
+    assert parse_type_attributes(data_type, char_len, num_prec, num_scale) == expected

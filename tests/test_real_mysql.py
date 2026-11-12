@@ -15,7 +15,8 @@ import os
 import pymysql
 import pytest
 
-from govio.metadata.mysql_loader import MysqlLoader, _parse_type
+from govio.metadata.mysql_loader import MysqlLoader
+from govio.metadata.type_parser import parse_type_string
 
 pytestmark = [
     pytest.mark.integration,
@@ -148,7 +149,7 @@ def test_real_mysql_type_parsing(loader):
     assert (marker["size"], marker["precision"], marker["scale"]) == (0, 0, 0)
     # mysql:8 的视图/表达式列均解析出具体长度，裸 varchar 不可达，
     # 此处钉住防御分支（单测见 tests/test_mysql_loader.py::test_parse_type）
-    assert _parse_type("varchar") == (0, 0, 0)
+    assert parse_type_string("varchar", strip_numeric_modifiers=True) == (0, 0, 0)
 
 
 def test_real_mysql_excludes_view_columns(loader):

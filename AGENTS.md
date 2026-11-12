@@ -298,6 +298,7 @@ src/govio/
 │   ├── relationship_schema.json  # Relationship definition JSON Schema
 │   ├── standard.py          # StandardLoader
 │   ├── trino_loader.py      # TrinoLoader
+│   ├── type_parser.py       # 列类型 -> (size, precision, scale) 共享解析
 │   └── utility.py           # make_csv, data_standard_recommend
 └── observe_data/            # Data observation module
     ├── __init__.py

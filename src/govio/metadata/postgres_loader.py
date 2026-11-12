@@ -11,6 +11,7 @@ import psycopg
 
 from .database import MetadataLoader
 from .datasource import qualify
+from .type_parser import parse_type_attributes
 
 # 表清单 + 表注释；obj_description 需要 pg_class 的 OID，按命名空间+表名关联。
 # information_schema.tables 含表/视图/外表，与 TrinoLoader 的 SHOW TABLES 范围一致。
@@ -67,45 +68,6 @@ _COLUMN_OUTPUT_COLUMNS = [
     "order_no",
     "data_type",
 ]
-
-
-def _parse_type(
-    data_type: str,
-    character_maximum_length: float | None,
-    numeric_precision: float | None,
-    numeric_scale: float | None,
-) -> tuple[int, int, int]:
-    """从 information_schema 类型属性解析 (size, precision, scale)。
-
-    character varying / character / bit -> (character_maximum_length, 0, 0)
-    numeric / decimal -> (0, numeric_precision, numeric_scale)
-    其他类型 -> (0, 0, 0)。整型的 numeric_precision 是位宽语义，
-    不计入 precision，与 TrinoLoader 的 decimal 语义保持一致。
-
-    判空统一用 pd.notna：_fetch 经 pd.DataFrame 承接整型+NULL 混合列时
-    会被推断为 float64，SQL NULL 变成 NaN（既非 None 也非 falsy），
-    用 ``is not None`` 或真值判断会在 int(NaN) 上抛 ValueError。
-
-    Args:
-        data_type: information_schema.columns.data_type 类型名
-        character_maximum_length: 字符/位串最大长度（无则为 None/NaN）
-        numeric_precision: 数值精度（无则为 None/NaN）
-        numeric_scale: 数值小数位（无则为 None/NaN）
-
-    Returns:
-        tuple[int, int, int]: (size, precision, scale)
-    """
-    base = data_type.strip().lower()
-    if base in ("character varying", "character", "bit", "bit varying"):
-        length = (
-            int(character_maximum_length) if pd.notna(character_maximum_length) else 0
-        )
-        return length, 0, 0
-    if base in ("numeric", "decimal"):
-        precision = int(numeric_precision) if pd.notna(numeric_precision) else 0
-        scale = int(numeric_scale) if pd.notna(numeric_scale) else 0
-        return 0, precision, scale
-    return 0, 0, 0
 
 
 class PostgresLoader(MetadataLoader):
@@ -211,7 +173,7 @@ class PostgresLoader(MetadataLoader):
             comment = row.column_comment
             name = comment if isinstance(comment, str) and comment else column_name
             dtype = str(row.data_type)
-            size, precision, scale = _parse_type(
+            size, precision, scale = parse_type_attributes(
                 dtype,
                 row.character_maximum_length,
                 row.numeric_precision,

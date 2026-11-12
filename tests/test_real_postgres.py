@@ -17,7 +17,8 @@ import pandas as pd
 import psycopg
 import pytest
 
-from govio.metadata.postgres_loader import _COLUMNS_SQL, PostgresLoader, _parse_type
+from govio.metadata.postgres_loader import _COLUMNS_SQL, PostgresLoader
+from govio.metadata.type_parser import parse_type_attributes
 
 pytestmark = [
     pytest.mark.integration,
@@ -191,7 +192,7 @@ def test_real_postgres_type_parsing(loader):
     assert (p1_b["size"], p1_b["precision"], p1_b["scale"]) == (0, 0, 0)
     p1_c = df.loc["govio_it.p1_case.c"]
     assert (p1_c["size"], p1_c["precision"], p1_c["scale"]) == (0, 0, 0)
-    assert _parse_type("character varying", None, None, None) == (0, 0, 0)
+    assert parse_type_attributes("character varying", None, None, None) == (0, 0, 0)
 
 
 def test_real_postgres_p1_nan_repro(loader):

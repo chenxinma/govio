@@ -5,19 +5,12 @@
 列结构的 DataFrame，data_entity_type 使用 MYSQL_TABLE / MYSQL_COLUMN。
 """
 
-import re
-
 import pandas as pd
 import pymysql
 
 from .database import MetadataLoader
 from .datasource import qualify
-
-# 匹配 MySQL 类型：base 或 base(params)，如 decimal(10,2)、varchar(64)、bigint
-_TYPE_RE = re.compile(r"^(\w+)\s*(?:\(([^)]*)\))?$")
-# 数值类型的 unsigned/zerofill 后缀（如 decimal(10,2) unsigned、int(10) unsigned zerofill），
-# 解析参数前剥离，否则整串不匹配会导致 precision/scale 静默丢失
-_MODIFIER_RE = re.compile(r"(?:\s+(?:unsigned|zerofill))+$", re.IGNORECASE)
+from .type_parser import parse_type_string
 
 # 输出 DataFrame 列结构，与 TrinoLoader / DuckDBLoader 保持一致
 _TABLE_COLUMNS = [
@@ -41,35 +34,6 @@ _COLUMN_COLUMNS = [
     "order_no",
     "data_type",
 ]
-
-
-def _parse_type(type_str: str) -> tuple[int, int, int]:
-    """从 MySQL COLUMN_TYPE 解析 (size, precision, scale)。
-
-    decimal(p,s) -> (0, p, s)；decimal(p) -> (0, p, 0)
-    varchar(n) / char(n) -> (n, 0, 0)；无参 varchar -> (0, 0, 0)
-    其他类型（bigint 等）-> (0, 0, 0)
-
-    数值类型的 unsigned / zerofill 后缀在解析前剥离
-    （如 decimal(10,2) unsigned -> (0, 10, 2)），dtype 仍保留原始 COLUMN_TYPE。
-    """
-    m = _TYPE_RE.match(_MODIFIER_RE.sub("", type_str.strip()))
-    if not m:
-        return 0, 0, 0
-    base = m.group(1).lower()
-    params = m.group(2)
-    if params is None:
-        return 0, 0, 0
-    nums = [int(p.strip()) for p in params.split(",") if p.strip().isdigit()]
-    if base == "decimal":
-        if len(nums) >= 2:
-            return 0, nums[0], nums[1]
-        if len(nums) == 1:
-            return 0, nums[0], 0
-        return 0, 0, 0
-    if base in ("varchar", "char"):
-        return (nums[0] if nums else 0), 0, 0
-    return 0, 0, 0
 
 
 class MysqlLoader(MetadataLoader):
@@ -206,7 +170,9 @@ class MysqlLoader(MetadataLoader):
         ):
             # COLUMN_COMMENT 可能为 None / NaN / ""，非空字符串才作为展示名
             name = comment if isinstance(comment, str) and comment else str(column_name)
-            size, precision, scale = _parse_type(str(column_type))
+            size, precision, scale = parse_type_string(
+                str(column_type), strip_numeric_modifiers=True
+            )
             column_id = f"{schema}.{table_name}.{column_name}"
             full_table_name = f"{schema}.{table_name}"
             if self.datasource_name:

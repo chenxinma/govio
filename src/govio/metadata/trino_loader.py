@@ -1,39 +1,9 @@
-import re
-
 import pandas as pd
 from trino import dbapi
 
 from .database import MetadataLoader
 from .datasource import qualify
-
-# 匹配 Trino 类型：base 或 base(params)，如 decimal(10,2)、varchar(19)、bigint
-_TYPE_RE = re.compile(r"^(\w+)\s*(?:\(([^)]*)\))?$")
-
-
-def _parse_type(type_str: str) -> tuple[int, int, int]:
-    """从 Trino 类型字符串解析 (size, precision, scale)。
-
-    decimal(p,s) -> (0, p, s)；decimal(p) -> (0, p, 0)
-    varchar(n) / char(n) -> (n, 0, 0)；无参 varchar -> (0, 0, 0)
-    其他类型 -> (0, 0, 0)
-    """
-    m = _TYPE_RE.match(type_str.strip())
-    if not m:
-        return 0, 0, 0
-    base = m.group(1).lower()
-    params = m.group(2)
-    if params is None:
-        return 0, 0, 0
-    nums = [int(p.strip()) for p in params.split(",") if p.strip().isdigit()]
-    if base == "decimal":
-        if len(nums) >= 2:
-            return 0, nums[0], nums[1]
-        if len(nums) == 1:
-            return 0, nums[0], 0
-        return 0, 0, 0
-    if base in ("varchar", "char"):
-        return (nums[0] if nums else 0), 0, 0
-    return 0, 0, 0
+from .type_parser import parse_type_string
 
 
 class TrinoLoader(MetadataLoader):
@@ -152,7 +122,7 @@ class TrinoLoader(MetadataLoader):
             ):
                 # Comment 可能为 None / NaN / ""，非空字符串才作为展示名
                 disp = comment if isinstance(comment, str) and comment else cname
-                _size, _prec, _scale = _parse_type(ctype)
+                _size, _prec, _scale = parse_type_string(ctype)
                 col_id = f"{schema}.{table_name}.{cname}"
                 ftn_id = f"{schema}.{table_name}"
                 if self.datasource_name:
