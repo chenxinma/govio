@@ -7,7 +7,8 @@
     dist/govio-dsh-skills/      仅在 --skills-bundle 时生成（6 个 skill 目录副本，排除 assets）
 
 统一排除规则（design.md §4.4）: skills/govio/assets/**、**/__pycache__/**、**/*.pyc、
-.DS_Store、package-lock.json；插件源目录额外排除 node_modules/**。每次执行先清理旧产物再重建，可重复执行。
+.DS_Store、package-lock.json（规则实现见 scripts/_packaging_common.py，与另两支打包脚本共用）。
+每次执行先清理旧产物再重建，可重复执行。
 """
 
 import argparse
@@ -17,9 +18,23 @@ import re
 import shutil
 import subprocess
 import sys
-import tomllib
 from collections.abc import Sequence
 from pathlib import Path
+
+# 按文件路径加载脚本时 scripts/ 不在 sys.path 上，显式加入以导入共享模块
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _packaging_common import (
+    ASSETS_EXCLUDE_PREFIX,
+    collect_files,
+    copy_files,
+    is_excluded,
+    read_pyproject_version,
+    rewrite_package_version,
+)
+from _packaging_common import (
+    validate_version as _validate_version_with_pattern,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,26 +56,6 @@ SKILL_DIRS = (
 )
 
 VERSION_PATTERN = re.compile(r"^\d+(\.\d+)*([-.+][0-9A-Za-z.]+)?$")
-EXCLUDED_DIR_NAMES = {"__pycache__", "node_modules"}
-EXCLUDED_FILE_NAMES = {".DS_Store", "package-lock.json"}
-EXCLUDED_SUFFIXES = {".pyc"}
-
-
-def read_default_version(pyproject_path: Path) -> str:
-    """读取 pyproject.toml 的 project.version 作为默认版本号
-
-    Args:
-        pyproject_path: pyproject.toml 路径
-
-    Returns:
-        str: 版本号
-    """
-    with pyproject_path.open("rb") as fh:
-        data = tomllib.load(fh)
-    project = data.get("project")
-    if not isinstance(project, dict) or not isinstance(project.get("version"), str):
-        raise ValueError(f"pyproject.toml 缺少 project.version: {pyproject_path}")
-    return project["version"]
 
 
 def validate_version(version: str) -> str:
@@ -72,69 +67,7 @@ def validate_version(version: str) -> str:
     Returns:
         str: 校验通过的版本号
     """
-    if not VERSION_PATTERN.fullmatch(version):
-        raise ValueError(f"非法版本号: {version!r}（示例: 0.7.0）")
-    return version
-
-
-def is_excluded(path: Path, root: Path) -> bool:
-    """判断文件是否命中统一排除规则
-
-    Args:
-        path: 待判断文件
-        root: 复制源根目录（用于计算相对路径）
-
-    Returns:
-        bool: 是否排除
-    """
-    rel = path.relative_to(root)
-    if any(part in EXCLUDED_DIR_NAMES for part in rel.parts):
-        return True
-    if path.name in EXCLUDED_FILE_NAMES:
-        return True
-    return path.suffix in EXCLUDED_SUFFIXES
-
-
-def collect_files(src: Path, exclude_prefixes: Sequence[str] = ()) -> list[Path]:
-    """收集待复制文件（跳过排除项，按相对路径 POSIX 序排序）
-
-    Args:
-        src: 复制源根目录
-        exclude_prefixes: 额外排除的相对路径前缀，如 ("govio/assets",)
-
-    Returns:
-        list[Path]: 待复制文件清单
-    """
-    files: list[Path] = []
-    for path in src.rglob("*"):
-        if not path.is_file() or is_excluded(path, src):
-            continue
-        rel_posix = path.relative_to(src).as_posix()
-        if any(
-            rel_posix == prefix or rel_posix.startswith(prefix + "/")
-            for prefix in exclude_prefixes
-        ):
-            continue
-        files.append(path)
-    return sorted(files, key=lambda p: p.relative_to(src).as_posix())
-
-
-def copy_files(files: Sequence[Path], src: Path, dst: Path) -> int:
-    """按相对路径把文件复制到目标目录
-
-    Args:
-        files: 待复制文件清单
-        src: 复制源根目录
-        dst: 目标根目录
-
-    Returns:
-        int: 复制文件数
-    """
-    for path in files:
-        target = dst / path.relative_to(src)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, target)
-    return len(files)
+    return _validate_version_with_pattern(version, VERSION_PATTERN)
 
 
 def compile_plugin(plugin_src: Path) -> None:
@@ -184,20 +117,6 @@ def compile_plugin(plugin_src: Path) -> None:
         )
 
 
-def rewrite_package_version(package_json: Path, version: str) -> None:
-    """重写 package.json 的 version 字段（UTF-8 读写）
-
-    Args:
-        package_json: 目标 package.json 路径
-        version: 注入的版本号
-    """
-    data = json.loads(package_json.read_text(encoding="utf-8"))
-    data["version"] = version
-    package_json.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-
-
 def build_plugin(plugin_src: Path, output_dir: Path, version: str) -> tuple[Path, int]:
     """生成插件产物目录并注入版本号（先清理旧产物，可重复执行）
 
@@ -234,7 +153,7 @@ def build_skills_bundle(skills_src: Path, output_dir: Path) -> tuple[Path, int]:
         shutil.rmtree(target)
     target.mkdir(parents=True)
     count = copy_files(
-        collect_files(skills_src, exclude_prefixes=("govio/assets",)),
+        collect_files(skills_src, exclude_prefixes=(ASSETS_EXCLUDE_PREFIX,)),
         skills_src,
         target,
     )
@@ -363,7 +282,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         raw_version = (
             args.version
             if args.version is not None
-            else read_default_version(PYPROJECT)
+            else read_pyproject_version(PYPROJECT)
         )
         version = validate_version(raw_version)
         if not (PLUGIN_SRC / "package.json").is_file():

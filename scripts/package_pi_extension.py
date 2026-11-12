@@ -9,6 +9,7 @@
 4. 产物结构自检（6 个 skill、无 assets/缓存、pi manifest、扩展入口、版本注入）。
 
 可重复执行：每次运行先清理旧产物与 skills 副本再重建。
+排除规则与版本注入复用 scripts/_packaging_common.py，本文件只保留 pi 形态特有逻辑。
 """
 
 from __future__ import annotations
@@ -19,8 +20,20 @@ import logging
 import re
 import shutil
 import sys
-import tomllib
 from pathlib import Path
+
+# 按文件路径加载脚本时 scripts/ 不在 sys.path 上，显式加入以导入共享模块
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _packaging_common import (
+    collect_files,
+    copy_files,
+    is_excluded_dir,
+    is_excluded_file,
+    read_pyproject_version,
+    rewrite_package_version,
+    validate_version,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGING_DIR = ROOT / "packaging" / "pi"
@@ -29,81 +42,9 @@ SKILLS_TARGET = PACKAGING_DIR / "skills"
 
 # design.md §1.1：6 个 skill 直接位于 skills 根下，目录名与 frontmatter name 一致
 EXPECTED_SKILLS = ("govio", "govio-eda", "govio-meta", "govio-observe", "govio-query", "govio-reconcile")
-SKIP_DIR_NAMES = {"__pycache__"}
-SKIP_FILE_NAMES = {".DS_Store"}
 VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.\-+]*")
 
 logger = logging.getLogger(__name__)
-
-
-def _read_pyproject_version() -> str:
-    """读取 pyproject.toml 的 project.version 作为默认版本号
-
-    Returns:
-        str: 版本号
-
-    Raises:
-        ValueError: pyproject.toml 缺少 project.version
-    """
-    pyproject = ROOT / "pyproject.toml"
-    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
-    version = (data.get("project") or {}).get("version", "")
-    if not version:
-        raise ValueError(f"pyproject.toml 缺少 project.version: {pyproject}")
-    return version
-
-
-def _is_excluded_dir(entry: Path) -> bool:
-    """判断目录是否属于打包排除范围（assets 派生数据与缓存目录）
-
-    Args:
-        entry: 待判断的目录
-
-    Returns:
-        bool: 是否排除
-    """
-    if entry.name in SKIP_DIR_NAMES:
-        return True
-    # assets 契约（design.md §1.2）：派生数据永远落在 <skills-root>/govio/assets
-    return entry.name == "assets" and entry.parent.name == "govio"
-
-
-def _copy_tree_filtered(src: Path, dst: Path) -> int:
-    """递归复制目录树，排除 assets 派生数据与缓存文件（design.md §4.4）
-
-    Args:
-        src: 源目录
-        dst: 目标目录
-
-    Returns:
-        int: 复制的文件数
-    """
-    count = 0
-    dst.mkdir(parents=True, exist_ok=True)
-    for entry in sorted(src.iterdir()):
-        target = dst / entry.name
-        if entry.is_dir():
-            if _is_excluded_dir(entry):
-                continue
-            count += _copy_tree_filtered(entry, target)
-        elif entry.is_file():
-            if entry.suffix == ".pyc" or entry.name in SKIP_FILE_NAMES:
-                continue
-            shutil.copy2(entry, target)
-            count += 1
-    return count
-
-
-def _inject_version(package_json: Path, version: str) -> None:
-    """重写产物 package.json 的 version 字段
-
-    Args:
-        package_json: 产物 package.json 路径
-        version: 注入的版本号
-    """
-    data = json.loads(package_json.read_text(encoding="utf-8"))
-    data["version"] = version
-    package_json.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _skill_frontmatter_name(skill_md: Path) -> str | None:
@@ -161,9 +102,9 @@ def _verify_artifact(out_dir: Path, version: str) -> list[str]:
             problems.append(f"skills/{name}/SKILL.md frontmatter name 与目录名不一致")
 
     for path in out_dir.rglob("*"):
-        if path.is_dir() and _is_excluded_dir(path):
+        if path.is_dir() and is_excluded_dir(path):
             problems.append(f"产物含排除目录: {path.relative_to(out_dir).as_posix()}")
-        elif path.is_file() and (path.suffix == ".pyc" or path.name in SKIP_FILE_NAMES):
+        elif path.is_file() and is_excluded_file(path):
             problems.append(f"产物含缓存文件: {path.relative_to(out_dir).as_posix()}")
 
     return problems
@@ -182,12 +123,15 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        version = args.version or _read_pyproject_version()
+        version = args.version or read_pyproject_version(ROOT / "pyproject.toml")
     except (OSError, ValueError):
         logger.exception("✗ 读取版本号失败")
         return 1
-    if not VERSION_PATTERN.fullmatch(version):
-        logger.error("✗ 非法版本号: %s", version)
+    try:
+        validate_version(version, VERSION_PATTERN)
+    except ValueError:
+        # 友好中文报错，不打印堆栈（同 package_harness_plugin.py 的 CLI 边界惯例）
+        logger.error("✗ 非法版本号: %s", version)  # noqa: TRY400
         return 1
 
     for source_dir, label in ((PACKAGING_DIR, "扩展包源"), (SKILLS_DIR, "skills 源")):
@@ -203,16 +147,18 @@ def main() -> int:
         # 1. 同步 skills 副本到 packaging/pi/skills/（供 pi install ./packaging/pi 原地加载）
         if SKILLS_TARGET.exists():
             shutil.rmtree(SKILLS_TARGET)
-        skill_file_count = _copy_tree_filtered(SKILLS_DIR, SKILLS_TARGET)
+        SKILLS_TARGET.mkdir(parents=True)
+        skill_file_count = copy_files(collect_files(SKILLS_DIR), SKILLS_DIR, SKILLS_TARGET)
 
         # 2. 清理并重建产物目录
         out_dir = output_dir / f"govio-pi-{version}"
         if out_dir.exists():
             shutil.rmtree(out_dir)
-        file_count = _copy_tree_filtered(PACKAGING_DIR, out_dir)
+        out_dir.mkdir(parents=True)
+        file_count = copy_files(collect_files(PACKAGING_DIR), PACKAGING_DIR, out_dir)
 
         # 3. 版本注入
-        _inject_version(out_dir / "package.json", version)
+        rewrite_package_version(out_dir / "package.json", version)
     except (OSError, ValueError):
         logger.exception("✗ 打包失败")
         return 1
