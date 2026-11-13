@@ -93,8 +93,8 @@ def duckdb_datasources(sample_duckdb: Path) -> dict[str, Any]:
 
 @pytest.fixture
 def nx_gml(isolated_env: Path) -> Path:
-    """由 graph_csv 构建 NetworkX GML 图（复用 gen_networkx CSV→GML 管道）"""
-    from govio.metadata.gen_networkx import build_graph
+    """由 graph_csv 构建 NetworkX GML 图（复用 graph.networkx_loader CSV→GML 管道）"""
+    from govio.graph.networkx_loader import build_graph
 
     gml_path = isolated_env / "ontology.gml"
     # 构建过程的 tqdm/打印不进 capsys

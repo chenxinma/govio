@@ -11,7 +11,7 @@ Govio (Governance + IO) is a data governance knowledge graph platform. It extrac
 
 | Module | Spec | Description |
 |---|---|---|
-| `govio.graph` | [graph.md](graph.md) | Graph backends (NetworkX, FalkorDB, Ladybug) |
+| `govio.graph` | [graph.md](graph.md) | Graph backends (NetworkX, FalkorDB, Ladybug), CSV loaders (bulk import + NetworkX CSV→GML) |
 | `govio.metadata` | [metadata.md](metadata.md) | Metadata loading (TDS/DuckDB/MySQL/PostgreSQL/Trino loaders), recommendation, metric definition caliber conflict check, node ID generation, import validation report |
 | `govio.core` | [core.md](core.md) | Graph factory, asset generation, SQL builder |
 | `govio.cli` | [cli.md](cli.md) | CLI entry points and subcommands |
@@ -19,7 +19,7 @@ Govio (Governance + IO) is a data governance knowledge graph platform. It extrac
 | `govio.crypto` | (inline) | Credential encryption/decryption for config passwords |
 | Data Model | [data-model.md](data-model.md) | Node types, edge types, CSV conventions |
 | Configuration | [config.md](config.md) | Config file format, datasource definitions, meta config |
-| Packaging | [install.md](../install.md) | 分发打包（`packaging/` 包源 + `scripts/` 打包脚本）：skills zip（`package_skills.py`）、pi 扩展（`scripts/package_pi_extension.py`）、DeepSeek Harness 插件（`scripts/package_harness_plugin.py`） |
+| Packaging | [install.md](../install.md) | 分发打包（`packaging/` 包源 + `scripts/` 打包脚本）：skills zip（`package_skills.py`）、pi 扩展（`scripts/package_pi_extension.py`）、DeepSeek Harness 插件（`scripts/package_harness_plugin.py`）；排除规则与版本注入由 `scripts/_packaging_common.py` 统一实现，三支脚本复用 |
 
 ## Skills
 
@@ -53,7 +53,6 @@ Govio ships with AI assistant skills under `skills/`:
 | tqdm | Progress bars |
 | questionary | Interactive CLI prompts |
 | matplotlib | Chart rendering (bar/line) |
-| mcp | Model Context Protocol support（当前无代码引用，精简候选，见 roadmap Phase 3） |
 | trino | Trino database connector |
 | pymysql | MySQL database connector |
 | psycopg[binary] | PostgreSQL database connector (psycopg3) |

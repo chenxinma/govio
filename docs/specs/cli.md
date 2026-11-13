@@ -147,9 +147,23 @@ Logs to `~/.govio/logs/query_{YYYYMMDD}.log`.
 
 ---
 
-## meta.py
+## meta/
 
 Knowledge graph maintenance command group: `govio-cli meta`.
+
+原单文件 `cli/meta.py`（1294 行）在 Phase 3 按子命令域拆为包 `src/govio/cli/meta/`，CLI 契约（子命令、参数、退出码、`--help` 文本）零变化。模块职责与依赖方向（parser → commands → steps / graph_ops → merge / common）：
+
+| 模块 | 职责 |
+|---|---|
+| `parser.py` | `meta()` argparse 装配，唯一入口 |
+| `commands.py` | 各 `cmd_*`：参数校验、退出码（失败 1 / 成功含空结果 0）、步骤编排 |
+| `steps.py` | 各 `step_*_export`：读源 → 赋 node_id → 幂等写 CSV |
+| `merge.py` | 节点/边 CSV 增量合并与 import-delta 计数 |
+| `graph_ops.py` | 图后端装载（update/clear）、assets 生成、导入校验报告 |
+| `common.py` | 元数据加载器构造（`_build_metadata_loader`）与数据源 schema 解析 |
+| `constants.py` | `DEFAULT_ASSETS_DIR` 与 `--source` 相关映射（展示名、schema 提示、URL scheme/默认值） |
+
+`__init__.py` 只 re-export `meta` / `cmd_*` / `step_*_export`（保持 `from govio.cli.meta import meta` 不变）；加载器与 `ConfigManager` / `GraphFactory` / `AssetsGenerator` 等名字留在各自子模块，测试打桩需 patch 所属子模块（如 `govio.cli.meta.common.MysqlLoader`、`govio.cli.meta.graph_ops.ConfigManager`）。
 
 ### Subcommands
 
@@ -238,7 +252,7 @@ step_metric_export(output, metric_file) -> bool
 
 `step_meta_export` 的 `db_path` 即 `--db` 值：duckdb 为文件路径，mysql / postgres / trino 为连接 URL。
 
-加载器构造由 `_build_metadata_loader` 完成（`src/govio/cli/meta.py`）：
+加载器构造由 `_build_metadata_loader` 完成（`src/govio/cli/meta/common.py`）：
 
 ```python
 _build_metadata_loader(source, db, schemas, datasource_name) -> MetadataLoader

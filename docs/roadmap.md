@@ -94,20 +94,20 @@
 
 ---
 
-## Phase 3: 工程精简与边界收敛（进行中，下一优先）
+## Phase 3: 工程精简与边界收敛 ✅ 已完成
 
 **目标：** 执行 T7 架构审视的精简建议（详见 [design.md](tasks/T7-architecture-roadmap/design.md) §6），
 先删冗余、收敛边界，再扩功能。
 
-- [ ] 删除未使用的 `mcp` 依赖（`src/`/`tests/` 无引用）
-- [ ] `_parse_type` 类型解析三份（trino/mysql/postgres loader）收敛为共享实现
-- [ ] 打包排除规则与版本注入收敛到 `scripts/` 共享模块（三支打包脚本复用）
+- [x] 删除未使用的 `mcp` 依赖（`src/`/`tests/`/`scripts/` 无引用；连带移除其传递依赖，`docs/specs/README.md` 依赖表同步）
+- [x] `_parse_type` 类型解析三份（trino/mysql/postgres loader）收敛为共享实现（新增 `metadata/type_parser.py`：串式 `parse_type_string` + 属性式 `parse_type_attributes`；三份实现的代表性输入输出快照逐例一致，`tests/test_type_parser.py` 固化等价基线）
+- [x] 打包排除规则与版本注入收敛到 `scripts/` 共享模块（新增 `scripts/_packaging_common.py`，`package_skills.py` / `package_pi_extension.py` / `package_harness_plugin.py` 复用；重构前后三支脚本产物逐文件 SHA256 一致）
 - [x] `test_package_harness_plugin.py` 从任务目录迁入 `tests/` 常规集（V3 已完成；同轮补齐 `tests/test_package_pi_extension.py`、`tests/test_package_harness_plugin.py` 打包脚本自动化测试）
 - [x] 真实库集成测试固化：`tests/test_real_mysql.py` / `tests/test_real_postgres.py` / `tests/test_real_observe.py`（`@pytest.mark.integration`，默认 skip，`GOVIO_REAL_DB=1` 才执行；用 wslc 容器 mysql:8 / postgres:17 / trino:483 验证，用后 `wslc stop` + `wslc remove` 清理，保证无容器时 `uv run pytest tests/` 全绿）
-- [ ] `cli/meta.py`（1240 行）按子命令域拆文件（切点 `_build_metadata_loader` / 各 `cmd_*`）
-- [ ] `metadata/utility.py` 拆分「导出编排 / 推荐入口」两类职责
-- [ ] `metadata/gen_networkx.py`（CSV→GML）归属迁移到 `graph/`，同步 spec
-- [ ] observe_data 的 tools/core 分层说明补进 docs/specs/observe-data.md
+- [x] `cli/meta.py`（1294 行）按子命令域拆文件（切点 `_build_metadata_loader` / 各 `cmd_*`）→ 拆为 `cli/meta/` 包（parser / commands / steps / merge / graph_ops / common / constants），`--help` 与退出码快照逐字节一致
+- [x] `metadata/utility.py` 拆分「导出编排 / 推荐入口」两类职责（`metadata/export.py` 的 `make_csv` + `metadata/recommend_entry.py` 的 `data_standard_recommend`，函数体逐字不变、公开签名不变）
+- [x] `metadata/gen_networkx.py`（CSV→GML）归属迁移到 `graph/`，同步 spec（`graph/networkx_loader.py`，与 falkordb/ladybug loader 命名对齐；迁移前后 GML 产物逐字节一致）
+- [x] observe_data 的 tools/core 分层说明补进 docs/specs/observe-data.md（新增「分层结构（core 与 tools）」：内核符号表、薄层函数—依赖表、调用方向与 `cli/observe.py` 的两条路径）
 
 已停止 / 暂缓的路线（T7 复核，如需重启请先讨论）：
 

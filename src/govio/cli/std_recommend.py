@@ -1,7 +1,7 @@
 import sys
 from pathlib import Path
 
-from ..metadata.utility import data_standard_recommend
+from ..metadata.recommend_entry import data_standard_recommend
 
 
 def std_recommend(

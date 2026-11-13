@@ -240,9 +240,9 @@ def test_trino_loader_connect_kwargs(monkeypatch, fake_dataset):
 )
 def test_parse_type(type_str, expected):
     """size/precision/scale 从 Trino 类型字符串正确解析。"""
-    from govio.metadata.trino_loader import _parse_type
+    from govio.metadata.type_parser import parse_type_string
 
-    assert _parse_type(type_str) == expected
+    assert parse_type_string(type_str) == expected
 
 
 def test_trino_loader_type_parsing(monkeypatch):

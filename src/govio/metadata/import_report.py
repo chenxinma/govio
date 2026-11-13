@@ -25,7 +25,7 @@ REPORT_VERSION = 1
 # 每项校验最多列出的样例条数
 MAX_EXAMPLES = 5
 
-# 与 gen_networkx.load_nodes / load_edges 的固定文件名一致
+# 与 graph.networkx_loader.load_nodes / load_edges 的固定文件名一致
 NODE_CSVS = {
     "PhysicalTable.csv": "PhysicalTable",
     "Col.csv": "Col",

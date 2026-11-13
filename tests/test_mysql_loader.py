@@ -1,7 +1,8 @@
 import pytest
 
 from govio.metadata.database import MetadataLoader
-from govio.metadata.mysql_loader import MysqlLoader, _parse_type
+from govio.metadata.mysql_loader import MysqlLoader
+from govio.metadata.type_parser import parse_type_string
 
 
 class FakeMysqlConn:
@@ -397,7 +398,7 @@ def test_mysql_loader_schema_filter_is_parameterized(monkeypatch, fake_dataset):
 )
 def test_parse_type(type_str, expected):
     """size/precision/scale 从 MySQL COLUMN_TYPE 正确解析（unsigned/zerofill 后缀不影响解析）。"""
-    assert _parse_type(type_str) == expected
+    assert parse_type_string(type_str, strip_numeric_modifiers=True) == expected
 
 
 def test_mysql_loader_type_parsing_unsigned(monkeypatch):

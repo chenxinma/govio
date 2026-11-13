@@ -2,6 +2,59 @@
 
 Data exploration, comparison, charting, and relationship inference for loaded DataFrames.
 
+## 分层结构（core 与 tools）
+
+`observe_data` 分两层：`core/` 是业务内核，`tools/` 是面向 CLI / Agent 的适配薄层；包根的 `config.py` 提供两层共用的数据源配置类型。
+
+### core —— 业务内核
+
+| 模块 | 公开符号 | 职责 |
+|---|---|---|
+| `observe_store.py` | `ObserveStore`、`DataFrameInfo`、`Manifest` | parquet 落盘的 DataFrame 存储（`store` / `get` / `list` / `release` / `exists`）与 manifest 读写（`load` / `save` / `add` / `remove`） |
+| `dataframe_store.py` | `DataFrameStore`、`DataFrameInfo` | 进程内单例的纯内存存储（`store` / `get` / `list` / `release`）；落盘能力已由 `ObserveStore` 取代，`src/` 与 `tests/` 内暂无调用方 |
+| `database.py` | `DatabaseManager`、`_resolve_sqlalchemy_target` | 多数据源连接与只读 SQL 执行（`get_engine` / `execute_sql`）、URL scheme 归一 |
+| `comparator.py` | `TableComparator` | 结构比对与数据比对（`compare_schema` / `compare_data` / `compare`），数据比对用 datacompy `Compare` |
+| `explorer.py` | `RelationExplorer` | 外键推断与列名相似度（`infer_foreign_keys` / `find_column_similarity` / `explore`） |
+| `visualizer.py` | `RelationVisualizer` | 关系图数据生成（`to_networkx` / `to_json` / `visualize`） |
+| `chart.py` | `render_chart`（内部 `_setup_font`） | matplotlib 渲染 bar/line PNG，含中文字体回退 |
+
+内核不感知命令行：不解析 argv、不打印、不 `sys.exit`。错误以异常传播（如 `DatabaseManager` 数据源不存在时的 `ValueError`），或交由调用方按返回值判断（`ObserveStore.get` 未命中返回 `None`、`release` 返回 `bool`）；只有 `render_chart` 自己返回 `{'success', 'output' | 'error'}` 结构。
+
+### config.py —— 两层共用的配置类型
+
+`DataSourceConfig`（`url` / `connect_args` / `encrypted_password`，`resolved_url` 还原真实密码）与 `Config` 是内核的输入类型。`load_config(path)` 读 JSON 配置文件，目前只被测试用来构造 `Config`；CLI 实际走 `cli/config.py` 的 `ConfigManager`，在 `cli/observe.py` 的 `get_db_manager()` 里把 `datasources` 段逐条转成 `DataSourceConfig`。
+
+### tools —— CLI / Agent 适配薄层
+
+| 模块 | 函数 | 依赖的内核符号 |
+|---|---|---|
+| `list_dataframes.py` | `list_dataframes(store)` | `ObserveStore.list` |
+| `list_datasources.py` | `list_datasources(db_manager)` | `DatabaseManager`（现状：直接读其 `_datasources` 属性） |
+| `load_dataframe.py` | `load_dataframe(store, db_manager, datasource, name, sql)`、`load_from_memory(store, name, sql)` | `DatabaseManager.execute_sql` + `ObserveStore.store`；`load_from_memory` 自建内存 DuckDB 并注册已存储的表 |
+| `release_dataframe.py` | `release_dataframe(store, name)`、`release_all_dataframes(store)` | `ObserveStore.get` / `release` / `list` |
+| `visualize_relations.py` | `visualize_relations(relations)` | `RelationVisualizer.visualize`（先归一 `column_similarity` 记录的字段名） |
+
+薄层三条约定：
+
+- 入参是调用方已构造好的内核对象（`ObserveStore` / `DatabaseManager`）；薄层不读配置、不建连接
+- 返回值统一为 `dict`，失败用 `{'success': False, 'error': ...}` 表达，不抛异常、不决定退出码
+- 只做入参整形与结果整形，不新增业务规则（阈值、比对算法、落盘格式都在 `core/`）
+
+### 调用方向
+
+```
+cli/observe.py
+├── 构造内核对象：ObserveStore、DatabaseManager（get_db_manager + DataSourceConfig）
+├── 薄层路径：info / load / release / visualize-relations  →  observe_data.tools.*  →  observe_data.core.*
+└── 直连内核：compare → TableComparator，explore → RelationExplorer，chart → render_chart
+```
+
+- `tools/` → `core/` 单向依赖；`core/` 不 import `tools/`，两层都不 import `govio.cli`
+- 退出码、stdout/stderr 的 JSON 形状、`❌` 提示等 CLI 契约只由 `cli/observe.py` 决定（见下文「失败语义与退出码」与 `docs/specs/cli.md`）
+- 新增 Agent 可调用动作优先加薄层函数以复用结构化返回；纯算法与存储能力放 `core/`
+
+---
+
 ## Config
 
 `observe_data/config.py`
@@ -231,6 +284,6 @@ or `{"success": false, "error": "..."}` on failure.
 
 ### 失败语义与退出码（全部 observe 子命令）
 
-工具层保持 `{'success': True/False, 'error': ...}` 契约不变（向后兼容）：`load_dataframe` / `load_from_memory` / `render_chart` / `release_dataframe` / `visualize_relations` 失败时均返回 `{'success': False, 'error': ...}`。
+`tools/` 薄层保持 `{'success': True/False, 'error': ...}` 契约不变（向后兼容）：`load_dataframe` / `load_from_memory` / `release_dataframe` / `visualize_relations` 失败时均返回 `{'success': False, 'error': ...}`；`core/chart.py` 的 `render_chart` 虽不属薄层，同样按该契约返回 dict。
 
 CLI 层统一把失败转换为退出码 1（与 load 一致）：`success: false`、DataFrame 不存在、参数非法（如 `--rows` 负数、release 同时给 `--name` 与 `--all`）、文件不存在、比对/探查/渲染执行错误、后端异常 → stdout 仍输出结果 JSON（含 `error` 字段，既有字段不变），另向 stderr 打印 `❌ {error}` 并以退出码 1 结束；成功（含 0 行结果、空关系列表、`released: []` 等空结果）退出 0。未预期异常由 `observe()` 入口兜底为 `❌ 执行失败: ...` + 退出码 1（不裸奔 traceback）。详见 `docs/specs/cli.md`「退出码契约（observe 全部子命令）」。

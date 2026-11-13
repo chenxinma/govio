@@ -17,8 +17,8 @@ import pandas as pd
 import pytest
 from trino.auth import BasicAuthentication
 
-from govio.cli import meta as meta_mod
 from govio.cli.meta import cmd_meta, meta, step_meta_export
+from govio.cli.meta import common as meta_common
 
 
 def _table_df() -> pd.DataFrame:
@@ -79,7 +79,7 @@ def loader_calls(monkeypatch) -> dict:
         ("trino", "TrinoLoader"),
     ]:
         monkeypatch.setattr(
-            meta_mod,
+            meta_common,
             attr,
             lambda *a, _s=source, **kw: FakeLoader(calls, _s, *a, **kw),
         )

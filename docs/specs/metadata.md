@@ -103,7 +103,7 @@ load_tables() -> pd.DataFrame    # information_schema.tables（BASE TABLE，含�
 load_columns() -> pd.DataFrame   # information_schema.columns（含列注释与类型解析）
 ```
 
-类型解析（`_parse_type`，取 `COLUMN_TYPE`）：`decimal(p,s)` → precision/scale，`varchar(n)` / `char(n)` → size，其余 → (0,0,0)。数值类型的 `unsigned` / `zerofill` 后缀在解析前剥离（如 `decimal(10,2) unsigned` → (0,10,2)），`dtype` 保留原始 `COLUMN_TYPE`。注释为空（NULL / ""）时 `name` 回退为表名/列名；`order_no` 取 `ORDINAL_POSITION`。
+类型解析（共享实现 `type_parser.parse_type_string(..., strip_numeric_modifiers=True)`，取 `COLUMN_TYPE`）：`decimal(p,s)` → precision/scale，`varchar(n)` / `char(n)` → size，其余 → (0,0,0)。数值类型的 `unsigned` / `zerofill` 后缀在解析前剥离（如 `decimal(10,2) unsigned` → (0,10,2)），`dtype` 保留原始 `COLUMN_TYPE`。注释为空（NULL / ""）时 `name` 回退为表名/列名；`order_no` 取 `ORDINAL_POSITION`。
 
 ---
 
@@ -136,7 +136,7 @@ load_tables() -> pd.DataFrame    # information_schema.tables + obj_description �
 load_columns() -> pd.DataFrame   # information_schema.columns + col_description 列注释
 ```
 
-类型解析（`_parse_type`）：`character varying` / `character` / `bit(n)` → size，`numeric` / `decimal` → precision/scale，其余 → (0,0,0)（整型 `numeric_precision` 是位宽语义，不计入 precision）。`order_no` 按 `ordinal_position` 排序后每表从 1 连续递增（删列导致 attnum 空洞时重排，保证 `recommender.py` 依赖的 `order_no == 1` 首列语义）。
+类型解析（共享实现 `type_parser.parse_type_attributes`，取 `character_maximum_length` / `numeric_precision` / `numeric_scale` 属性列而非类型串）：`character varying` / `character` / `bit(n)` → size，`numeric` / `decimal` → precision/scale，其余 → (0,0,0)（整型 `numeric_precision` 是位宽语义，不计入 precision）。`order_no` 按 `ordinal_position` 排序后每表从 1 连续递增（删列导致 attnum 空洞时重排，保证 `recommender.py` 依赖的 `order_no == 1` 首列语义）。
 
 ---
 
@@ -171,6 +171,36 @@ load_columns() -> pd.DataFrame   # 逐表 SHOW COLUMNS FROM catalog.schema.table
 ```
 
 SHOW TABLES 不返回表注释，`name` 回退为 table_name；SHOW COLUMNS 的注释列非空时作为列展示名。
+
+类型解析（共享实现 `type_parser.parse_type_string`，取 `Type` 列的类型串，不剥离修饰后缀）：`decimal(p,s)` → precision/scale，`varchar(n)` / `char(n)` → size，其余 → (0,0,0)。
+
+---
+
+## type_parser.py
+
+列类型 → `(size, precision, scale)` 的共享解析实现，供 MysqlLoader / PostgresLoader / TrinoLoader 复用（原先三份方言实现收敛于此）。
+
+```python
+parse_type_string(type_str: str, *, strip_numeric_modifiers: bool = False) -> tuple[int, int, int]
+# 串式语法：MySQL COLUMN_TYPE（strip_numeric_modifiers=True，剥离 unsigned/zerofill）
+#           Trino SHOW COLUMNS Type 列（默认不剥离）
+# decimal(p,s) -> (0,p,s)；decimal(p) -> (0,p,0)；varchar(n)/char(n) -> (n,0,0)；其余/不匹配 -> (0,0,0)
+
+parse_type_attributes(
+    data_type: str,
+    character_maximum_length: float | None,
+    numeric_precision: float | None,
+    numeric_scale: float | None,
+) -> tuple[int, int, int]
+# 属性式语法：PostgreSQL information_schema 的类型属性列
+# character varying/character/bit/bit varying -> (character_maximum_length,0,0)
+# numeric/decimal -> (0,numeric_precision,numeric_scale)；其余 -> (0,0,0)
+```
+
+- 共享常量：`STRING_ARG_TYPES` / `DECIMAL_ARG_TYPES`（串式语法的字符/小数类型名）、`LENGTH_ATTRIBUTE_TYPES` / `DECIMAL_ATTRIBUTE_TYPES`（属性式语法），两套语法各自维护类型名集合，避免串式语法误吞 `bit(8)` 之类方言差异
+- 整型一律 `(0,0,0)`：MySQL `int(11)` 的括号参数是显示宽度、PostgreSQL 整型 `numeric_precision` 是位宽，均与 decimal 精度语义不同
+- 属性值判空统一走 `pd.notna`（SQL NULL 经 `pd.DataFrame` 承接为 NaN，`int(NaN)` 会抛 `ValueError`）
+- 等价性基线：`tests/test_type_parser.py` 的用例矩阵取自重构前三份实现的逐例输出快照
 
 ---
 
@@ -495,24 +525,6 @@ JSON Schema (draft-07) for datasource declaration files（文件路径 `src/govi
 
 ---
 
-## gen_networkx.py
-
-Converts CSV node/edge files to NetworkX GML format.
-
-```python
-load_nodes(csv_dir: str) -> list[dict]
-load_edges(csv_dir: str) -> pd.DataFrame
-build_graph(csv_dir: str, output_gml: str, incremental: bool = False)
-gml_generate() -> None  # CLI: --csv, -o/--output
-```
-
-When `incremental=True`, merges new CSV data into existing GML graph instead of rebuilding from scratch.
-
-Supported node CSVs: Datasource, PhysicalTable, Col, Standard, Metric, Dimension
-Supported edge CSVs: HAS_COLUMN, OWNS, COMPLIES_WITH, RELATES_TO, USES_TABLE, REFERS_COLUMN, DERIVED_FROM, DIMENSION_USED, SUPERSEDES
-
----
-
 ## import_report.py
 
 导入校验报告与增量统计（`meta graph` / `meta import-schema` 的报告产出，与图后端无关）。
@@ -544,18 +556,28 @@ write_import_report(report, path) -> Path  # 整体序列化后单次写入，�
 
 ---
 
-## utility.py
+## export.py
 
-CLI orchestration functions.
+TDS 元数据导出编排（老路径 CLI，一类职责：把整条 TDS 管线跑成 CSV）。
 
 ```python
-reorder_index(dfs: list[pd.DataFrame], start: int = 1) -> None
 make_csv(output, db, workspace_uuid, datasource_file,
          relationship_file=None, metric_file=None) -> None
+```
+
+`make_csv` 产出 `PhysicalTable.csv`、`Col.csv`、`HAS_COLUMN.csv`、`Datasource.csv`、`OWNS.csv`，可选追加 `RELATES_TO.csv` 与指标相关 CSV；TDS 抽取范围来自 `datasource_file` 各条目 `filter.schemas` 的并集。节点 CSV 经 `assign_node_ids` / `write_node_csv` 写入确定性 node_id，与 `govio-cli meta` 分步导出（`cli/meta/steps.py` 的 `step_*_export`）共用同一套 CSV 契约；结束时打印 `falkordb-bulk-insert` 复现命令。
+
+---
+
+## recommend_entry.py
+
+数据标准推荐入口（老路径 CLI，另一类职责：调用推荐器产出贯标边）。被 `govio-cli meta recommend`（经 `cli/std_recommend.py`）调用。
+
+```python
 data_standard_recommend(output, db, workspace_uuid, schemas: list[str],
                         datasource_name: str, csv_dir: Path | None = None) -> None
 ```
 
-`make_csv` 产出 `PhysicalTable.csv`、`Col.csv`、`HAS_COLUMN.csv`、`Datasource.csv`、`OWNS.csv`，可选追加 `RELATES_TO.csv` 与指标相关 CSV；TDS 抽取范围来自 `datasource_file` 各条目 `filter.schemas` 的并集。`schemas` 由调用方从 `Datasource.filter.schemas` 解析后传入；`csv_dir` 为已导入 CSV 目录（读取 `Col.csv` / `Standard.csv`，缺省取 `output`）。
+`schemas` 由调用方从 `Datasource.filter.schemas` 解析后传入；`csv_dir` 为已导入 CSV 目录（读取 `Col.csv` / `Standard.csv`，缺省取 `output`），命中时产出 `COMPLIES_WITH.csv`。
 
 `data_standard_recommend` uses custom weights: `table=0.25, name=0.35, comment=0.25, type=0.05, numeric=0.10`.

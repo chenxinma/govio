@@ -172,3 +172,25 @@ upsert_csv_to_ladybug(csv_dir, db_path, buffer_pool_size, max_db_size) -> None  
 属性类型：默认列为 STRING，数值型属性列 `size`/`precision`/`scale`/`order_no` 建为 INT64
 （读 CSV 时 `pd.to_numeric` 转换，缺失值兑底 0），保证 `ORDER BY order_no` 等为数值语义。
 存量 STRING 列的旧 `.lbdb` 需全量重建才能获得 INT64 列。
+
+---
+
+### NetworkX Loader (CSV → GML)
+
+`networkx_loader.py`（原 `metadata/gen_networkx.py`，Phase 3 归位到 `graph/`）
+
+```python
+load_nodes(csv_dir: str) -> list[dict]
+load_edges(csv_dir: str) -> pd.DataFrame
+build_graph(csv_dir: str, output_gml: str, incremental: bool = False)
+gml_generate() -> None  # CLI: --csv, -o/--output
+```
+
+读 CSV 节点/边构建 `nx.DiGraph` 并写出 GML（`ontology.gml`），是 NetworkX 后端的数据装载入口，
+由 `govio-cli meta graph`（`_update_graph`）与 `meta import-schema` 调用。
+
+- 节点 CSV 首列 `:ID({node_name})` 标明节点类型，`name` 列作展示名；边 CSV 首两列 `:START_ID(...)` / `:END_ID(...)`
+- 支持节点：Datasource、PhysicalTable、Col、Standard、Metric、Dimension
+- 支持边：HAS_COLUMN、OWNS、COMPLIES_WITH、RELATES_TO、USES_TABLE、REFERS_COLUMN、DERIVED_FROM、DIMENSION_USED、SUPERSEDES
+- `incremental=True` 先 `nx.read_gml` 读旧图再合并新数据，否则从零重建
+- 边属性 dict 中的 NaN 值在 `load_edges` 阶段剔除；文件清单与命名约定见 [data-model.md](data-model.md#csv-conventions)

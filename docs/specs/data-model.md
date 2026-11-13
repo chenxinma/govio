@@ -147,7 +147,7 @@ PTA1B2C3D4,COE5F6G7H8,值1,...
 
 ## Graph Output
 
-`gen_networkx.py` reads CSV files and produces a GML file (`ontology.gml`) containing a `nx.DiGraph` with all nodes and edges.
+`graph/networkx_loader.py`（原 `metadata/gen_networkx.py`）reads CSV files and produces a GML file (`ontology.gml`) containing a `nx.DiGraph` with all nodes and edges.
 
 ```python
 build_graph(csv_dir: str, output_gml: str, incremental: bool = False)

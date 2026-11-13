@@ -139,9 +139,9 @@ def _patched_loaders(tmp_path):
     Yields:
         str: datasource 声明文件路径（TDS 模式需要）
     """
-    with patch("govio.cli.meta.TDSLoader") as tds_m, \
-         patch("govio.cli.meta.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.StandardLoader") as std_m:
+    with patch("govio.cli.meta.steps.TDSLoader") as tds_m, \
+         patch("govio.cli.meta.common.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta.steps.StandardLoader") as std_m:
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = _mock_duck_tables()
@@ -238,9 +238,9 @@ def test_metric_edges_use_string_ids(tmp_path):
     metric_file = tmp_path / "metric.json"
     metric_file.write_text(json.dumps(metric_data, ensure_ascii=False), encoding="utf-8")
 
-    with patch("govio.cli.meta.TDSLoader") as tds_m, \
-         patch("govio.cli.meta.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.StandardLoader") as std_m:
+    with patch("govio.cli.meta.steps.TDSLoader") as tds_m, \
+         patch("govio.cli.meta.common.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta.steps.StandardLoader") as std_m:
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = _mock_duck_tables()
@@ -288,20 +288,20 @@ def test_metric_edges_use_string_ids(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Utility path tests
+# export.make_csv 老路径测试
 # ---------------------------------------------------------------------------
 
 def test_make_csv_utility_path_uses_string_ids(tmp_path, monkeypatch):
-    """老路径 utility.make_csv 也应产出 string ID 节点 CSV。"""
-    from govio.metadata import utility
+    """老路径 export.make_csv 也应产出 string ID 节点 CSV。"""
+    from govio.metadata import export as metadata_export
 
-    monkeypatch.setattr(utility, "TDSLoader", lambda *a, **k: MagicMock(
+    monkeypatch.setattr(metadata_export, "TDSLoader", lambda *a, **k: MagicMock(
         PhysicalTable=_mock_tds_tables(), Col=_mock_tds_columns()))
-    monkeypatch.setattr(utility, "StandardLoader", lambda *a, **k: MagicMock(
+    monkeypatch.setattr(metadata_export, "StandardLoader", lambda *a, **k: MagicMock(
         Standard=_mock_stds()))
 
     ds_file = _write_datasources_file(tmp_path)
-    utility.make_csv(
+    metadata_export.make_csv(
         output=tmp_path, db="mysql://x", workspace_uuid="ws",
         datasource_file=ds_file,
     )
@@ -363,9 +363,9 @@ def test_meta_duckdb_requires_db(tmp_path, monkeypatch, capsys):
 
 def test_duckdb_skips_tds_and_std(tmp_path):
     """DuckDB 模式不调用 TDSLoader 和 StandardLoader，自动声明 Datasource。"""
-    with patch("govio.cli.meta.TDSLoader") as tds_m, \
-         patch("govio.cli.meta.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.StandardLoader") as std_m:
+    with patch("govio.cli.meta.steps.TDSLoader") as tds_m, \
+         patch("govio.cli.meta.common.DuckDBLoader") as duck_m, \
+         patch("govio.cli.meta.steps.StandardLoader") as std_m:
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = pd.DataFrame({
