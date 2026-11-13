@@ -54,7 +54,8 @@
 - [x] `govio-cli observe info` 数据源/DataFrame 信息查询（合并原 show-datasource / list / show）
 - [x] `govio-cli observe release` 释放 DataFrame
 - [x] `govio-cli sql build` 指标 SQL 组装（从 JSON 规格生成标准 SQL）
-- [x] DataFrameStore 内存存储管理
+- [x] `govio-cli sql caliber` 口径冲突检测（sqlparse 提取 SQL 的聚合/WHERE/裸星号事实，与图谱内指标定义逐项比对）
+- [x] ObserveStore 的 DataFrame 存储管理（parquet 落盘 + manifest；原 DataFrameStore 内存单例已无调用方，已删除）
 - [x] DatabaseManager 统一连接管理与查询执行（DuckDB / MySQL / PostgreSQL / Trino，SQLAlchemy scheme 归一到统一 `execute_sql` 路径）
 
 ---

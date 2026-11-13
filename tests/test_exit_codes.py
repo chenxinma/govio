@@ -691,9 +691,9 @@ def _info_args(**overrides) -> argparse.Namespace:
 
 
 def _stub_db_manager(datasources: dict[str, str]):
-    """打桩 get_db_manager：仅提供 list_datasources 所需的 _datasources"""
+    """打桩 get_db_manager：仅提供 list_datasources 所需的 datasources 公开属性"""
     return SimpleNamespace(
-        _datasources={
+        datasources={
             name: SimpleNamespace(url=url) for name, url in datasources.items()
         }
     )

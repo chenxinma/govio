@@ -11,8 +11,7 @@ Data exploration, comparison, charting, and relationship inference for loaded Da
 | 模块 | 公开符号 | 职责 |
 |---|---|---|
 | `observe_store.py` | `ObserveStore`、`DataFrameInfo`、`Manifest` | parquet 落盘的 DataFrame 存储（`store` / `get` / `list` / `release` / `exists`）与 manifest 读写（`load` / `save` / `add` / `remove`） |
-| `dataframe_store.py` | `DataFrameStore`、`DataFrameInfo` | 进程内单例的纯内存存储（`store` / `get` / `list` / `release`）；落盘能力已由 `ObserveStore` 取代，`src/` 与 `tests/` 内暂无调用方 |
-| `database.py` | `DatabaseManager`、`_resolve_sqlalchemy_target` | 多数据源连接与只读 SQL 执行（`get_engine` / `execute_sql`）、URL scheme 归一 |
+| `database.py` | `DatabaseManager`、`_resolve_sqlalchemy_target` | 多数据源连接与只读 SQL 执行（`datasources` 只读属性 / `get_engine` / `execute_sql`）、URL scheme 归一 |
 | `comparator.py` | `TableComparator` | 结构比对与数据比对（`compare_schema` / `compare_data` / `compare`），数据比对用 datacompy `Compare` |
 | `explorer.py` | `RelationExplorer` | 外键推断与列名相似度（`infer_foreign_keys` / `find_column_similarity` / `explore`） |
 | `visualizer.py` | `RelationVisualizer` | 关系图数据生成（`to_networkx` / `to_json` / `visualize`） |
