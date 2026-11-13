@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Govio visualize-relations Input",
+  "description": "govio-cli observe visualize-relations --relations-file 所接受的关系数据格式。可直接使用 explore 子命令的输出，也可仅传入 relations 数组。",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "relations": { "$ref": "#/$defs/relations" }
+      },
+      "required": ["relations"]
+    },
+    {
+      "$ref": "#/$defs/relations"
+    }
+  ],
+  "$defs": {
+    "relations": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/foreignKeyRelation" },
+          { "$ref": "#/$defs/columnSimilarityRelation" }
+        ]
+      }
+    },
+    "foreignKeyRelation": {
+      "type": "object",
+      "properties": {
+        "source_table": { "type": "string" },
+        "source_column": { "type": "string" },
+        "target_table": { "type": "string" },
+        "target_column": { "type": "string" },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": ["source_table", "source_column", "target_table", "target_column"]
+    },
+    "columnSimilarityRelation": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "column_similarity" },
+        "table1": { "type": "string" },
+        "column1": { "type": "string" },
+        "table2": { "type": "string" },
+        "column2": { "type": "string" },
+        "similarity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": ["type", "table1", "column1", "table2", "column2"]
+    }
+  }
+}

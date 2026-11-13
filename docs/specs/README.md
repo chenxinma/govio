@@ -19,7 +19,7 @@ Govio (Governance + IO) is a data governance knowledge graph platform. It extrac
 | `govio.crypto` | (inline) | Credential encryption/decryption for config passwords |
 | Data Model | [data-model.md](data-model.md) | Node types, edge types, CSV conventions |
 | Configuration | [config.md](config.md) | Config file format, datasource definitions, meta config |
-| Packaging | [install.md](../install.md) | 分发打包（`packaging/` 包源 + `scripts/` 打包脚本）：skills zip（`package_skills.py`）、pi 扩展（`scripts/package_pi_extension.py`）、DeepSeek Harness 插件（`scripts/package_harness_plugin.py`）；排除规则与版本注入由 `scripts/_packaging_common.py` 统一实现，三支脚本复用 |
+| Packaging | [install.md](../install.md) | 分发打包（`packaging/` 包源 + `scripts/` 打包脚本）：skills zip（`package_skills.py`）、pi 扩展（`scripts/package_pi_extension.py`）、DeepSeek Harness 插件（`scripts/package_harness_plugin.py`）；排除规则与版本注入由 `scripts/_packaging_common.py` 统一实现，三支脚本复用；仅 `skills/govio/assets/` 是派生数据（`.gitignore` 忽略 + 打包排除），`skills/govio-observe/assets/` 属 skill 自带资源（`.gitignore` 例外放行、随包分发） |
 
 ## Skills
 

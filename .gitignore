@@ -15,6 +15,10 @@ logs/
 uv.lock
 
 assets/
+# 例外：skills 自带的 assets 资源不是派生数据，必须入库并进入分发包
+# （派生数据只有 <skills-root>/govio/assets，由 govio-cli meta graph 生成，仍按上面规则忽略）
+!skills/govio-observe/assets/
+!skills/govio-observe/assets/**
 .iflow
 .worktrees/
 
