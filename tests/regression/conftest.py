@@ -32,7 +32,9 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def run_cli(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> Callable[..., tuple[int, str, str]]:
+def run_cli(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> Callable[..., tuple[int, str, str]]:
     """以 govio-cli 真实入口执行命令
 
     Returns:
@@ -88,7 +90,9 @@ def sample_duckdb(isolated_env: Path) -> Path:
 @pytest.fixture
 def duckdb_datasources(sample_duckdb: Path) -> dict[str, Any]:
     """observe load 用的数据源配置（URL 用正斜杠，跨平台安全）"""
-    return {"local": {"url": f"duckdb://{sample_duckdb.as_posix()}", "connect_args": {}}}
+    return {
+        "local": {"url": f"duckdb://{sample_duckdb.as_posix()}", "connect_args": {}}
+    }
 
 
 @pytest.fixture
@@ -98,8 +102,9 @@ def nx_gml(isolated_env: Path) -> Path:
 
     gml_path = isolated_env / "ontology.gml"
     # 构建过程的 tqdm/打印不进 capsys
-    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-        io.StringIO()
+    with (
+        contextlib.redirect_stdout(io.StringIO()),
+        contextlib.redirect_stderr(io.StringIO()),
     ):
         build_graph(str(GRAPH_CSV_DIR), str(gml_path))
     return gml_path
@@ -111,8 +116,9 @@ def ladybug_db(isolated_env: Path) -> Path:
     from govio.graph.ladybug_loader import import_csv_to_ladybug
 
     db_path = isolated_env / "ontology.lbdb"
-    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-        io.StringIO()
+    with (
+        contextlib.redirect_stdout(io.StringIO()),
+        contextlib.redirect_stderr(io.StringIO()),
     ):
         import_csv_to_ladybug(GRAPH_CSV_DIR, db_path)
     return db_path

@@ -12,7 +12,9 @@ def test_config_manager_save_and_load():
         manager = ConfigManager(config_path)
 
         # 新格式配置不会被迁移
-        config = {"graph": {"backend": "networkx", "networkx": {"gml_path": "test.gml"}}}
+        config = {
+            "graph": {"backend": "networkx", "networkx": {"gml_path": "test.gml"}}
+        }
 
         manager.save(config)
         assert config_path.exists()
@@ -39,7 +41,9 @@ def test_config_manager_validate_networkx():
         config_path = Path(tmpdir) / "config.yaml"
         manager = ConfigManager(config_path)
 
-        valid_config = {"graph": {"backend": "networkx", "networkx": {"gml_path": "test.gml"}}}
+        valid_config = {
+            "graph": {"backend": "networkx", "networkx": {"gml_path": "test.gml"}}
+        }
 
         assert manager.validate(valid_config) is True
 
@@ -63,7 +67,9 @@ def test_config_manager_validate_falkordb():
 
         assert manager.validate(valid_config) is True
 
-        invalid_config = {"graph": {"backend": "falkordb", "falkordb": {"host": "localhost"}}}
+        invalid_config = {
+            "graph": {"backend": "falkordb", "falkordb": {"host": "localhost"}}
+        }
 
         with pytest.raises(ValueError):
             manager.validate(invalid_config)
@@ -98,9 +104,6 @@ def test_config_manager_validate_missing_backend():
 
         with pytest.raises(ValueError, match="配置缺少 'graph' 字段"):
             manager.validate(invalid_config)
-
-
-
 
 
 def test_new_config_not_migrated():

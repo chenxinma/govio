@@ -47,9 +47,7 @@ def resolve_datasource(schema: str, datasource_map: dict[str, str]) -> str:
     """
     ds_name = datasource_map.get(schema)
     if ds_name is None:
-        raise ValueError(
-            f"schema '{schema}' 未归属任何 datasource，无法生成全限定标识"
-        )
+        raise ValueError(f"schema '{schema}' 未归属任何 datasource，无法生成全限定标识")
     return ds_name
 
 
@@ -288,9 +286,7 @@ class DatasourceLoader:
 
     def datasource_map(self) -> dict[str, str]:
         """schema -> datasource_name 映射（全限定标识构造用）"""
-        return {
-            s: d.datasource_name for d in self._defs.values() for s in d.schemas
-        }
+        return {s: d.datasource_name for d in self._defs.values() for s in d.schemas}
 
     def matches_table(self, schema: str, table_name: str) -> bool:
         """按 schema 归属数据源的 filter 判断表是否纳入治理范围"""

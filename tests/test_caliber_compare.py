@@ -39,7 +39,11 @@ def test_consistent_aggregation_and_columns():
     result = check_caliber([metric], "SELECT SUM(amount) FROM orders")
     assert result["results"][0]["status"] == "consistent"
     assert result["results"][0]["differences"] == []
-    assert result["results"][0]["metric"] == {"id": "ME00000001", "code": "m_sales", "name": "销售额"}
+    assert result["results"][0]["metric"] == {
+        "id": "ME00000001",
+        "code": "m_sales",
+        "name": "销售额",
+    }
 
 
 def test_consistent_time_window_match():
@@ -78,12 +82,20 @@ def test_consistent_parameterized_period_no_window_expectation():
 def test_canonical_expr_treats_display_wrappers_as_equivalent():
     # 展示层包装（ROUND/CAST/::type）与表限定不影响口径语义
     assert _canonical_expr("ROUND(SUM(f.amount), 2)") == _canonical_expr("sum(amount)")
-    assert _canonical_expr("CAST(SUM(f.amount) AS DECIMAL(18,2))") == _canonical_expr("sum(amount)")
+    assert _canonical_expr("CAST(SUM(f.amount) AS DECIMAL(18,2))") == _canonical_expr(
+        "sum(amount)"
+    )
     assert _canonical_expr("SUM(f.amount)::numeric") == _canonical_expr("sum(amount)")
-    assert _canonical_expr("SUM(chocolate.fact_sales.amount)") == _canonical_expr("sum(amount)")
+    assert _canonical_expr("SUM(chocolate.fact_sales.amount)") == _canonical_expr(
+        "sum(amount)"
+    )
     # 真正的表达式差异不被抹平
-    assert _canonical_expr("SUM(f.amount * (1 - f.discount_pct/100))") != _canonical_expr("sum(amount)")
-    assert _canonical_expr("SUM(price_per_box * boxes_shipped)") != _canonical_expr("sum(amount)")
+    assert _canonical_expr(
+        "SUM(f.amount * (1 - f.discount_pct/100))"
+    ) != _canonical_expr("sum(amount)")
+    assert _canonical_expr("SUM(price_per_box * boxes_shipped)") != _canonical_expr(
+        "sum(amount)"
+    )
 
 
 def test_consistent_wrapped_formula_and_dimension_refs_ignored():
@@ -122,7 +134,8 @@ def test_conflict_measure_expression_distorted():
 def test_consistent_distinct_count_with_qualifier():
     # COUNT(DISTINCT f.order_id) 与 formula count(distinct order_id) 等价
     metric = _metric(
-        formula="count(distinct order_id)", columns=[MetricColumn("order_id", "measure")]
+        formula="count(distinct order_id)",
+        columns=[MetricColumn("order_id", "measure")],
     )
     sql = "SELECT COUNT(DISTINCT f.order_id) AS order_count FROM fact_sales f"
     assert check_caliber([metric], sql)["results"][0]["status"] == "consistent"
@@ -201,7 +214,9 @@ def test_unknown_window_absent_in_sql():
 
 def test_unknown_exclusion_term_absent():
     metric = _metric(business_definition="剔除退款订单的销售金额 SUM(amount)")
-    result = check_caliber([metric], "SELECT SUM(amount) FROM orders WHERE status = 'paid'")["results"][0]
+    result = check_caliber(
+        [metric], "SELECT SUM(amount) FROM orders WHERE status = 'paid'"
+    )["results"][0]
     assert result["status"] == "unknown"
     diff = next(d for d in result["differences"] if d["aspect"] == "filter")
     assert "退款订单" in diff["expected"]
@@ -243,7 +258,9 @@ def test_unknown_non_select_sql():
 
 
 def test_multi_metric_mixed_statuses():
-    ok = _metric(code="m_ok", formula="SUM(amount)", columns=[MetricColumn("amount", "measure")])
+    ok = _metric(
+        code="m_ok", formula="SUM(amount)", columns=[MetricColumn("amount", "measure")]
+    )
     bad = _metric(code="m_bad", formula="SUM(price)")
     sql = "SELECT SUM(amount) FROM orders"
     results = check_caliber([ok, bad], sql)["results"]
@@ -335,10 +352,23 @@ def test_conflict_measure_missing_with_multiplication_in_sql():
 
 def test_read_metric_caliber_networkx():
     g = nx.MultiDiGraph()
-    g.add_node("ME00000001", node_type="Metric", id="ME00000001", code="m_sales",
-               name="销售额", formula="SUM(amount)", business_definition="合计",
-               statistical_scope=None, time_scope="近30天")
-    g.add_node("CO00000001", node_type="Col", column="ds.main.orders.amount", column_name="amount")
+    g.add_node(
+        "ME00000001",
+        node_type="Metric",
+        id="ME00000001",
+        code="m_sales",
+        name="销售额",
+        formula="SUM(amount)",
+        business_definition="合计",
+        statistical_scope=None,
+        time_scope="近30天",
+    )
+    g.add_node(
+        "CO00000001",
+        node_type="Col",
+        column="ds.main.orders.amount",
+        column_name="amount",
+    )
     g.add_edge("ME00000001", "CO00000001", edge_type="REFERS_COLUMN", role="measure")
     graph = SimpleNamespace(G=g)
 
@@ -354,9 +384,12 @@ def test_read_metric_caliber_networkx():
 
 
 def test_read_metric_caliber_cypher():
-    metric_rows = [["ME00000002", "m_orders", "订单数", "COUNT(order_id)",
-                    "订单笔数", None, None]]
-    col_rows = [["ME00000002", "m_orders", "order_id", "ds.main.orders.order_id", "measure"]]
+    metric_rows = [
+        ["ME00000002", "m_orders", "订单数", "COUNT(order_id)", "订单笔数", None, None]
+    ]
+    col_rows = [
+        ["ME00000002", "m_orders", "order_id", "ds.main.orders.order_id", "measure"]
+    ]
 
     class StubGraph:
         def query(self, query: str, params: dict | None = None):

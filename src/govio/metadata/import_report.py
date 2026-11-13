@@ -155,9 +155,7 @@ def record_merge_delta(
     )
     for k in CHANGE_KEYS:
         entry[k] = entry.get(k, 0) + int(delta.get(k, 0))
-    path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def take_merge_delta(csv_dir: Path) -> dict[str, dict]:
@@ -173,9 +171,7 @@ def take_merge_delta(csv_dir: Path) -> dict[str, dict]:
     changes = _empty_changes()
     for category in ("nodes", "edges"):
         for name, delta in data.get(category, {}).items():
-            changes[category][name] = {
-                k: int(delta.get(k, 0)) for k in CHANGE_KEYS
-            }
+            changes[category][name] = {k: int(delta.get(k, 0)) for k in CHANGE_KEYS}
     totals = changes["totals"]
     for category in ("nodes", "edges"):
         for delta in changes[category].values():
@@ -267,9 +263,7 @@ def run_validation_checks(csv_dir: Path) -> list[dict[str, Any]]:
             if not src or not dst:
                 missing_count += 1
                 if len(missing_examples) < MAX_EXAMPLES:
-                    missing_examples.append(
-                        f"{filename} 第{row_no}行: 边端点 ID 为空"
-                    )
+                    missing_examples.append(f"{filename} 第{row_no}行: 边端点 ID 为空")
                 continue
             if src not in node_ids or dst not in node_ids:
                 orphan_count += 1
@@ -333,7 +327,5 @@ def build_import_report(
 def write_import_report(report: dict[str, Any], path: Path) -> Path:
     """整体序列化后单次写入，失败时不留半截报告。"""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return path

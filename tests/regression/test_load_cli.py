@@ -82,9 +82,7 @@ def test_l02_output_file_unicode_and_nulls(
     assert records[4]["name"] == ""  # 空字符串保留
 
 
-def test_l03_same_name_overwrites(
-    duckdb_datasources, write_config, run_cli
-) -> None:
+def test_l03_same_name_overwrites(duckdb_datasources, write_config, run_cli) -> None:
     """L03: 同名 DataFrame 覆盖加载，只保留最新结果"""
     write_config(datasources=duckdb_datasources)
     first = _load(run_cli, "orders", "SELECT * FROM orders")
@@ -164,9 +162,7 @@ def test_l06_memory_without_loaded_data(write_config, run_cli) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_l07_bad_sql_returns_error(
-    duckdb_datasources, write_config, run_cli
-) -> None:
+def test_l07_bad_sql_returns_error(duckdb_datasources, write_config, run_cli) -> None:
     """L07: SQL 执行失败 → success=false，不落盘"""
     write_config(datasources=duckdb_datasources)
     code, out, _err = run_cli(

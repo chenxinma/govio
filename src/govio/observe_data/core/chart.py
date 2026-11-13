@@ -19,6 +19,7 @@ _FONT_FALLBACK = [
     "Arial Unicode MS",
 ]
 
+
 @lru_cache(maxsize=1)
 def _setup_font() -> None:
     """配置中文字体回退链和负号显示,模块级只执行一次（lru_cache 缓存保证）"""

@@ -14,6 +14,7 @@ from typing import Literal
 @dataclass
 class MetricInfo:
     """指标元数据"""
+
     code: str
     name: str
     type: Literal["原子", "派生"]
@@ -26,6 +27,7 @@ class MetricInfo:
 @dataclass
 class QueryRequest:
     """查询请求"""
+
     metrics: list[MetricInfo]
     dimensions: list[str] = field(default_factory=list)
     filters: dict[str, str] = field(default_factory=dict)
@@ -127,7 +129,9 @@ def build_metric_sql(
             formula_expr = _resolve_formula(formula, atomic_metrics)
             select_parts.append(f"    {formula_expr} AS {m['code']}")
 
-            source_cte = _find_source_cte(formula, atomic_metrics, tables if atomic_metrics else {})
+            source_cte = _find_source_cte(
+                formula, atomic_metrics, tables if atomic_metrics else {}
+            )
 
             sql = f"{cte_name} AS (\n"
             sql += "  SELECT\n"
@@ -151,15 +155,15 @@ def build_metric_sql(
     else:
         union_parts = []
         for m in all_metrics:
-            cte_name = _get_cte_name(m, atomic_metrics, tables if atomic_metrics else {})
+            cte_name = _get_cte_name(
+                m, atomic_metrics, tables if atomic_metrics else {}
+            )
             dim_select = ", ".join(dimensions) if dimensions else "NULL AS dim_key"
             union_parts.append(
                 f"SELECT {dim_select}, {m['code']} AS metric_value, '{m['name']}' AS metric_name FROM {cte_name}"
             )
 
-        final_select = [
-            "  *"
-        ]
+        final_select = ["  *"]
         from_cte = "(" + " UNION ALL ".join(union_parts) + ") t"
 
     sql = "WITH\n"
@@ -191,7 +195,7 @@ def _check_report_ym_required(
                 raise ValueError(
                     f"指标 {m['code']} 的来源表包含 {time_col} 字段，"
                     f"该字段为必须过滤条件（拉链表不同时期数据不可合并）。"
-                    f"请在 filters 中指定 {time_col}，如 {{\"{time_col}\": \"最新年月\"}}"
+                    f'请在 filters 中指定 {time_col}，如 {{"{time_col}": "最新年月"}}'
                 )
 
 

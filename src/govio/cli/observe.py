@@ -89,7 +89,7 @@ def cmd_load(
         if datasource is None:
             print("❌ datasource not setted.", file=sys.stderr)
             sys.exit(1)
-        
+
         db_manager = get_db_manager(config)
         result = load_dataframe(
             store=store,
@@ -127,7 +127,7 @@ def cmd_release(config: dict, name: str | None, release_all: bool) -> None:
     if release_all:
         result = release_all_dataframes(store=store)
     else:
-        result = release_dataframe(store=store, name=name) # pyright:ignore
+        result = release_dataframe(store=store, name=name)  # pyright:ignore
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if not result.get("success"):
         _fail(result.get("error", "释放失败"), output_json=False)
@@ -245,10 +245,16 @@ def cmd_info(config: dict, args: argparse.Namespace) -> None:
         store = ObserveStore()
         df_result = list_dataframes(store=store)
 
-        print(json.dumps({
-            "datasources": ds_names,
-            "dataframes": df_result,
-        }, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {
+                    "datasources": ds_names,
+                    "dataframes": df_result,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return
 
     if args.datasource:
@@ -362,7 +368,9 @@ def observe():
     p.add_argument("--datasource", action="store_true", help="仅显示已配置的数据源名称")
     p.add_argument("--df", action="store_true", help="仅显示已加载的 DataFrame 列表")
     p.add_argument("--name", help="显示指定 DataFrame 的结构和样本数据")
-    p.add_argument("--rows", type=int, default=10, help="样本行数（默认 10，仅与 --name 配合使用）")
+    p.add_argument(
+        "--rows", type=int, default=10, help="样本行数（默认 10，仅与 --name 配合使用）"
+    )
 
     args = parser.parse_args(sys.argv[1:])
 

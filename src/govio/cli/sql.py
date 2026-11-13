@@ -17,7 +17,9 @@ def sql():
 
     p_build = sub.add_parser("build", help="从 JSON 规格组装 SQL")
     p_build.add_argument("-f", "--file", help="JSON 规格文件路径")
-    p_build.add_argument("-o", "--output", help="输出 SQL 文件路径，省略则打印到 stdout")
+    p_build.add_argument(
+        "-o", "--output", help="输出 SQL 文件路径，省略则打印到 stdout"
+    )
 
     p_caliber = sub.add_parser("caliber", help="SQL 口径冲突检测（与图谱指标定义比对）")
     p_caliber.add_argument("--sql", help="SQL 文本")
@@ -121,7 +123,7 @@ def _caliber(args):
         if not config_manager.exists():
             print("错误：配置文件不存在，请先运行 govio-cli onboard", file=sys.stderr)
             sys.exit(1)
-        graph_config = (config_manager.load().get("graph") or {})
+        graph_config = config_manager.load().get("graph") or {}
         if not graph_config.get("backend"):
             print("错误：配置文件缺少 'graph.backend' 字段", file=sys.stderr)
             sys.exit(1)

@@ -106,7 +106,5 @@ class DuckDBLoader(MetadataLoader):
             df["full_table_name"] = [
                 qualify(self.datasource_name, ftn) for ftn in df["full_table_name"]
             ]
-            df["column"] = [
-                qualify(self.datasource_name, col) for col in df["column"]
-            ]
+            df["column"] = [qualify(self.datasource_name, col) for col in df["column"]]
         return df

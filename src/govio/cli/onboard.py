@@ -12,6 +12,7 @@ from .config import ConfigManager
 # CSV validation helper (still used internally)
 # ---------------------------------------------------------------------------
 
+
 def validate_csv_directory(csv_dir: Path) -> bool:
     """验证 CSV 目录是否包含必需的文件
 
@@ -32,6 +33,7 @@ def validate_csv_directory(csv_dir: Path) -> bool:
 # ---------------------------------------------------------------------------
 # Datasource configuration (used by onboard flow)
 # ---------------------------------------------------------------------------
+
 
 def prompt_connect_args(existing: dict[str, Any] | None = None) -> dict[str, Any]:
     """交互式输入连接参数（key=value 格式）
@@ -383,6 +385,7 @@ def prompt_datasource_config(
 # Onboard main flow (simplified)
 # ---------------------------------------------------------------------------
 
+
 def prompt_graph_config() -> dict[str, Any]:
     """交互式选择图数据库后端并生成 graph 配置
 
@@ -405,35 +408,53 @@ def prompt_graph_config() -> dict[str, Any]:
             "请输入 GML 文件路径:",
             validate=lambda v: True if Path(v).exists() else "GML 文件不存在",
         ).ask()
-        return {"backend": "networkx", "networkx": {"gml_path": str(Path(gml_path_input))}}
+        return {
+            "backend": "networkx",
+            "networkx": {"gml_path": str(Path(gml_path_input))},
+        }
     if backend == "falkordb":
         print("\n--- FalkorDB 配置 ---\n")
-        host = questionary.text(
-            "请输入 FalkorDB 主机地址:",
-            default="localhost",
-        ).ask() or "localhost"
+        host = (
+            questionary.text(
+                "请输入 FalkorDB 主机地址:",
+                default="localhost",
+            ).ask()
+            or "localhost"
+        )
 
-        port_str = questionary.text(
-            "请输入 FalkorDB 端口:",
-            default="6379",
-            validate=lambda v: True if v.isdigit() else "端口必须是数字",
-        ).ask() or "6379"
+        port_str = (
+            questionary.text(
+                "请输入 FalkorDB 端口:",
+                default="6379",
+                validate=lambda v: True if v.isdigit() else "端口必须是数字",
+            ).ask()
+            or "6379"
+        )
         port = int(port_str)
 
-        graph_name = questionary.text(
-            "请输入图数据库名称:",
-            default="ontology",
-        ).ask() or "ontology"
+        graph_name = (
+            questionary.text(
+                "请输入图数据库名称:",
+                default="ontology",
+            ).ask()
+            or "ontology"
+        )
 
-        return {"backend": "falkordb", "falkordb": {"host": host, "port": port, "graph": graph_name}}
+        return {
+            "backend": "falkordb",
+            "falkordb": {"host": host, "port": port, "graph": graph_name},
+        }
 
     # ladybug
     print("\n--- Ladybug 配置 ---\n")
     default_db = str(Path.home() / ".govio" / "ontology.lbdb")
-    db_path_input = questionary.text(
-        "请输入 Ladybug 数据库文件路径:",
-        default=default_db,
-    ).ask() or default_db
+    db_path_input = (
+        questionary.text(
+            "请输入 Ladybug 数据库文件路径:",
+            default=default_db,
+        ).ask()
+        or default_db
+    )
     return {
         "backend": "ladybug",
         "ladybug": {"db_path": str(Path(db_path_input))},
@@ -446,7 +467,9 @@ def onboard():
 
     if config_manager.exists():
         existing_config = config_manager.load()
-        has_backend = "graph" in existing_config and "backend" in existing_config.get("graph", {})
+        has_backend = "graph" in existing_config and "backend" in existing_config.get(
+            "graph", {}
+        )
 
         if has_backend:
             print(f"\n检测到已有配置 (backend: {existing_config['graph']['backend']})")

@@ -3,6 +3,7 @@
 支持通过 CLI 或作为包内模块调用。
 用法: govio query --query "查询语句"
 """
+
 import json
 import logging
 import sys
@@ -88,9 +89,7 @@ def output_result(data, columns: list[str] | None = None):
 
     output_dir = Path(".") / ".govio"
     output_dir.mkdir(parents=True, exist_ok=True)
-    fname = (
-        output_dir / f"output-{datetime.now().strftime('%Y%m%d%H%M%S%f')}.json"
-    )
+    fname = output_dir / f"output-{datetime.now().strftime('%Y%m%d%H%M%S%f')}.json"
     with open(fname, "w", encoding="utf-8") as f:
         f.writelines(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
 
@@ -115,7 +114,7 @@ def cmd_networkx(code: str, gml_path: str):
         _fail(f"GML file not found: {gml_file}")
 
     try:
-        gf = NetworkXGraph(gml_file) # pyright: ignore[reportArgumentType]
+        gf = NetworkXGraph(gml_file)  # pyright: ignore[reportArgumentType]
         g = gf.G
     except Exception as e:
         _fail(f"连接图库失败: {e!s}")
@@ -131,7 +130,9 @@ def cmd_networkx(code: str, gml_path: str):
     output_result(local_vars.get("result"))
 
 
-def cmd_falkordb(cypher: str, host: str = "localhost", port: int = 6379, graph_name: str = "ontology"):
+def cmd_falkordb(
+    cypher: str, host: str = "localhost", port: int = 6379, graph_name: str = "ontology"
+):
     """FalkorDB 查询处理"""
     if not cypher.upper().startswith("MATCH"):
         _fail("Please write a MATCH query.")
@@ -223,5 +224,3 @@ def query(query_text: str | None):
     except Exception as e:
         # 兜底：未预期异常转简洁错误，避免裸 traceback
         _fail(f"查询执行失败: {e!s}")
-
-

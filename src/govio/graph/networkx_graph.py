@@ -2,6 +2,7 @@
 govio.graph.networkx_graph
 
 """
+
 import os
 from os import PathLike
 
@@ -9,23 +10,20 @@ import networkx as nx
 
 
 class NetworkXGraph:
-    def __init__(self, graph: str| PathLike ="ontology.gml") -> None:
+    def __init__(self, graph: str | PathLike = "ontology.gml") -> None:
         if not os.path.exists(graph):
-            raise FileNotFoundError(f"File not found: {graph}") 
-        
+            raise FileNotFoundError(f"File not found: {graph}")
+
         self._g = nx.read_gml(graph)
 
-        self._schema:str = ""
+        self._schema: str = ""
         self.refresh_schema()
-    
+
     def refresh_schema(self):
-        schema = {
-            "node_types": {},
-            "edge_relationships": {}
-        }
+        schema = {"node_types": {}, "edge_relationships": {}}
 
         # 1. Inspect Nodes
-        for _node, data in self._g.nodes(data=True):            
+        for _node, data in self._g.nodes(data=True):
             node_type = data["node_type"]
 
             if node_type not in schema["node_types"]:
@@ -53,7 +51,7 @@ class NetworkXGraph:
             schema["edge_relationships"][rel_key].update(data.keys())
 
         # Convert sets to lists for JSON serialization
-    
+
         self._schema = (
             "## NetworkX schema:\n"
             f"node_types：{ {k: sorted(v) for k, v in schema['node_types'].items()} }\n"
@@ -61,15 +59,12 @@ class NetworkXGraph:
             f"edge_relationships: { {k: sorted(v) for k, v in schema['edge_relationships'].items()} }\n"
         )
 
-    
     @property
     def schema(self) -> str:
         """Returns the schema of the Graph"""
         return self._schema
-    
 
     @property
     def G(self) -> nx.Graph:
         """Returns the schema of the Graph"""
         return self._g
-

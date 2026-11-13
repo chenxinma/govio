@@ -135,9 +135,7 @@ def test_q06_ladybug_aliases_chinese_and_ascii_stdout(
     assert "客户信息表" in file_text  # 文件 UTF-8 保留中文原样
 
 
-def test_q07_ladybug_cross_node_join(
-    ladybug_db: Path, write_config, run_cli
-) -> None:
+def test_q07_ladybug_cross_node_join(ladybug_db: Path, write_config, run_cli) -> None:
     """Q07: 跨节点关系查询（Table-HAS_COLUMN->Col）"""
     write_config(graph={"backend": "ladybug", "ladybug": {"db_path": str(ladybug_db)}})
     code, out, _err = run_cli(

@@ -62,9 +62,7 @@ class GraphFactory:
                 buffer_pool_size=ladybug_config.get(
                     "buffer_pool_size", 256 * 1024 * 1024
                 ),
-                max_db_size=ladybug_config.get(
-                    "max_db_size", 1 * 1024 * 1024 * 1024
-                ),
+                max_db_size=ladybug_config.get("max_db_size", 1 * 1024 * 1024 * 1024),
             )
 
         raise ValueError(f"不支持的 backend: {backend}")

@@ -3,7 +3,15 @@
 import subprocess
 import sys
 
-HEAVY = ("pandas", "sklearn", "matplotlib", "duckdb", "sqlalchemy", "networkx", "falkordb")
+HEAVY = (
+    "pandas",
+    "sklearn",
+    "matplotlib",
+    "duckdb",
+    "sqlalchemy",
+    "networkx",
+    "falkordb",
+)
 
 
 def _run(code: str) -> subprocess.CompletedProcess[str]:

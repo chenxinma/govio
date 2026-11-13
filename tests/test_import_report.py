@@ -42,9 +42,7 @@ def test_classify_rows_empty_input_counts_zero():
 
 
 def test_classify_rows_splits_added_updated_skipped():
-    existing = pd.DataFrame(
-        {"key": ["k1", "k2", "k3"], "name": ["a", "b", "c"]}
-    )
+    existing = pd.DataFrame({"key": ["k1", "k2", "k3"], "name": ["a", "b", "c"]})
     new = pd.DataFrame({"key": ["k1", "k2", "k4"], "name": ["a", "B", "d"]})
     assert classify_rows(new, existing, ["key"]) == {
         "added": 1,  # k4
@@ -71,9 +69,15 @@ def test_classify_rows_missing_key_column_counts_all_added():
 
 
 def test_record_merge_delta_accumulates_and_take_clears(tmp_path):
-    record_merge_delta(tmp_path, "nodes", "PhysicalTable", {"added": 2, "updated": 0, "skipped": 0})
-    record_merge_delta(tmp_path, "nodes", "PhysicalTable", {"added": 0, "updated": 1, "skipped": 3})
-    record_merge_delta(tmp_path, "edges", "HAS_COLUMN", {"added": 5, "updated": 0, "skipped": 0})
+    record_merge_delta(
+        tmp_path, "nodes", "PhysicalTable", {"added": 2, "updated": 0, "skipped": 0}
+    )
+    record_merge_delta(
+        tmp_path, "nodes", "PhysicalTable", {"added": 0, "updated": 1, "skipped": 3}
+    )
+    record_merge_delta(
+        tmp_path, "edges", "HAS_COLUMN", {"added": 5, "updated": 0, "skipped": 0}
+    )
 
     changes = take_merge_delta(tmp_path)
     assert changes["nodes"]["PhysicalTable"] == {"added": 2, "updated": 1, "skipped": 3}
@@ -200,7 +204,9 @@ def test_orphan_edge_detected(tmp_path):
 
 def test_build_import_report_structure_and_summary(tmp_path):
     _write_clean_dir(tmp_path)
-    record_merge_delta(tmp_path, "nodes", "PhysicalTable", {"added": 2, "updated": 0, "skipped": 0})
+    record_merge_delta(
+        tmp_path, "nodes", "PhysicalTable", {"added": 2, "updated": 0, "skipped": 0}
+    )
     report = build_import_report(
         tmp_path, mode="update", backend="networkx", changes=take_merge_delta(tmp_path)
     )

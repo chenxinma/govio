@@ -1,4 +1,5 @@
 """step 函数 string ID 集成测试。mock 全部 Loader，跑 dry-run 检查 CSV。"""
+
 import json
 import sys
 from unittest.mock import MagicMock, patch
@@ -8,65 +9,75 @@ import pytest
 
 
 def _mock_tds_tables():
-    return pd.DataFrame({
-        "full_table_name": ["dm.orders", "dm.customers"],
-        "schema": ["dm", "dm"],
-        "table_name": ["orders", "customers"],
-        "name": ["Orders", "Customers"],
-        "data_entity_type": ["MYSQL_TABLE", "MYSQL_TABLE"],
-        "database_name": ["db", "db"],
-    })
+    return pd.DataFrame(
+        {
+            "full_table_name": ["dm.orders", "dm.customers"],
+            "schema": ["dm", "dm"],
+            "table_name": ["orders", "customers"],
+            "name": ["Orders", "Customers"],
+            "data_entity_type": ["MYSQL_TABLE", "MYSQL_TABLE"],
+            "database_name": ["db", "db"],
+        }
+    )
 
 
 def _mock_tds_columns():
-    return pd.DataFrame({
-        "column": ["dm.orders.id", "dm.orders.amount", "dm.customers.id"],
-        "column_name": ["id", "amount", "id"],
-        "name": ["ID", "Amount", "ID"],
-        "full_table_name": ["dm.orders", "dm.orders", "dm.customers"],
-        "data_entity_type": ["MYSQL_COLUMN"] * 3,
-        "dtype": ["int", "decimal", "int"],
-        "size": [0, 10, 0],
-        "precision": [0, 10, 0],
-        "scale": [0, 2, 0],
-        "order_no": [1, 2, 1],
-        "data_type": ["int", "decimal(10,2)", "int"],
-    })
+    return pd.DataFrame(
+        {
+            "column": ["dm.orders.id", "dm.orders.amount", "dm.customers.id"],
+            "column_name": ["id", "amount", "id"],
+            "name": ["ID", "Amount", "ID"],
+            "full_table_name": ["dm.orders", "dm.orders", "dm.customers"],
+            "data_entity_type": ["MYSQL_COLUMN"] * 3,
+            "dtype": ["int", "decimal", "int"],
+            "size": [0, 10, 0],
+            "precision": [0, 10, 0],
+            "scale": [0, 2, 0],
+            "order_no": [1, 2, 1],
+            "data_type": ["int", "decimal(10,2)", "int"],
+        }
+    )
 
 
 def _mock_duck_tables():
-    return pd.DataFrame({
-        "full_table_name": ["dm.orders", "dm.customers"],
-        "schema": ["dm", "dm"],
-        "table_name": ["orders", "customers"],
-        "name": ["Orders", "Customers"],
-        "data_entity_type": ["DUCKDB_TABLE", "DUCKDB_TABLE"],
-        "database_name": ["db", "db"],
-    })
+    return pd.DataFrame(
+        {
+            "full_table_name": ["dm.orders", "dm.customers"],
+            "schema": ["dm", "dm"],
+            "table_name": ["orders", "customers"],
+            "name": ["Orders", "Customers"],
+            "data_entity_type": ["DUCKDB_TABLE", "DUCKDB_TABLE"],
+            "database_name": ["db", "db"],
+        }
+    )
 
 
 def _mock_duck_columns():
-    return pd.DataFrame({
-        "column": ["dm.orders.id", "dm.orders.amount", "dm.customers.id"],
-        "column_name": ["id", "amount", "id"],
-        "name": ["ID", "Amount", "ID"],
-        "full_table_name": ["dm.orders", "dm.orders", "dm.customers"],
-        "data_entity_type": ["DUCKDB_COLUMN"] * 3,
-        "dtype": ["int", "decimal", "int"],
-        "size": [0, 10, 0],
-        "precision": [0, 10, 0],
-        "scale": [0, 2, 0],
-        "order_no": [1, 2, 1],
-        "data_type": ["int", "decimal(10,2)", "int"],
-    })
+    return pd.DataFrame(
+        {
+            "column": ["dm.orders.id", "dm.orders.amount", "dm.customers.id"],
+            "column_name": ["id", "amount", "id"],
+            "name": ["ID", "Amount", "ID"],
+            "full_table_name": ["dm.orders", "dm.orders", "dm.customers"],
+            "data_entity_type": ["DUCKDB_COLUMN"] * 3,
+            "dtype": ["int", "decimal", "int"],
+            "size": [0, 10, 0],
+            "precision": [0, 10, 0],
+            "scale": [0, 2, 0],
+            "order_no": [1, 2, 1],
+            "data_type": ["int", "decimal(10,2)", "int"],
+        }
+    )
 
 
 def _mock_stds():
-    return pd.DataFrame({
-        "standard_id": ["std_amount"],
-        "name": ["Amount Standard"],
-        "data_type": ["decimal"],
-    })
+    return pd.DataFrame(
+        {
+            "standard_id": ["std_amount"],
+            "name": ["Amount Standard"],
+            "data_type": ["decimal"],
+        }
+    )
 
 
 def _write_datasources_file(tmp_path, name="billing", schemas=("dm",)):
@@ -109,10 +120,14 @@ def _run_steps(
     )
 
     result = step_meta_export(
-        output, source=source, db_path=db_path,
-        schemas=schemas, datasource_name=datasource_name,
+        output,
+        source=source,
+        db_path=db_path,
+        schemas=schemas,
+        datasource_name=datasource_name,
         datasource_file=datasource_file,
-        kundb=kundb, workspace_uuid=workspace_uuid,
+        kundb=kundb,
+        workspace_uuid=workspace_uuid,
     )
     if result is None:
         return
@@ -132,6 +147,7 @@ def _run_steps(
 # Node CSV tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def _patched_loaders(tmp_path):
     """Patch all loaders so step functions run without DB/config.
@@ -139,21 +155,27 @@ def _patched_loaders(tmp_path):
     Yields:
         str: datasource 声明文件路径（TDS 模式需要）
     """
-    with patch("govio.cli.meta.steps.TDSLoader") as tds_m, \
-         patch("govio.cli.meta.common.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.steps.StandardLoader") as std_m:
+    with (
+        patch("govio.cli.meta.steps.TDSLoader") as tds_m,
+        patch("govio.cli.meta.common.DuckDBLoader") as duck_m,
+        patch("govio.cli.meta.steps.StandardLoader") as std_m,
+    ):
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = _mock_duck_tables()
         duck_m.return_value.Col = _mock_duck_columns()
         std_m.return_value.Standard = _mock_stds()
-        std_m.return_value.StdCompliance = pd.DataFrame(columns=["column", "standard_id"])
+        std_m.return_value.StdCompliance = pd.DataFrame(
+            columns=["column", "standard_id"]
+        )
         yield _write_datasources_file(tmp_path)
 
 
 def test_node_csvs_have_string_ids(_patched_loaders, tmp_path):
     _run_steps(
-        output=tmp_path, source="tds", datasource_file=_patched_loaders,
+        output=tmp_path,
+        source="tds",
+        datasource_file=_patched_loaders,
     )
 
     for fname, prefix, label in [
@@ -164,7 +186,9 @@ def test_node_csvs_have_string_ids(_patched_loaders, tmp_path):
     ]:
         df = pd.read_csv(tmp_path / fname)
         id_col = f":ID({label})"
-        assert id_col == df.columns[0], f"{fname} 第一列应为 {id_col}, 实际 {df.columns[0]}"
+        assert id_col == df.columns[0], (
+            f"{fname} 第一列应为 {id_col}, 实际 {df.columns[0]}"
+        )
         for v in df[id_col]:
             assert len(str(v)) == 10, f"{fname} ID 长度应为 10: {v}"
             assert str(v).startswith(prefix), f"{fname} ID 前缀应为 {prefix}: {v}"
@@ -172,7 +196,9 @@ def test_node_csvs_have_string_ids(_patched_loaders, tmp_path):
 
 def test_edge_csvs_reference_valid_node_ids(_patched_loaders, tmp_path):
     _run_steps(
-        output=tmp_path, source="tds", datasource_file=_patched_loaders,
+        output=tmp_path,
+        source="tds",
+        datasource_file=_patched_loaders,
     )
 
     # 收集所有节点 ID
@@ -210,6 +236,7 @@ def test_edge_csvs_reference_valid_node_ids(_patched_loaders, tmp_path):
 # Metric tests
 # ---------------------------------------------------------------------------
 
+
 def test_metric_edges_use_string_ids(tmp_path):
     """带 metric 的全量导出：metric/dim 节点与 5 类边都是 string ID。"""
     metric_data = {
@@ -224,9 +251,10 @@ def test_metric_edges_use_string_ids(tmp_path):
                 "data_type": "decimal",
                 "source_layer": "DM",
                 "source_tables": [
-                    {"full_table_name": "dm.orders", "columns": [
-                        {"column_name": "amount", "role": "measure"}
-                    ]}
+                    {
+                        "full_table_name": "dm.orders",
+                        "columns": [{"column_name": "amount", "role": "measure"}],
+                    }
                 ],
                 "dimensions": [{"code": "dim_time", "usage_type": "group"}],
             }
@@ -236,21 +264,30 @@ def test_metric_edges_use_string_ids(tmp_path):
         ],
     }
     metric_file = tmp_path / "metric.json"
-    metric_file.write_text(json.dumps(metric_data, ensure_ascii=False), encoding="utf-8")
+    metric_file.write_text(
+        json.dumps(metric_data, ensure_ascii=False), encoding="utf-8"
+    )
 
-    with patch("govio.cli.meta.steps.TDSLoader") as tds_m, \
-         patch("govio.cli.meta.common.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.steps.StandardLoader") as std_m:
+    with (
+        patch("govio.cli.meta.steps.TDSLoader") as tds_m,
+        patch("govio.cli.meta.common.DuckDBLoader") as duck_m,
+        patch("govio.cli.meta.steps.StandardLoader") as std_m,
+    ):
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
         duck_m.return_value.PhysicalTable = _mock_duck_tables()
         duck_m.return_value.Col = _mock_duck_columns()
         std_m.return_value.Standard = _mock_stds()
-        std_m.return_value.StdCompliance = pd.DataFrame(columns=["column", "standard_id"])
+        std_m.return_value.StdCompliance = pd.DataFrame(
+            columns=["column", "standard_id"]
+        )
 
         out = tmp_path / "out"
         _run_steps(
-            output=out, source="duckdb", db_path="ignored", schemas=["dm"],
+            output=out,
+            source="duckdb",
+            db_path="ignored",
+            schemas=["dm"],
             metric_file=str(metric_file),
         )
 
@@ -263,9 +300,11 @@ def test_metric_edges_use_string_ids(tmp_path):
 
     node_ids = set()
     for fname, label in [
-        ("PhysicalTable.csv", "PhysicalTable"), ("Col.csv", "Col"),
+        ("PhysicalTable.csv", "PhysicalTable"),
+        ("Col.csv", "Col"),
         ("Datasource.csv", "Datasource"),
-        ("Metric.csv", "Metric"), ("Dimension.csv", "Dimension"),
+        ("Metric.csv", "Metric"),
+        ("Dimension.csv", "Dimension"),
     ]:
         d = pd.read_csv(out / fname)
         node_ids.update(d[f":ID({label})"].astype(str))
@@ -291,18 +330,29 @@ def test_metric_edges_use_string_ids(tmp_path):
 # export.make_csv 老路径测试
 # ---------------------------------------------------------------------------
 
+
 def test_make_csv_utility_path_uses_string_ids(tmp_path, monkeypatch):
     """老路径 export.make_csv 也应产出 string ID 节点 CSV。"""
     from govio.metadata import export as metadata_export
 
-    monkeypatch.setattr(metadata_export, "TDSLoader", lambda *a, **k: MagicMock(
-        PhysicalTable=_mock_tds_tables(), Col=_mock_tds_columns()))
-    monkeypatch.setattr(metadata_export, "StandardLoader", lambda *a, **k: MagicMock(
-        Standard=_mock_stds()))
+    monkeypatch.setattr(
+        metadata_export,
+        "TDSLoader",
+        lambda *a, **k: MagicMock(
+            PhysicalTable=_mock_tds_tables(), Col=_mock_tds_columns()
+        ),
+    )
+    monkeypatch.setattr(
+        metadata_export,
+        "StandardLoader",
+        lambda *a, **k: MagicMock(Standard=_mock_stds()),
+    )
 
     ds_file = _write_datasources_file(tmp_path)
     metadata_export.make_csv(
-        output=tmp_path, db="mysql://x", workspace_uuid="ws",
+        output=tmp_path,
+        db="mysql://x",
+        workspace_uuid="ws",
         datasource_file=ds_file,
     )
 
@@ -332,13 +382,22 @@ def test_make_csv_utility_path_uses_string_ids(tmp_path, monkeypatch):
 # CLI arg validation tests
 # ---------------------------------------------------------------------------
 
+
 def test_meta_requires_source(tmp_path, monkeypatch, capsys):
     """meta meta 不传 --source 应报错。"""
     from govio.cli import main
-    monkeypatch.setattr(sys, "argv", [
-        "govio-cli", "meta", "meta",
-        "--output", str(tmp_path),
-    ])
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "govio-cli",
+            "meta",
+            "meta",
+            "--output",
+            str(tmp_path),
+        ],
+    )
     with pytest.raises(SystemExit):
         main()
 
@@ -346,11 +405,20 @@ def test_meta_requires_source(tmp_path, monkeypatch, capsys):
 def test_meta_duckdb_requires_db(tmp_path, monkeypatch, capsys):
     """meta meta --source duckdb 不传 --db 应在 step 中报错退出。"""
     from govio.cli import main
-    monkeypatch.setattr(sys, "argv", [
-        "govio-cli", "meta", "meta",
-        "--source", "duckdb",
-        "--output", str(tmp_path),
-    ])
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "govio-cli",
+            "meta",
+            "meta",
+            "--source",
+            "duckdb",
+            "--output",
+            str(tmp_path),
+        ],
+    )
     with pytest.raises(SystemExit):
         main()
     err = capsys.readouterr().err
@@ -361,34 +429,51 @@ def test_meta_duckdb_requires_db(tmp_path, monkeypatch, capsys):
 # Data source mode tests
 # ---------------------------------------------------------------------------
 
+
 def test_duckdb_skips_tds_and_std(tmp_path):
     """DuckDB 模式不调用 TDSLoader 和 StandardLoader，自动声明 Datasource。"""
-    with patch("govio.cli.meta.steps.TDSLoader") as tds_m, \
-         patch("govio.cli.meta.common.DuckDBLoader") as duck_m, \
-         patch("govio.cli.meta.steps.StandardLoader") as std_m:
+    with (
+        patch("govio.cli.meta.steps.TDSLoader") as tds_m,
+        patch("govio.cli.meta.common.DuckDBLoader") as duck_m,
+        patch("govio.cli.meta.steps.StandardLoader") as std_m,
+    ):
         tds_m.return_value.PhysicalTable = _mock_tds_tables()
         tds_m.return_value.Col = _mock_tds_columns()
-        duck_m.return_value.PhysicalTable = pd.DataFrame({
-            "full_table_name": ["dm.orders"],
-            "schema": ["dm"], "table_name": ["orders"],
-            "name": ["Orders"], "data_entity_type": ["DUCKDB_TABLE"],
-            "database_name": ["db"],
-        })
-        duck_m.return_value.Col = pd.DataFrame({
-            "column": ["dm.orders.id", "dm.orders.amount"],
-            "column_name": ["id", "amount"], "name": ["ID", "Amount"],
-            "full_table_name": ["dm.orders", "dm.orders"],
-            "data_entity_type": ["DUCKDB_COLUMN", "DUCKDB_COLUMN"],
-            "dtype": ["int", "decimal"], "size": [0, 10],
-            "precision": [0, 10], "scale": [0, 2], "order_no": [1, 2],
-            "data_type": ["int", "decimal(10,2)"],
-        })
+        duck_m.return_value.PhysicalTable = pd.DataFrame(
+            {
+                "full_table_name": ["dm.orders"],
+                "schema": ["dm"],
+                "table_name": ["orders"],
+                "name": ["Orders"],
+                "data_entity_type": ["DUCKDB_TABLE"],
+                "database_name": ["db"],
+            }
+        )
+        duck_m.return_value.Col = pd.DataFrame(
+            {
+                "column": ["dm.orders.id", "dm.orders.amount"],
+                "column_name": ["id", "amount"],
+                "name": ["ID", "Amount"],
+                "full_table_name": ["dm.orders", "dm.orders"],
+                "data_entity_type": ["DUCKDB_COLUMN", "DUCKDB_COLUMN"],
+                "dtype": ["int", "decimal"],
+                "size": [0, 10],
+                "precision": [0, 10],
+                "scale": [0, 2],
+                "order_no": [1, 2],
+                "data_type": ["int", "decimal(10,2)"],
+            }
+        )
         std_m.return_value.Standard = _mock_stds()
-        std_m.return_value.StdCompliance = pd.DataFrame(columns=["column", "standard_id"])
+        std_m.return_value.StdCompliance = pd.DataFrame(
+            columns=["column", "standard_id"]
+        )
 
         out = tmp_path / "out"
         _run_steps(
-            output=out, source="duckdb", db_path="ignored",
+            output=out,
+            source="duckdb",
+            db_path="ignored",
             schemas=["dm"],
         )
 

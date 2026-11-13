@@ -17,11 +17,15 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description="数据治理知识图谱项目，提供元数据查询、表字段比较、SQL 生成、数据标准推荐等数据治理支持功能。",
     )
-    parser.add_argument("-V", "--version", action="version", version=f"govio {_get_version()}")
+    parser.add_argument(
+        "-V", "--version", action="version", version=f"govio {_get_version()}"
+    )
     sub = parser.add_subparsers(dest="action")
 
     # onboard 子命令（交互向导 + 非交互式数据源管理）
-    p_onboard = sub.add_parser("onboard", help="初始化配置向导（支持非交互式添加/删除数据源）")
+    p_onboard = sub.add_parser(
+        "onboard", help="初始化配置向导（支持非交互式添加/删除数据源）"
+    )
     p_onboard.add_argument(
         "--add-datasource",
         metavar="NAME",
@@ -74,9 +78,7 @@ def main():
 
     # meta 子命令组
     p_meta = sub.add_parser("meta", help="知识图库维护", add_help=False)
-    p_meta.add_argument(
-        "meta_args", nargs=argparse.REMAINDER, help="meta 子命令参数"
-    )
+    p_meta.add_argument("meta_args", nargs=argparse.REMAINDER, help="meta 子命令参数")
 
     # observe 子命令组
     p_observe = sub.add_parser("observe", help="数据表探查", add_help=False)
@@ -86,9 +88,7 @@ def main():
 
     # sql 子命令组
     p_sql = sub.add_parser("sql", help="指标 SQL 组装", add_help=False)
-    p_sql.add_argument(
-        "sql_args", nargs=argparse.REMAINDER, help="sql 子命令参数"
-    )
+    p_sql.add_argument("sql_args", nargs=argparse.REMAINDER, help="sql 子命令参数")
 
     args, remaining = parser.parse_known_args()
 

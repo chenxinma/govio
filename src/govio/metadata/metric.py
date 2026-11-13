@@ -272,44 +272,43 @@ class MetricLoader:
         )
 
         logger.info(
-            f"成功加载 {len(self._metric_df)} 个指标, "
-            f"{len(self._dimension_df)} 个维度"
+            f"成功加载 {len(self._metric_df)} 个指标, {len(self._dimension_df)} 个维度"
         )
 
     @property
     def Metric(self) -> pd.DataFrame:
         """Metric 节点 DataFrame"""
-        return self._metric_df # pyright:ignore
+        return self._metric_df  # pyright:ignore
 
     @property
     def Dimension(self) -> pd.DataFrame:
         """Dimension 节点 DataFrame"""
-        return self._dimension_df # pyright:ignore
+        return self._dimension_df  # pyright:ignore
 
     @property
     def uses_table_edges(self) -> pd.DataFrame:
         """USES_TABLE 边 DataFrame: Metric -> PhysicalTable"""
-        return self._uses_table_edges # pyright:ignore
+        return self._uses_table_edges  # pyright:ignore
 
     @property
     def refers_column_edges(self) -> pd.DataFrame:
         """REFERS_COLUMN 边 DataFrame: Metric -> Col"""
-        return self._refers_column_edges # pyright:ignore
+        return self._refers_column_edges  # pyright:ignore
 
     @property
     def derived_from_edges(self) -> pd.DataFrame:
         """DERIVED_FROM 边 DataFrame: Metric -> Metric"""
-        return self._derived_from_edges # pyright:ignore
+        return self._derived_from_edges  # pyright:ignore
 
     @property
     def dimension_used_edges(self) -> pd.DataFrame:
         """DIMENSION_USED 边 DataFrame: Metric -> Dimension"""
-        return self._dimension_used_edges # pyright:ignore
+        return self._dimension_used_edges  # pyright:ignore
 
     @property
     def supersedes_edges(self) -> pd.DataFrame:
         """SUPERSEDES 边 DataFrame: Metric -> Metric"""
-        return self._supersedes_edges # pyright:ignore
+        return self._supersedes_edges  # pyright:ignore
 
 
 def load_metrics(

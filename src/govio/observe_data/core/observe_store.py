@@ -150,8 +150,7 @@ class ObserveStore:
 
                     df = pd.read_parquet(file_path)
                     column_info = [
-                        {"name": col, "dtype": str(df[col].dtype)}
-                        for col in df.columns
+                        {"name": col, "dtype": str(df[col].dtype)} for col in df.columns
                     ]
 
             infos.append(

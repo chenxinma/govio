@@ -75,6 +75,7 @@ def _connect(
 # CSV -> schema 解析
 # ---------------------------------------------------------------------------
 
+
 def _node_spec(filepath: Path) -> tuple[str, list[str], pd.DataFrame]:
     """解析节点 CSV：返回 (label, 属性列, df)。
 
@@ -140,6 +141,7 @@ def _drop_all_tables(conn: lb.Connection) -> None:
 # 全量重建
 # ---------------------------------------------------------------------------
 
+
 def import_csv_to_ladybug(
     csv_dir: Path | str,
     db_path: str | PathLike,
@@ -194,10 +196,11 @@ def import_csv_to_ladybug(
 # 增量 upsert
 # ---------------------------------------------------------------------------
 
+
 def _batched_execute(conn: lb.Connection, query: str, rows: list[dict]) -> None:
     """按 _BATCH_SIZE 批量执行 UNWIND $rows 查询。"""
     for start in range(0, len(rows), _BATCH_SIZE):
-        batch = rows[start:start + _BATCH_SIZE]
+        batch = rows[start : start + _BATCH_SIZE]
         conn.execute(query, {"rows": batch})
 
 
@@ -209,9 +212,7 @@ def _node_merge(label: str, prop_cols: list[str]) -> str:
     return f"UNWIND $rows AS row {merge} SET {sets}"
 
 
-def _edge_merge(
-    rel_type: str, src: str, dst: str, prop_cols: list[str]
-) -> str:
+def _edge_merge(rel_type: str, src: str, dst: str, prop_cols: list[str]) -> str:
     base = (
         f"UNWIND $rows AS row "
         f"MATCH (a:{_bt(src)} {{{_bt('id')}: row.{_bt('src')}}}), "

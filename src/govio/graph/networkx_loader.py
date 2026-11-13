@@ -42,7 +42,14 @@ from tqdm import tqdm
 
 
 def load_nodes(csv_dir: str) -> list[dict[str, Any]]:
-    node_files = ["PhysicalTable.csv", "Col.csv", "Datasource.csv", "Standard.csv", "Metric.csv", "Dimension.csv"]
+    node_files = [
+        "PhysicalTable.csv",
+        "Col.csv",
+        "Datasource.csv",
+        "Standard.csv",
+        "Metric.csv",
+        "Dimension.csv",
+    ]
     nodes_list = []
     for filename in node_files:
         filepath = Path(csv_dir) / filename
@@ -63,9 +70,17 @@ def load_nodes(csv_dir: str) -> list[dict[str, Any]]:
 
 
 def load_edges(csv_dir: str) -> pd.DataFrame:
-    edge_files = ["HAS_COLUMN.csv", "OWNS.csv", "COMPLIES_WITH.csv", "RELATES_TO.csv",
-                   "USES_TABLE.csv", "REFERS_COLUMN.csv", "DERIVED_FROM.csv",
-                   "DIMENSION_USED.csv", "SUPERSEDES.csv"]
+    edge_files = [
+        "HAS_COLUMN.csv",
+        "OWNS.csv",
+        "COMPLIES_WITH.csv",
+        "RELATES_TO.csv",
+        "USES_TABLE.csv",
+        "REFERS_COLUMN.csv",
+        "DERIVED_FROM.csv",
+        "DIMENSION_USED.csv",
+        "SUPERSEDES.csv",
+    ]
     edges_list = []
     for filename in edge_files:
         filepath = Path(csv_dir) / filename
@@ -83,10 +98,9 @@ def load_edges(csv_dir: str) -> pd.DataFrame:
         df["edge_type"] = edge_type
         cols = list(df.columns.copy())
         cols.remove("source")
-        cols.remove("target") 
+        cols.remove("target")
         df["attributes"] = df[cols].apply(
-            lambda x: {k: v for k, v in x.items() if pd.notna(v)}, 
-            axis=1
+            lambda x: {k: v for k, v in x.items() if pd.notna(v)}, axis=1
         )
         edges_list.append(df)
     if not edges_list:
@@ -139,4 +153,3 @@ def gml_generate():
         sys.exit()
 
     build_graph(args.csv, os.path.join(args.output, "ontology.gml"))
-

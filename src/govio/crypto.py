@@ -19,9 +19,7 @@ DEFAULT_KEY_PATH = Path.home() / ".govio" / ".key"
 
 # URL 中密码的正则：匹配 scheme://user:password@host 部分
 # 密码可能包含 @，因此使用贪婪匹配到最后一个 @
-_URL_PASSWORD_RE = re.compile(
-    r"^([^:]+://[^:]+:)(.*)(@[^@]+)$"
-)
+_URL_PASSWORD_RE = re.compile(r"^([^:]+://[^:]+:)(.*)(@[^@]+)$")
 
 
 def get_or_create_key(key_path: Path | None = None) -> bytes:

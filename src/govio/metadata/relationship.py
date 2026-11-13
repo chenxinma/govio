@@ -157,8 +157,12 @@ class RelationshipLoader:
             return False, None, None
 
         if full_col_name in col_names.values:
-            matched = self.df_columns[self.df_columns["column"]==full_col_name]
-            ft = matched["full_table_name"].values[0] if "full_table_name" in matched.columns and not matched.empty else None
+            matched = self.df_columns[self.df_columns["column"] == full_col_name]
+            ft = (
+                matched["full_table_name"].values[0]
+                if "full_table_name" in matched.columns and not matched.empty
+                else None
+            )
             return True, column_name, ft
 
         col_names_lower = {str(c).lower(): c for c in col_names.values}
@@ -170,17 +174,21 @@ class RelationshipLoader:
             logger.info(
                 f"{context}: 列名大小写不匹配，'{column_name}' -> '{actual_simple_name}'"
             )
-            matched = self.df_columns[self.df_columns["column"]==actual_col_name]
-            ft = matched["full_table_name"].values[0] if "full_table_name" in matched.columns and not matched.empty else None
+            matched = self.df_columns[self.df_columns["column"] == actual_col_name]
+            ft = (
+                matched["full_table_name"].values[0]
+                if "full_table_name" in matched.columns and not matched.empty
+                else None
+            )
             return True, actual_simple_name, ft
-
 
         logger.warning(f"{context}: 列 '{full_col_name}' 不存在于 Col 数据中，跳过")
         return False, None, None
-    
-    def _get_table_id(self, full_table_name:str)-> int:
-        return self.df_tables[self.df_tables["full_table_name"] == full_table_name].index[0]
 
+    def _get_table_id(self, full_table_name: str) -> int:
+        return self.df_tables[
+            self.df_tables["full_table_name"] == full_table_name
+        ].index[0]
 
     def validate_table_and_columns(self, rel: dict[str, Any], index: int) -> bool:
         """
@@ -219,7 +227,6 @@ class RelationshipLoader:
             return False
         source_id_table = full_table_names.pop() if full_table_names else source_table
         rel["source"]["ID"] = self._get_table_id(source_id_table)
-
 
         normalized_target_cols = []
         full_table_names = set()
@@ -269,7 +276,7 @@ class RelationshipLoader:
         """
         data = self.load_json()
         relationships = data["relationships"]
-        
+
         edge_rows = []
         for idx, rel in enumerate(relationships):
             if not self.validate_relationship(rel, idx):
@@ -280,7 +287,6 @@ class RelationshipLoader:
 
             edge_row = self._convert_to_edge_row(rel)
             edge_rows.append(edge_row)
-        
 
         if not edge_rows:
             logger.warning("没有有效的关系数据")

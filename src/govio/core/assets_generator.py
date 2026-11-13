@@ -91,7 +91,9 @@ class AssetsGenerator:
         if nodes:
             file_path = names_dir / "node_names.md"
             with open(file_path, "w", encoding="utf-8") as f:
-                f.writelines(json.dumps(node, ensure_ascii=False) + "\n" for node in nodes)
+                f.writelines(
+                    json.dumps(node, ensure_ascii=False) + "\n" for node in nodes
+                )
 
     def _generate_names_cypher(self, names_dir: Path) -> None:
         """为 Cypher 后端（FalkorDB / Ladybug）生成名称索引
@@ -124,7 +126,6 @@ class AssetsGenerator:
         格式: {comment}_{datasource_name}.md（无 comment 时为 {datasource_name}.md）
         """
         for comment, datasource_name in datasources:
-
             # 查询该数据源治理归属的所有物理表
             # 注意：变量名不能用 table，TABLE 是 Ladybug 的保留字，会触发解析错误。
             tables_query = """
@@ -219,9 +220,7 @@ class AssetsGenerator:
             RETURN col.column_name AS column_name, col.name AS col_name
             ORDER BY col.order_no
             """
-            cols = self.graph.query(
-                cols_query, {"full_table_name": full_table_name}
-            )
+            cols = self.graph.query(cols_query, {"full_table_name": full_table_name})
 
             for col_row in cols:
                 column_name, col_name = col_row
@@ -258,15 +257,15 @@ class AssetsGenerator:
                 )
                 metrics = [
                     (
-                        row[0], # pyright: ignore
+                        row[0],  # pyright: ignore
                         {
-                            "code": row[0], # pyright: ignore
-                            "name": row[1], # pyright: ignore
-                            "type": row[2], # pyright: ignore
-                            "formula": row[3], # pyright: ignore
-                            "business_definition": row[4], # pyright: ignore
-                            "source_layer": row[5], # pyright: ignore
-                            "unit": row[6], # pyright: ignore
+                            "code": row[0],  # pyright: ignore
+                            "name": row[1],  # pyright: ignore
+                            "type": row[2],  # pyright: ignore
+                            "formula": row[3],  # pyright: ignore
+                            "business_definition": row[4],  # pyright: ignore
+                            "source_layer": row[5],  # pyright: ignore
+                            "unit": row[6],  # pyright: ignore
                         },
                     )
                     for row in result
@@ -278,8 +277,12 @@ class AssetsGenerator:
             return
 
         # 原子指标
-        atomic = [(nid, attrs) for nid, attrs in metrics if attrs.get("type") == "atomic"]
-        derived = [(nid, attrs) for nid, attrs in metrics if attrs.get("type") == "derived"]
+        atomic = [
+            (nid, attrs) for nid, attrs in metrics if attrs.get("type") == "atomic"
+        ]
+        derived = [
+            (nid, attrs) for nid, attrs in metrics if attrs.get("type") == "derived"
+        ]
 
         if atomic:
             lines.append("## 原子指标\n")
