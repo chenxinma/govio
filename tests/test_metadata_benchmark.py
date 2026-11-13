@@ -332,11 +332,28 @@ def test_exec_sql_read_only(csv_dir: Path, tmp_path: Path):
     assert err is not None
 
 
-def test_compose_prompt_contains_materials_and_question():
+def test_compose_prompt_contains_materials_and_question(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """compose_prompt 拼接材料 + 环境说明 + 任务提示词
+
+    材料文档用 tmp 夹具：真实的 GRAPH_MATERIALS 包含
+    skills/govio/assets/schema.md（派生数据，已 gitignore，需 govio-cli meta graph 生成），
+    干净检出（如 CI）上不存在，直读会让本用例 FileNotFoundError。
+    """
+    graph_material = tmp_path / "reference-ladybug.md"
+    graph_material.write_text("# Ladybug 后端参考\n", encoding="utf-8")
+    sqlite_material = tmp_path / "sqlite-schema.md"
+    sqlite_material.write_text("# sqlite schema\n", encoding="utf-8")
+    monkeypatch.setattr(eval_mod, "GRAPH_MATERIALS", [graph_material])
+    monkeypatch.setattr(eval_mod, "SQLITE_MATERIALS", [sqlite_material])
+
     for cond, expect in (("graph", "ladybug"), ("sqlite", "schema")):
         text = eval_mod.compose_prompt(cond, "测试问题 XYZ？")
         assert "测试问题 XYZ？" in text
-        assert expect in text.casefold() or "sqlite" in text.casefold()
+        assert expect in text.casefold()
+        assert "任务提示词：" in text
+        assert eval_mod.ENV_NOTES[cond] in text
 
 
 def test_prompts_json_valid():
