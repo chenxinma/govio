@@ -1,0 +1,66 @@
+name: CI
+
+# 门禁内容：
+#   lint  —— ruff check（规则集固定在 pyproject [tool.ruff.lint]）+ ruff format --check
+#            format 检查是新增门禁：此前只有 ruff check 在把关，格式漂移累积到 51 个文件
+#            （已由 PR #18 一次性对齐），加这道门禁防止再次漂移。
+#   test  —— pytest tests/（真实库集成测试 tests/test_real_*.py 需 GOVIO_REAL_DB=1，默认 skip）
+#
+# 注意：仓库不含 uv.lock（.gitignore 忽略），CI 每次全新解析依赖，因此 pyproject 的依赖
+# 上限是 CI 稳定性的前提（例如 datacompy<1.0：1.x 移除了 datacompy.core，会让
+# core/comparator.py 直接 ImportError）。新增依赖时请一并评估是否需要上限。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: ruff (check + format)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: 安装 uv
+        run: python -m pip install --upgrade uv
+
+      - name: 安装依赖
+        # --default-index 覆盖 pyproject 里的清华镜像：GitHub 托管 runner 走 PyPI 更稳更快
+        run: uv sync --group dev --default-index https://pypi.org/simple
+
+      - name: ruff check
+        run: uv run --no-sync ruff check .
+
+      - name: ruff format --check
+        run: uv run --no-sync ruff format --check .
+
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: 安装 uv
+        run: python -m pip install --upgrade uv
+
+      - name: 安装依赖
+        run: uv sync --group dev --default-index https://pypi.org/simple
+
+      - name: pytest
+        run: uv run --no-sync python -m pytest tests/ -q

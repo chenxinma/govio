@@ -76,6 +76,8 @@ uv run ruff check --fix src/ tests/
 
 Lint 规则集固定在 `pyproject.toml` 的 `[tool.ruff.lint]`（`uvx ruff check` 与 `uv run ruff check` 结果一致）；中文内容、测试断言、错误边界宽捕获等意图性排除见该配置内注释。
 
+CI（`.github/workflows/ci.yml`）在 push 到 `main` 与每个 PR 上跑三道门禁：`ruff check .`、`ruff format --check .`、`pytest tests/`。提交前请在本地跑同样三条命令；`ruff format --check` 不过就先 `uv run ruff format .`（格式化是纯空白/引号/换行调整，不改语义）。
+
 ### Build
 
 ```bash
