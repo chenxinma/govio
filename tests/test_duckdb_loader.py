@@ -1,4 +1,3 @@
-
 import duckdb
 import pytest
 
@@ -99,7 +98,9 @@ def test_duckdb_loader_list_schemas(sample_duckdb):
 
 def test_duckdb_loader_list_schemas_ignores_schemas_arg(sample_duckdb):
     """list_schemas 列出全部可导入 schema，不受构造参数限制。"""
-    assert dict(DuckDBLoader(sample_duckdb, ["nope"]).list_schemas())["test_schema"] == 2
+    assert (
+        dict(DuckDBLoader(sample_duckdb, ["nope"]).list_schemas())["test_schema"] == 2
+    )
 
 
 def test_duckdb_loader_unknown_schema_returns_empty(sample_duckdb):

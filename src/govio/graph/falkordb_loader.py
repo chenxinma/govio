@@ -76,9 +76,7 @@ def import_csv_to_falkordb(
     print(f"\n正在执行: {' '.join(cmd)}")
 
     env = {**os.environ, "PYTHONUTF8": "1"}
-    result = subprocess.run(
-        cmd, capture_output=True, text=True, env=env, check=False
-    )
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env, check=False)
 
     if result.returncode != 0:
         raise RuntimeError(f"falkordb-bulk-insert 失败: {result.stderr}")
@@ -166,7 +164,7 @@ def upsert_csv_to_falkordb(
         print(f"  {filename}: {query}")
         total = 0
         for start in range(0, len(df), _BATCH_SIZE):
-            batch = df.iloc[start:start + _BATCH_SIZE].values.tolist()
+            batch = df.iloc[start : start + _BATCH_SIZE].values.tolist()
             total += _execute_batch(graph, query, batch)
         print(f"    {len(df)} rows, {total} effects")
 
@@ -186,7 +184,7 @@ def upsert_csv_to_falkordb(
         print(f"  {filename}: {query}")
         total = 0
         for start in range(0, len(df), _BATCH_SIZE):
-            batch = df.iloc[start:start + _BATCH_SIZE].values.tolist()
+            batch = df.iloc[start : start + _BATCH_SIZE].values.tolist()
             total += _execute_batch(graph, query, batch)
         print(f"    {len(df)} rows, {total} effects")
 

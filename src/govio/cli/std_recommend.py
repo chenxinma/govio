@@ -31,7 +31,10 @@ def std_recommend(
         sys.exit(1)
 
     if not schemas:
-        print("❌ 需要指定分析范围 schema（来自 Datasource.filter.schemas）", file=sys.stderr)
+        print(
+            "❌ 需要指定分析范围 schema（来自 Datasource.filter.schemas）",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     if not csv_dir.exists():

@@ -8,6 +8,7 @@ Ladybug Python API 要点（实测 ladybug 0.19.0）：
 - QueryResult.get_all() 返回 list[list]（纯数据行，不含表头）。
 - 标识符用反引号包裹（双引号会解析失败）。
 """
+
 from os import PathLike
 from typing import Any
 
@@ -85,8 +86,7 @@ class LadybugGraph:
         """通过数据发现关系的 (src_label, dst_label)。表为空时返回 (None, None)。"""
         try:
             res = self._conn.execute(
-                f"MATCH (a)-[r:{self._bt(rel)}]->(b) "
-                f"RETURN label(a), label(b) LIMIT 1"
+                f"MATCH (a)-[r:{self._bt(rel)}]->(b) RETURN label(a), label(b) LIMIT 1"
             )
             rows = res.get_all()
             if rows:
@@ -105,17 +105,13 @@ class LadybugGraph:
             name = table["name"]
             if table["type"] == "NODE":
                 props, pk = self._node_properties(name)
-                nodes.append(
-                    {"label": name, "primary_key": pk, "properties": props}
-                )
+                nodes.append({"label": name, "primary_key": pk, "properties": props})
             elif table["type"] == "REL":
                 props, _ = self._node_properties(name)
                 src, dst = self._rel_endpoints(name)
                 rels.append({"label": name, "properties": props})
                 if src and dst:
-                    relationships.append(
-                        f"(:{src})-[:{name}]->(:{dst})"
-                    )
+                    relationships.append(f"(:{src})-[:{name}]->(:{dst})")
 
         self._schema = (
             "## Ladybug 图数据库结构:\n"

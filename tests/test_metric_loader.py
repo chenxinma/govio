@@ -12,7 +12,11 @@ from govio.metadata.metric import MetricLoader, load_metrics
 def sample_tables():
     return pd.DataFrame(
         {
-            "full_table_name": ["db.schema.t_bill", "db.schema.t_risk", "db.schema.t_leads"],
+            "full_table_name": [
+                "db.schema.t_bill",
+                "db.schema.t_risk",
+                "db.schema.t_leads",
+            ],
             "name": ["t_bill", "t_risk", "t_leads"],
             "schema": ["schema", "schema", "schema"],
         }
@@ -172,7 +176,9 @@ def test_dimension_used_edges(sample_tables, sample_columns, valid_metric_data):
         path = _write_json(valid_metric_data, tmpdir)
         loader = MetricLoader(path, sample_tables, sample_columns)
 
-        total_dims = sum(len(m.get("dimensions", [])) for m in valid_metric_data["metrics"])
+        total_dims = sum(
+            len(m.get("dimensions", [])) for m in valid_metric_data["metrics"]
+        )
         assert len(loader.dimension_used_edges) == total_dims
         assert "usage_type" in loader.dimension_used_edges.columns
 
@@ -199,9 +205,7 @@ def test_invalid_source_table_raises_error(sample_tables, sample_columns):
                 "unit": "万元",
                 "data_type": "decimal(18,2)",
                 "source_layer": "DWS",
-                "source_tables": [
-                    {"full_table_name": "db.schema.nonexistent_table"}
-                ],
+                "source_tables": [{"full_table_name": "db.schema.nonexistent_table"}],
             }
         ],
     }
@@ -288,9 +292,7 @@ def test_invalid_dimension_ref_raises_error(sample_tables, sample_columns):
                 "unit": "万元",
                 "data_type": "decimal(18,2)",
                 "source_layer": "DWS",
-                "source_tables": [
-                    {"full_table_name": "db.schema.t_bill"}
-                ],
+                "source_tables": [{"full_table_name": "db.schema.t_bill"}],
                 "dimensions": [
                     {"code": "nonexistent_dim", "usage_type": "group"},
                 ],

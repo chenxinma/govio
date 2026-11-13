@@ -41,8 +41,11 @@ KNOWN_METRIC = CaliberMetric(
 def _setup(monkeypatch, metric=KNOWN_METRIC, config=None):
     """打桩：配置 + 图工厂 + 图读取"""
     monkeypatch.setattr(
-        sql_mod, "ConfigManager",
-        lambda: StubConfigManager(config if config is not None else {"graph": {"backend": "networkx"}}),
+        sql_mod,
+        "ConfigManager",
+        lambda: StubConfigManager(
+            config if config is not None else {"graph": {"backend": "networkx"}}
+        ),
     )
     monkeypatch.setattr(
         "govio.core.graph_factory.GraphFactory.create",
@@ -66,11 +69,18 @@ def _run(monkeypatch, argv):
 
 def test_caliber_conflict_result_is_json_on_stdout(monkeypatch, capsys):
     _setup(monkeypatch)
-    _run(monkeypatch, ["caliber", "--sql", "SELECT AVG(price) FROM orders", "--metric", "m_sales"])
+    _run(
+        monkeypatch,
+        ["caliber", "--sql", "SELECT AVG(price) FROM orders", "--metric", "m_sales"],
+    )
     out = capsys.readouterr().out
     payload = json.loads(out.strip().splitlines()[-1])
     assert list(payload.keys()) == ["results"]
-    assert payload["results"][0]["metric"] == {"id": "ME00000001", "code": "m_sales", "name": "销售额"}
+    assert payload["results"][0]["metric"] == {
+        "id": "ME00000001",
+        "code": "m_sales",
+        "name": "销售额",
+    }
     assert payload["results"][0]["status"] == "conflict"
     aspects = {d["aspect"] for d in payload["results"][0]["differences"]}
     assert aspects == {"aggregation", "column"}
@@ -78,7 +88,10 @@ def test_caliber_conflict_result_is_json_on_stdout(monkeypatch, capsys):
 
 def test_caliber_consistent_metric_exits_zero(monkeypatch, capsys):
     _setup(monkeypatch)
-    _run(monkeypatch, ["caliber", "--sql", "SELECT SUM(amount) FROM orders", "--metric", "m_sales"])
+    _run(
+        monkeypatch,
+        ["caliber", "--sql", "SELECT SUM(amount) FROM orders", "--metric", "m_sales"],
+    )
     payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert payload["results"][0]["status"] == "consistent"
 
@@ -117,10 +130,18 @@ def test_caliber_unknown_metric_degrades_to_unknown(monkeypatch, capsys):
 
 def test_caliber_multi_metric_mixed(monkeypatch, capsys):
     _setup(monkeypatch)
-    _run(monkeypatch, [
-        "caliber", "--sql", "SELECT SUM(amount) FROM orders",
-        "--metric", "m_sales", "--metric", "m_nope",
-    ])
+    _run(
+        monkeypatch,
+        [
+            "caliber",
+            "--sql",
+            "SELECT SUM(amount) FROM orders",
+            "--metric",
+            "m_sales",
+            "--metric",
+            "m_nope",
+        ],
+    )
     payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     results = payload["results"]
     assert len(results) == 2
@@ -163,16 +184,17 @@ def test_caliber_missing_metric_exits_one(monkeypatch, capsys):
 def test_caliber_sql_file_not_found_exits_one(monkeypatch, capsys):
     _setup(monkeypatch)
     with pytest.raises(SystemExit) as exc:
-        _run(monkeypatch, ["caliber", "--sql-file", "no-such-file.sql", "--metric", "m_sales"])
+        _run(
+            monkeypatch,
+            ["caliber", "--sql-file", "no-such-file.sql", "--metric", "m_sales"],
+        )
     assert exc.value.code == 1
     assert "文件不存在" in capsys.readouterr().err
 
 
 def test_caliber_missing_config_exits_one(monkeypatch, capsys):
     _setup(monkeypatch, config={})
-    monkeypatch.setattr(
-        sql_mod, "ConfigManager", lambda: StubConfigManager(None)
-    )
+    monkeypatch.setattr(sql_mod, "ConfigManager", lambda: StubConfigManager(None))
     with pytest.raises(SystemExit) as exc:
         _run(monkeypatch, ["caliber", "--sql", "SELECT 1", "--metric", "m_sales"])
     assert exc.value.code == 1
@@ -203,7 +225,10 @@ def test_caliber_no_subcommand_prints_help(monkeypatch, capsys):
 def test_caliber_stdout_is_pure_json(monkeypatch, capsys):
     """stdout 只有一行 JSON（无日志/无 ❌ 前缀），ensure_ascii 转义对控制台编码免疫"""
     _setup(monkeypatch)
-    _run(monkeypatch, ["caliber", "--sql", "SELECT SUM(amount) FROM orders", "--metric", "m_sales"])
+    _run(
+        monkeypatch,
+        ["caliber", "--sql", "SELECT SUM(amount) FROM orders", "--metric", "m_sales"],
+    )
     out = capsys.readouterr().out
     lines = out.strip().splitlines()
     assert len(lines) == 1

@@ -7,12 +7,13 @@ from .datasource import qualify, resolve_datasource
 
 
 class StandardLoader:
-    def __init__(self, db: str, workspace_uuid: str,
-                       datasource_map: dict[str, str] | None = None) -> None:
+    def __init__(
+        self, db: str, workspace_uuid: str, datasource_map: dict[str, str] | None = None
+    ) -> None:
         self.engine = create_engine(db)
         self.workspace_uuid = workspace_uuid
         self.datasource_map = datasource_map
-    
+
     def load_standard_connects(self) -> pd.DataFrame:
         """从数据库加载数据标准关联的元数据列
 
@@ -66,10 +67,9 @@ class StandardLoader:
                     and d2.tenant = 'TDH'
                     and d2.workspace_uuid = '{self.workspace_uuid}'
                 """)
-        df_std_col = pd.read_sql(sql, self.engine, 
-                                 dtype={"size":"int", 
-                                        "precision":"int", 
-                                        "scale":"int"})
+        df_std_col = pd.read_sql(
+            sql, self.engine, dtype={"size": "int", "precision": "int", "scale": "int"}
+        )
         self._qualify_columns(df_std_col)
         return df_std_col
 
@@ -80,7 +80,9 @@ class StandardLoader:
         """
         ftn_list = []
         col_list = []
-        for ftn, col_name in zip(df_std_col["full_table_name"], df_std_col["column_name"], strict=False):
+        for ftn, col_name in zip(
+            df_std_col["full_table_name"], df_std_col["column_name"], strict=False
+        ):
             raw_col = f"{ftn}.{col_name}"
             if self.datasource_map is None:
                 ftn_list.append(ftn)
@@ -137,10 +139,13 @@ class StandardLoader:
                 order by 1,2
                 """)
         df_standards_kv = pd.read_sql(sql, self.engine)
-        return df_standards_kv.pivot(index=["standard_id", "name"], 
-                                            columns="attrbute", 
-                                            values="value") \
-                                    .reset_index().rename(columns={"code": "ref_code_define"})
+        return (
+            df_standards_kv.pivot(
+                index=["standard_id", "name"], columns="attrbute", values="value"
+            )
+            .reset_index()
+            .rename(columns={"code": "ref_code_define"})
+        )
 
     @property
     def Standard(self):

@@ -137,7 +137,9 @@ def test_query_connection_failure_exits_one(tmp_path, monkeypatch, capsys):
     assert "❌" not in captured.out
 
 
-@pytest.mark.parametrize("query_text", [None, "", "   "], ids=["none", "empty", "blank"])
+@pytest.mark.parametrize(
+    "query_text", [None, "", "   "], ids=["none", "empty", "blank"]
+)
 def test_query_missing_code_exits_one(tmp_path, monkeypatch, capsys, query_text):
     """查询语句缺失退出码 1。"""
     _setup_networkx_query(monkeypatch, tmp_path)
@@ -455,7 +457,9 @@ def test_observe_chart_empty_result_exits_zero(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     _seed_dataframe(
         "t1",
-        pd.DataFrame({"x": pd.Series([], dtype="int64"), "y": pd.Series([], dtype="int64")}),
+        pd.DataFrame(
+            {"x": pd.Series([], dtype="int64"), "y": pd.Series([], dtype="int64")}
+        ),
     )
 
     result = observe_mod.cmd_chart({}, "t1", "bar", "x", "y", "out.png")
@@ -516,9 +520,7 @@ def test_observe_show_negative_rows_exits_one(tmp_path, monkeypatch, capsys):
 def test_observe_show_empty_result_exits_zero(tmp_path, monkeypatch, capsys):
     """0 行 DataFrame（空结果）不是失败：success:true sample:[]，退出码 0。"""
     monkeypatch.chdir(tmp_path)
-    _seed_dataframe(
-        "t1", pd.DataFrame({"x": pd.Series([], dtype="int64")})
-    )
+    _seed_dataframe("t1", pd.DataFrame({"x": pd.Series([], dtype="int64")}))
 
     result = observe_mod.cmd_show({}, "t1", 10)
 
@@ -691,7 +693,9 @@ def _info_args(**overrides) -> argparse.Namespace:
 def _stub_db_manager(datasources: dict[str, str]):
     """打桩 get_db_manager：仅提供 list_datasources 所需的 _datasources"""
     return SimpleNamespace(
-        _datasources={name: SimpleNamespace(url=url) for name, url in datasources.items()}
+        _datasources={
+            name: SimpleNamespace(url=url) for name, url in datasources.items()
+        }
     )
 
 

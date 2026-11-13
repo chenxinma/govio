@@ -30,7 +30,8 @@ from sqlparse import tokens as T
 _COMMENT_RE = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
 # SQL 侧时间窗：`INTERVAL '7' DAY`、`INTERVAL 30 DAY`、`DATE_SUB(..., 7 DAY)` 等
 _SQL_WINDOW_RE = re.compile(
-    r"\b(\d+)\s*'?\s*(DAY|DAYS|WEEK|WEEKS|MONTH|MONTHS|YEAR|YEARS|HOUR|HOURS)\b", re.IGNORECASE
+    r"\b(\d+)\s*'?\s*(DAY|DAYS|WEEK|WEEKS|MONTH|MONTHS|YEAR|YEARS|HOUR|HOURS)\b",
+    re.IGNORECASE,
 )
 # 指标定义侧时间窗：「近30天」「最近7日」「过去3个月」「近1年」等
 _DEF_WINDOW_RE = re.compile(r"(?:近|最近|过去|向前)\s*(\d+)\s*(天|日|周|个月|月|年)")
@@ -62,11 +63,22 @@ _PROSE_AGG_HINTS: tuple[tuple[str, str], ...] = (
 _AGG_FUNCS = frozenset({"COUNT", "SUM", "AVG", "MIN", "MAX"})
 
 _UNIT_DAYS = {
-    "HOUR": 1 / 24, "HOURS": 1 / 24,
-    "DAY": 1, "DAYS": 1, "天": 1, "日": 1,
-    "WEEK": 7, "WEEKS": 7, "周": 7,
-    "MONTH": 30, "MONTHS": 30, "月": 30, "个月": 30,
-    "YEAR": 365, "YEARS": 365, "年": 365,
+    "HOUR": 1 / 24,
+    "HOURS": 1 / 24,
+    "DAY": 1,
+    "DAYS": 1,
+    "天": 1,
+    "日": 1,
+    "WEEK": 7,
+    "WEEKS": 7,
+    "周": 7,
+    "MONTH": 30,
+    "MONTHS": 30,
+    "月": 30,
+    "个月": 30,
+    "YEAR": 365,
+    "YEARS": 365,
+    "年": 365,
 }
 
 
@@ -110,7 +122,9 @@ def _agg_from_function(func: S.Function) -> AggCall | None:
         if isinstance(child, S.Parenthesis):
             inner = str(child)[1:-1].strip()
             distinct = bool(re.match(r"^\s*DISTINCT\s+", inner, re.IGNORECASE))
-            arg = re.sub(r"^\s*DISTINCT\s+", "", inner, count=1, flags=re.IGNORECASE).strip()
+            arg = re.sub(
+                r"^\s*DISTINCT\s+", "", inner, count=1, flags=re.IGNORECASE
+            ).strip()
             return AggCall(func=name, distinct=distinct, arg=arg)
     return AggCall(func=name, distinct=False, arg="")
 
@@ -277,7 +291,13 @@ def _metric_summary(metric: CaliberMetric) -> dict[str, Any]:
 
 def _definition_text(metric: CaliberMetric) -> str:
     return " ".join(
-        x for x in (metric.business_definition, metric.statistical_scope, metric.time_scope) if x
+        x
+        for x in (
+            metric.business_definition,
+            metric.statistical_scope,
+            metric.time_scope,
+        )
+        if x
     )
 
 
@@ -289,7 +309,9 @@ def _expected_aggs(metric: CaliberMetric) -> tuple[list[AggCall], list[str]]:
         if not text:
             continue
         for m in _EXPLICIT_AGG_RE.finditer(text):
-            call = AggCall(func=m.group(1).upper(), distinct=bool(m.group(2)), arg=m.group(3))
+            call = AggCall(
+                func=m.group(1).upper(), distinct=bool(m.group(2)), arg=m.group(3)
+            )
             if call not in explicit:
                 explicit.append(call)
     prose = sorted(
@@ -316,14 +338,26 @@ def _exclusion_terms(metric: CaliberMetric) -> list[str]:
     return terms
 
 
-def _diff(aspect: str, expected: str, found: str, detail: str | None = None) -> dict[str, Any]:
+def _diff(
+    aspect: str, expected: str, found: str, detail: str | None = None
+) -> dict[str, Any]:
     out: dict[str, Any] = {"aspect": aspect, "expected": expected, "found": found}
     if detail:
         out["detail"] = detail
     return out
 
 
-_NEGATION_MARKERS = ("NOT", "!=", "<>", "IS NULL", "= 0", "= FALSE", "= '否'", 'NOT LIKE', 'NOT IN')
+_NEGATION_MARKERS = (
+    "NOT",
+    "!=",
+    "<>",
+    "IS NULL",
+    "= 0",
+    "= FALSE",
+    "= '否'",
+    "NOT LIKE",
+    "NOT IN",
+)
 
 
 def _agg_signature(call: AggCall) -> tuple[str, bool]:
@@ -400,42 +434,88 @@ def _compare_aggregation(
        因此 `SUM(f.amount)`、`ROUND(SUM(amount),2)`、`sum(amount)` 视为同一口径。
     """
     explicit, prose = _expected_aggs(metric)
-    found_desc = ", ".join(
-        sorted({f"{c.func}({'DISTINCT ' if c.distinct else ''}{c.arg})" for c in facts.aggs})
-    ) or "无聚合函数"
+    found_desc = (
+        ", ".join(
+            sorted(
+                {
+                    f"{c.func}({'DISTINCT ' if c.distinct else ''}{c.arg})"
+                    for c in facts.aggs
+                }
+            )
+        )
+        or "无聚合函数"
+    )
     expected_desc = ", ".join(
-        sorted({f"{c.func}({'DISTINCT ' if c.distinct else ''}{c.arg})" for c in explicit})
+        sorted(
+            {f"{c.func}({'DISTINCT ' if c.distinct else ''}{c.arg})" for c in explicit}
+        )
     ) or ", ".join(prose)
 
     if explicit:
         diffs: list[tuple[dict[str, Any], bool]] = []
         for expected in explicit:
-            same_sig = [a for a in facts.aggs if _agg_signature(a) == _agg_signature(expected)]
+            same_sig = [
+                a for a in facts.aggs if _agg_signature(a) == _agg_signature(expected)
+            ]
             if not same_sig:
-                diffs.append((_diff("aggregation", expected_desc, found_desc,
-                                    "SQL 聚合结构与 formula 不一致"), True))
+                diffs.append(
+                    (
+                        _diff(
+                            "aggregation",
+                            expected_desc,
+                            found_desc,
+                            "SQL 聚合结构与 formula 不一致",
+                        ),
+                        True,
+                    )
+                )
                 continue
             if expected.arg and not any(
-                _canonical_expr(a.arg) == _canonical_expr(expected.arg) for a in same_sig
+                _canonical_expr(a.arg) == _canonical_expr(expected.arg)
+                for a in same_sig
             ):
                 # COUNT(*) 的计数对象不可确认（可能是同一列）→ 存疑，不误报
                 if any(a.arg.strip() == "*" for a in same_sig):
-                    diffs.append((_diff(
-                        "aggregation", expected_desc, found_desc,
-                        f"SQL 使用 COUNT(*)，计数对象无法确认（期望 {expected.func}({expected.arg})）",
-                    ), False))
+                    diffs.append(
+                        (
+                            _diff(
+                                "aggregation",
+                                expected_desc,
+                                found_desc,
+                                f"SQL 使用 COUNT(*)，计数对象无法确认（期望 {expected.func}({expected.arg})）",
+                            ),
+                            False,
+                        )
+                    )
                 else:
-                    diffs.append((_diff(
-                        "aggregation", expected_desc, found_desc,
-                        f"聚合参数与 formula 不一致（期望 {expected.func}({expected.arg})）",
-                    ), True))
+                    diffs.append(
+                        (
+                            _diff(
+                                "aggregation",
+                                expected_desc,
+                                found_desc,
+                                f"聚合参数与 formula 不一致（期望 {expected.func}({expected.arg})）",
+                            ),
+                            True,
+                        )
+                    )
         return diffs
     found_sigs = {_agg_signature(c) for c in facts.aggs}
     if prose and any(
         (f, False) not in found_sigs and (f, True) not in found_sigs for f in prose
     ):
         # 中文语义提示只是弱证据：不一致只给 unknown
-        return [(_diff("aggregation", expected_desc, found_desc, "定义中的聚合语义未能在 SQL 中确认"), False)]
+        return [
+            (
+                _diff(
+                    "aggregation",
+                    expected_desc,
+                    found_desc,
+                    "定义中的聚合语义未能在 SQL 中确认",
+                ),
+                False,
+            )
+        ]
     return []
 
 
@@ -447,14 +527,32 @@ def _compare_filter(
     for term in _exclusion_terms(metric):
         hit_segments = [s for s in facts.where_segments if term.lower() in s.lower()]
         if not hit_segments:
-            diffs.append((_diff("filter", f"剔除 {term}", "SQL WHERE 未见该限定",
-                                "无法确认 SQL 是否实现了该剔除条件"), False))
+            diffs.append(
+                (
+                    _diff(
+                        "filter",
+                        f"剔除 {term}",
+                        "SQL WHERE 未见该限定",
+                        "无法确认 SQL 是否实现了该剔除条件",
+                    ),
+                    False,
+                )
+            )
         elif not any(
             any(marker in seg.upper() or marker in seg for marker in _NEGATION_MARKERS)
             for seg in hit_segments
         ):
-            diffs.append((_diff("filter", f"剔除 {term}", "SQL WHERE 提及该词但未见否定算子",
-                                "无法确认是否为剔除条件"), False))
+            diffs.append(
+                (
+                    _diff(
+                        "filter",
+                        f"剔除 {term}",
+                        "SQL WHERE 提及该词但未见否定算子",
+                        "无法确认是否为剔除条件",
+                    ),
+                    False,
+                )
+            )
     return diffs
 
 
@@ -470,12 +568,30 @@ def _compare_time_scope(
         return []
     expected_desc = f"时间窗 {sorted(expected)} 天"
     if not facts.window_days:
-        return [(_diff("time_scope", expected_desc, "SQL 未见明确时间窗限定",
-                       "SQL 可能由参数化条件实现时间范围"), False)]
+        return [
+            (
+                _diff(
+                    "time_scope",
+                    expected_desc,
+                    "SQL 未见明确时间窗限定",
+                    "SQL 可能由参数化条件实现时间范围",
+                ),
+                False,
+            )
+        ]
     if expected & facts.window_days:
         return []
-    return [(_diff("time_scope", expected_desc, f"时间窗 {sorted(facts.window_days)} 天",
-                   "SQL 时间窗与指标定义不一致"), True)]
+    return [
+        (
+            _diff(
+                "time_scope",
+                expected_desc,
+                f"时间窗 {sorted(facts.window_days)} 天",
+                "SQL 时间窗与指标定义不一致",
+            ),
+            True,
+        )
+    ]
 
 
 def _compare_columns(
@@ -504,7 +620,14 @@ def _compare_columns(
     found_desc = ", ".join(sorted(facts.referenced_columns)) or "未解析出引用列"
 
     if not facts.referenced_columns:
-        return [(_diff("column", expected_desc, found_desc, "SQL 未解析出引用列，无法比对"), False)]
+        return [
+            (
+                _diff(
+                    "column", expected_desc, found_desc, "SQL 未解析出引用列，无法比对"
+                ),
+                False,
+            )
+        ]
 
     diffs: list[tuple[dict[str, Any], bool]] = []
     # 星号展开（SELECT *）与 COUNT(*) 都会让「计量列是否真的没用到」不可确认：
@@ -514,12 +637,34 @@ def _compare_columns(
         if col.column_name.lower() in facts.referenced_columns:
             continue
         if not ambiguous_expansion:
-            diffs.append((_diff("column", expected_desc, found_desc,
-                                f"计量列 {col.column_name} 未在 SQL 中引用"), True))
+            diffs.append(
+                (
+                    _diff(
+                        "column",
+                        expected_desc,
+                        found_desc,
+                        f"计量列 {col.column_name} 未在 SQL 中引用",
+                    ),
+                    True,
+                )
+            )
         else:
-            reason = "SQL 含 * 展开无法确认" if facts.has_star else "SQL 含 COUNT(*) 计数对象无法确认"
-            diffs.append((_diff("column", expected_desc, found_desc,
-                                f"计量列 {col.column_name} 未显式引用，{reason}"), False))
+            reason = (
+                "SQL 含 * 展开无法确认"
+                if facts.has_star
+                else "SQL 含 COUNT(*) 计数对象无法确认"
+            )
+            diffs.append(
+                (
+                    _diff(
+                        "column",
+                        expected_desc,
+                        found_desc,
+                        f"计量列 {col.column_name} 未显式引用，{reason}",
+                    ),
+                    False,
+                )
+            )
     return diffs
 
 
@@ -533,7 +678,14 @@ def compare_metric(metric: CaliberMetric, facts: SqlFacts) -> dict[str, Any]:
         return {
             "metric": _metric_summary(metric),
             "status": "unknown",
-            "differences": [_diff("sql", "可解析的 SQL", "无法解析 SQL 结构", "SQL 文本未解析出可比对结构")],
+            "differences": [
+                _diff(
+                    "sql",
+                    "可解析的 SQL",
+                    "无法解析 SQL 结构",
+                    "SQL 文本未解析出可比对结构",
+                )
+            ],
         }
 
     verdicts = (
@@ -593,8 +745,15 @@ def _read_metric_networkx(graph: Any, ref: str) -> CaliberMetric | None:
             if edata.get("edge_type") != "REFERS_COLUMN":
                 continue
             v_attrs = g.nodes[v]
-            name = v_attrs.get("column_name") or str(v_attrs.get("column", "")).rsplit(".", 1)[-1]
-            columns.append(MetricColumn(column_name=name or str(v), role=str(edata.get("role") or "")))
+            name = (
+                v_attrs.get("column_name")
+                or str(v_attrs.get("column", "")).rsplit(".", 1)[-1]
+            )
+            columns.append(
+                MetricColumn(
+                    column_name=name or str(v), role=str(edata.get("role") or "")
+                )
+            )
         return _metric_from_attrs(str(node_key), attrs, columns)
     return None
 

@@ -14,7 +14,9 @@ from govio.graph.ladybug_loader import (
 )
 
 
-def _write_csvs(csv_dir, tables=None, cols=None, datasources=None, has_column=None, owns=None):
+def _write_csvs(
+    csv_dir, tables=None, cols=None, datasources=None, has_column=None, owns=None
+):
     """按 FalkorDB 批量导入约定写入节点/边 CSV。"""
     csv_dir = Path(csv_dir)
     csv_dir.mkdir(parents=True, exist_ok=True)

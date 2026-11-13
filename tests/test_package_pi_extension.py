@@ -16,7 +16,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "package_pi_extension.py"
 
 # 与 design.md §1.1 一致：6 个 skill 直接位于 skills 根下（测试侧硬编码，独立于脚本常量）
-EXPECTED_SKILLS = ("govio", "govio-eda", "govio-meta", "govio-observe", "govio-query", "govio-reconcile")
+EXPECTED_SKILLS = (
+    "govio",
+    "govio-eda",
+    "govio-meta",
+    "govio-observe",
+    "govio-query",
+    "govio-reconcile",
+)
 
 _spec = importlib.util.spec_from_file_location("package_pi_extension", SCRIPT_PATH)
 assert _spec is not None and _spec.loader is not None
@@ -33,7 +40,10 @@ def _write_skill(skills_root: Path, name: str) -> None:
     """
     skill_dir = skills_root / name
     skill_dir.mkdir(parents=True, exist_ok=True)
-    (skill_dir / "SKILL.md").write_text(f"---\nname: {name}\ndescription: 测试 skill\n---\n\n# {name}\n", encoding="utf-8")
+    (skill_dir / "SKILL.md").write_text(
+        f"---\nname: {name}\ndescription: 测试 skill\n---\n\n# {name}\n",
+        encoding="utf-8",
+    )
 
 
 def _build_fake_repo(repo: Path) -> None:
@@ -43,14 +53,18 @@ def _build_fake_repo(repo: Path) -> None:
         repo: 假仓库根目录
     """
     repo.mkdir(parents=True, exist_ok=True)
-    (repo / "pyproject.toml").write_text('[project]\nname = "govio"\nversion = "9.9.9"\n', encoding="utf-8")
+    (repo / "pyproject.toml").write_text(
+        '[project]\nname = "govio"\nversion = "9.9.9"\n', encoding="utf-8"
+    )
 
     skills_root = repo / "skills"
     for name in EXPECTED_SKILLS:
         _write_skill(skills_root, name)
     # 应排除：govio/assets 派生数据、__pycache__、.pyc、.DS_Store
     (skills_root / "govio" / "assets").mkdir()
-    (skills_root / "govio" / "assets" / "generated.json").write_text("{}", encoding="utf-8")
+    (skills_root / "govio" / "assets" / "generated.json").write_text(
+        "{}", encoding="utf-8"
+    )
     (skills_root / "govio-eda" / "__pycache__").mkdir()
     (skills_root / "govio-eda" / "__pycache__" / "cache.pyc").write_bytes(b"\x00")
     (skills_root / "govio-meta" / "junk.pyc").write_bytes(b"\x00")
@@ -58,7 +72,9 @@ def _build_fake_repo(repo: Path) -> None:
     # 应保留：普通文件与非 govio skill 自带的 assets 资源
     (skills_root / "govio" / "eval.md").write_text("# eval\n", encoding="utf-8")
     (skills_root / "govio-observe" / "assets").mkdir()
-    (skills_root / "govio-observe" / "assets" / "keep.json").write_text("{}", encoding="utf-8")
+    (skills_root / "govio-observe" / "assets" / "keep.json").write_text(
+        "{}", encoding="utf-8"
+    )
 
     packaging_dir = repo / "packaging" / "pi"
     (packaging_dir / "extensions").mkdir(parents=True)
@@ -67,7 +83,10 @@ def _build_fake_repo(repo: Path) -> None:
             {
                 "name": "govio-tools",
                 "version": "0.0.0",
-                "pi": {"extensions": ["extensions/govio-tools.ts"], "skills": ["skills"]},
+                "pi": {
+                    "extensions": ["extensions/govio-tools.ts"],
+                    "skills": ["skills"],
+                },
             },
             ensure_ascii=False,
             indent=2,
@@ -76,7 +95,9 @@ def _build_fake_repo(repo: Path) -> None:
         encoding="utf-8",
     )
     (packaging_dir / "README.md").write_text("# govio-tools\n", encoding="utf-8")
-    (packaging_dir / "extensions" / "govio-tools.ts").write_text("// stub\n", encoding="utf-8")
+    (packaging_dir / "extensions" / "govio-tools.ts").write_text(
+        "// stub\n", encoding="utf-8"
+    )
 
 
 @pytest.fixture
@@ -93,9 +114,13 @@ def fake_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     repo = tmp_path / "repo"
     _build_fake_repo(repo)
     monkeypatch.setattr(package_pi_extension, "ROOT", repo)
-    monkeypatch.setattr(package_pi_extension, "PACKAGING_DIR", repo / "packaging" / "pi")
+    monkeypatch.setattr(
+        package_pi_extension, "PACKAGING_DIR", repo / "packaging" / "pi"
+    )
     monkeypatch.setattr(package_pi_extension, "SKILLS_DIR", repo / "skills")
-    monkeypatch.setattr(package_pi_extension, "SKILLS_TARGET", repo / "packaging" / "pi" / "skills")
+    monkeypatch.setattr(
+        package_pi_extension, "SKILLS_TARGET", repo / "packaging" / "pi" / "skills"
+    )
     return repo
 
 
@@ -129,7 +154,9 @@ def _snapshot_tree(root: Path) -> dict[str, str]:
     }
 
 
-def test_version_injected_from_pyproject(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_version_injected_from_pyproject(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """默认版本号取 pyproject.toml 的 project.version 并注入产物 package.json"""
     assert _run_main(monkeypatch) == 0
 
@@ -147,16 +174,22 @@ def test_version_cli_override(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) 
     assert data["version"] == "1.2.3"
 
 
-def test_illegal_version_rejected(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_illegal_version_rejected(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """非法版本号（含空格与特殊字符）被打包脚本拒绝，不产出目录"""
     assert _run_main(monkeypatch, "--version", "bad version!") == 1
 
     assert not (fake_repo / "dist").exists()
 
 
-def test_missing_pyproject_version_rejected(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_pyproject_version_rejected(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """pyproject.toml 缺少 project.version 且未指定 --version 时退出码为 1"""
-    (fake_repo / "pyproject.toml").write_text('[project]\nname = "govio"\n', encoding="utf-8")
+    (fake_repo / "pyproject.toml").write_text(
+        '[project]\nname = "govio"\n', encoding="utf-8"
+    )
 
     assert _run_main(monkeypatch) == 1
 
@@ -177,7 +210,9 @@ def test_exclusion_rules(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> No
         assert (skills_root / "govio-observe" / "assets" / "keep.json").is_file()
 
 
-def test_repeat_run_idempotent(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_repeat_run_idempotent(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """重复执行：产物与 skills 副本逐文件一致，陈旧文件被清理重建"""
     assert _run_main(monkeypatch) == 0
     out_dir = fake_repo / "dist" / "govio-pi-9.9.9"
@@ -194,7 +229,9 @@ def test_repeat_run_idempotent(fake_repo: Path, monkeypatch: pytest.MonkeyPatch)
     assert _snapshot_tree(skills_copy) == first_skills_copy
 
 
-def test_verify_artifact_failure_paths(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verify_artifact_failure_paths(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """产物自检：篡改产物后各类结构问题均被报告"""
     assert _run_main(monkeypatch) == 0
     out_dir = fake_repo / "dist" / "govio-pi-9.9.9"
@@ -222,9 +259,13 @@ def test_verify_artifact_failure_paths(fake_repo: Path, monkeypatch: pytest.Monk
     assert "产物含缓存文件" in joined
 
 
-def test_self_check_failure_returns_nonzero(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_self_check_failure_returns_nonzero(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """端到端自检失败：SKILL.md frontmatter name 与目录名不一致时 main() 返回 1"""
     skill_md = fake_repo / "skills" / "govio-query" / "SKILL.md"
-    skill_md.write_text("---\nname: wrong-name\n---\n\n# govio-query\n", encoding="utf-8")
+    skill_md.write_text(
+        "---\nname: wrong-name\n---\n\n# govio-query\n", encoding="utf-8"
+    )
 
     assert _run_main(monkeypatch) == 1

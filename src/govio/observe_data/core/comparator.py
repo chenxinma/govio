@@ -35,9 +35,7 @@ class TableComparator:
         """比对数据"""
         compare = Compare(df1=source, df2=target, join_columns=join_columns)
 
-        return {
-            "report": compare.report()
-        }
+        return {"report": compare.report()}
 
     def compare(
         self, source: pd.DataFrame, target: pd.DataFrame, join_columns: list[str]

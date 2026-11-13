@@ -115,6 +115,7 @@ def _stub_config(monkeypatch, tmp_path, extra: dict | None = None):
     }
     if extra:
         config.update(extra)
+
     # 配置读取分散在两个子模块：cmd_import_schema 在 commands，图/assets 装载在 graph_ops
     def _stub_config_manager():
         return StubConfigManager(config)
@@ -243,9 +244,7 @@ def test_report_written_to_output_dir_by_default(
     assert "✓ 校验报告已写入" in captured
 
 
-def test_report_override_path(
-    duck_db, rel_file, metric_file, tmp_path, monkeypatch
-):
+def test_report_override_path(duck_db, rel_file, metric_file, tmp_path, monkeypatch):
     out, assets = tmp_path / "out", tmp_path / "assets"
     _stub_config(monkeypatch, tmp_path)
     custom = tmp_path / "custom-report.json"
@@ -268,7 +267,10 @@ def test_bad_input_writes_no_partial_report(tmp_path, monkeypatch, capsys):
     with pytest.raises(SystemExit) as exc:
         cmd_graph(
             argparse.Namespace(
-                output=str(out), mode="update", assets_dir=str(assets), report=str(custom)
+                output=str(out),
+                mode="update",
+                assets_dir=str(assets),
+                report=str(custom),
             )
         )
 

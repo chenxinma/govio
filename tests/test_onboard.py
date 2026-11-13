@@ -95,7 +95,9 @@ def test_onboard_networkx_workflow(monkeypatch, tmp_path):
         # text for gml path
         mock_q.text.return_value.ask.return_value = str(gml_path)
         # prompt_datasource_config -> None (skip)
-        monkeypatch.setattr(onboard_module, "prompt_datasource_config", lambda *a, **kw: None)
+        monkeypatch.setattr(
+            onboard_module, "prompt_datasource_config", lambda *a, **kw: None
+        )
 
         onboard_module.onboard()
 
@@ -127,7 +129,9 @@ def test_onboard_falkordb_workflow(monkeypatch, tmp_path):
         # text inputs: host, port, graph_name
         mock_q.text.return_value.ask.side_effect = ["localhost", "6379", "test_graph"]
         # prompt_datasource_config -> None (skip)
-        monkeypatch.setattr(onboard_module, "prompt_datasource_config", lambda *a, **kw: None)
+        monkeypatch.setattr(
+            onboard_module, "prompt_datasource_config", lambda *a, **kw: None
+        )
 
         onboard_module.onboard()
 
@@ -163,7 +167,9 @@ def test_onboard_skip_backend_when_existing(monkeypatch, tmp_path):
         # confirm: skip backend, only datasource
         mock_q.confirm.return_value.ask.return_value = True
         # prompt_datasource_config -> None (skip)
-        monkeypatch.setattr(onboard_module, "prompt_datasource_config", lambda *a, **kw: None)
+        monkeypatch.setattr(
+            onboard_module, "prompt_datasource_config", lambda *a, **kw: None
+        )
 
         onboard_module.onboard()
 
@@ -197,7 +203,12 @@ class TestPromptConnectArgs:
         from govio.cli.onboard import prompt_connect_args
 
         with patch("govio.cli.onboard.questionary") as mock_q:
-            mock_q.text.return_value.ask.side_effect = ["ssl=true", "timeout=30", "name=test", ""]
+            mock_q.text.return_value.ask.side_effect = [
+                "ssl=true",
+                "timeout=30",
+                "name=test",
+                "",
+            ]
             result = prompt_connect_args()
             assert result == {"ssl": True, "timeout": 30, "name": "test"}
 
@@ -254,9 +265,7 @@ class TestCliDatasource:
         monkeypatch.setattr(
             onboard_module, "ConfigManager", lambda: ConfigManager(config_path)
         )
-        monkeypatch.setattr(
-            onboard_module, "encrypt_value", lambda p: f"enc:{p}"
-        )
+        monkeypatch.setattr(onboard_module, "encrypt_value", lambda p: f"enc:{p}")
         return ConfigManager(config_path)
 
     def test_add_datasource_basic(self, cm):
@@ -273,13 +282,18 @@ class TestCliDatasource:
         assert entry["connect_args"] == {"charset": "utf8mb4"}
 
         saved = cm.load()
-        assert saved["datasources"]["prod"]["url"] == "mysql+pymysql://user:***@host:3306/db"
+        assert (
+            saved["datasources"]["prod"]["url"]
+            == "mysql+pymysql://user:***@host:3306/db"
+        )
 
     def test_add_datasource_keeps_existing_graph(self, cm):
         """已有图后端配置时添加数据源不会破坏原配置"""
         from govio.cli.onboard import add_datasource
 
-        cm.save({"graph": {"backend": "networkx", "networkx": {"gml_path": "/tmp/x.gml"}}})
+        cm.save(
+            {"graph": {"backend": "networkx", "networkx": {"gml_path": "/tmp/x.gml"}}}
+        )
         add_datasource("ds1", "duckdb:///tmp/data.duckdb")
 
         saved = cm.load()
@@ -319,9 +333,7 @@ class TestCliDatasource:
         with pytest.raises(ValueError, match="已存在"):
             add_datasource("prod", "mysql+pymysql://u:p2@h2/db")
 
-        add_datasource(
-            "prod", "mysql+pymysql://u:p2@h2/db", overwrite=True
-        )
+        add_datasource("prod", "mysql+pymysql://u:p2@h2/db", overwrite=True)
         assert cm.load()["datasources"]["prod"]["url"] == "mysql+pymysql://u:***@h2/db"
 
     def test_remove_datasource(self, cm):
@@ -343,7 +355,9 @@ class TestCliDatasource:
         """命令行连接参数解析与类型转换"""
         from govio.cli.onboard import parse_cli_connect_args
 
-        result = parse_cli_connect_args(["ssl=true", "timeout=30", "ratio=0.5", "name=x"])
+        result = parse_cli_connect_args(
+            ["ssl=true", "timeout=30", "ratio=0.5", "name=x"]
+        )
         assert result == {"ssl": True, "timeout": 30, "ratio": 0.5, "name": "x"}
 
         assert parse_cli_connect_args(None) == {}

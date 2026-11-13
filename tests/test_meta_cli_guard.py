@@ -6,6 +6,7 @@
 3. 导出结果为空时直接失败，不写任何 CSV，并提示源库可用 schema
 4. assets 输出路径以绝对路径打印，提示用户自行合并
 """
+
 import argparse
 from pathlib import Path
 from unittest.mock import patch
@@ -30,8 +31,14 @@ def duck_db(tmp_path):
 
 def _args(**kw) -> argparse.Namespace:
     base = {
-        "source": "duckdb", "db": None, "schemas": None, "datasource": None,
-        "datasources_file": None, "kundb": None, "workspace_uuid": None, "output": None,
+        "source": "duckdb",
+        "db": None,
+        "schemas": None,
+        "datasource": None,
+        "datasources_file": None,
+        "kundb": None,
+        "workspace_uuid": None,
+        "output": None,
     }
     base.update(kw)
     return argparse.Namespace(**base)
@@ -40,6 +47,7 @@ def _args(**kw) -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 # --schemas / --datasource 必填
 # ---------------------------------------------------------------------------
+
 
 def test_cmd_meta_requires_schemas(duck_db, tmp_path, capsys):
     """DuckDB 模式省略 --schemas 时报错退出，不再静默导出 0 张表。"""
@@ -60,10 +68,14 @@ def test_cmd_meta_requires_datasource(duck_db, tmp_path, capsys):
 def test_cmd_meta_tds_requires_datasources_file(tmp_path, capsys):
     """TDS 模式省略 --datasources-file 时报错退出。"""
     with pytest.raises(SystemExit) as exc:
-        cmd_meta(_args(
-            source="tds", kundb="mysql://x", workspace_uuid="ws",
-            output=str(tmp_path / "out"),
-        ))
+        cmd_meta(
+            _args(
+                source="tds",
+                kundb="mysql://x",
+                workspace_uuid="ws",
+                output=str(tmp_path / "out"),
+            )
+        )
     assert exc.value.code == 1
     assert "--datasources-file" in capsys.readouterr().err
 
@@ -71,19 +83,28 @@ def test_cmd_meta_tds_requires_datasources_file(tmp_path, capsys):
 def test_cmd_meta_schemas_blank_only(duck_db, tmp_path, capsys):
     """--schemas 仅含逗号/空白等同于未指定。"""
     with pytest.raises(SystemExit):
-        cmd_meta(_args(
-            db=duck_db, datasource="test", schemas=" , ",
-            output=str(tmp_path / "out"),
-        ))
+        cmd_meta(
+            _args(
+                db=duck_db,
+                datasource="test",
+                schemas=" , ",
+                output=str(tmp_path / "out"),
+            )
+        )
     assert "--schemas" in capsys.readouterr().err
 
 
 def test_cmd_meta_strips_schema_whitespace(duck_db, tmp_path):
     """schema 名两侧空白被清理后正常导出。"""
     out = tmp_path / "out"
-    cmd_meta(_args(
-        db=duck_db, datasource="test", schemas=" main ", output=str(out),
-    ))
+    cmd_meta(
+        _args(
+            db=duck_db,
+            datasource="test",
+            schemas=" main ",
+            output=str(out),
+        )
+    )
     assert (out / "PhysicalTable.csv").exists()
     assert (out / "Datasource.csv").exists()
     assert (out / "OWNS.csv").exists()
@@ -93,11 +114,15 @@ def test_cmd_meta_strips_schema_whitespace(duck_db, tmp_path):
 # 空结果守卫
 # ---------------------------------------------------------------------------
 
+
 def test_step_meta_export_empty_result_writes_no_csv(duck_db, tmp_path, capsys):
     """schema 不存在时返回 None，不写 CSV，并提示可用 schema。"""
     out = tmp_path / "out"
     result = step_meta_export(
-        out, source="duckdb", db_path=duck_db, schemas=["sales"],
+        out,
+        source="duckdb",
+        db_path=duck_db,
+        schemas=["sales"],
         datasource_name="test",
     )
     assert result is None
@@ -113,10 +138,14 @@ def test_step_meta_export_empty_result_writes_no_csv(duck_db, tmp_path, capsys):
 def test_cmd_meta_exits_on_empty_result(duck_db, tmp_path):
     """CLI 层将空结果转为非零退出码。"""
     with pytest.raises(SystemExit) as exc:
-        cmd_meta(_args(
-            db=duck_db, datasource="test", schemas="sales",
-            output=str(tmp_path / "out"),
-        ))
+        cmd_meta(
+            _args(
+                db=duck_db,
+                datasource="test",
+                schemas="sales",
+                output=str(tmp_path / "out"),
+            )
+        )
     assert exc.value.code == 1
 
 
@@ -124,7 +153,10 @@ def test_step_meta_export_success(duck_db, tmp_path):
     """schema 命中时正常导出并返回 DataFrame。"""
     out = tmp_path / "out"
     result = step_meta_export(
-        out, source="duckdb", db_path=duck_db, schemas=["main"],
+        out,
+        source="duckdb",
+        db_path=duck_db,
+        schemas=["main"],
         datasource_name="test",
     )
     assert result is not None
@@ -140,13 +172,16 @@ def test_step_meta_export_success(duck_db, tmp_path):
 # assets 路径输出
 # ---------------------------------------------------------------------------
 
+
 def test_generate_assets_prints_absolute_path(tmp_path, capsys, monkeypatch):
     """assets 路径以绝对路径打印，接受 assets_dir 参数。"""
     monkeypatch.chdir(tmp_path)
     assets_dir = Path(".agents/skills/govio/assets")
-    with patch.object(meta_graph_ops, "ConfigManager") as cm, \
-            patch.object(meta_graph_ops, "GraphFactory"), \
-            patch.object(meta_graph_ops, "AssetsGenerator"):
+    with (
+        patch.object(meta_graph_ops, "ConfigManager") as cm,
+        patch.object(meta_graph_ops, "GraphFactory"),
+        patch.object(meta_graph_ops, "AssetsGenerator"),
+    ):
         cm.return_value.load.return_value = {"graph": {"backend": "ladybug"}}
         meta_graph_ops._generate_assets(assets_dir)
 

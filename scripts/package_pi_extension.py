@@ -41,7 +41,14 @@ SKILLS_DIR = ROOT / "skills"
 SKILLS_TARGET = PACKAGING_DIR / "skills"
 
 # design.md §1.1：6 个 skill 直接位于 skills 根下，目录名与 frontmatter name 一致
-EXPECTED_SKILLS = ("govio", "govio-eda", "govio-meta", "govio-observe", "govio-query", "govio-reconcile")
+EXPECTED_SKILLS = (
+    "govio",
+    "govio-eda",
+    "govio-meta",
+    "govio-observe",
+    "govio-query",
+    "govio-reconcile",
+)
 VERSION_PATTERN = re.compile(r"[0-9A-Za-z][0-9A-Za-z.\-+]*")
 
 logger = logging.getLogger(__name__)
@@ -56,7 +63,9 @@ def _skill_frontmatter_name(skill_md: Path) -> str | None:
     Returns:
         str | None: name 字段值（未找到返回 None）
     """
-    match = re.search(r"^name:\s*(\S+)\s*$", skill_md.read_text(encoding="utf-8"), re.MULTILINE)
+    match = re.search(
+        r"^name:\s*(\S+)\s*$", skill_md.read_text(encoding="utf-8"), re.MULTILINE
+    )
     return match.group(1) if match else None
 
 
@@ -78,10 +87,14 @@ def _verify_artifact(out_dir: Path, version: str) -> list[str]:
     else:
         data = json.loads(package_json.read_text(encoding="utf-8"))
         if data.get("version") != version:
-            problems.append(f"package.json version 未注入: {data.get('version')!r} != {version!r}")
+            problems.append(
+                f"package.json version 未注入: {data.get('version')!r} != {version!r}"
+            )
         manifest = data.get("pi") or {}
         if manifest.get("extensions") != ["extensions/govio-tools.ts"]:
-            problems.append(f"pi manifest extensions 不符: {manifest.get('extensions')!r}")
+            problems.append(
+                f"pi manifest extensions 不符: {manifest.get('extensions')!r}"
+            )
         if "skills" not in (manifest.get("skills") or []):
             problems.append(f"pi manifest 未声明 skills: {manifest.get('skills')!r}")
 
@@ -91,9 +104,15 @@ def _verify_artifact(out_dir: Path, version: str) -> list[str]:
         problems.append("缺少 README.md")
 
     skills_dir = out_dir / "skills"
-    actual_skills = sorted(p.name for p in skills_dir.iterdir() if p.is_dir()) if skills_dir.is_dir() else []
+    actual_skills = (
+        sorted(p.name for p in skills_dir.iterdir() if p.is_dir())
+        if skills_dir.is_dir()
+        else []
+    )
     if actual_skills != sorted(EXPECTED_SKILLS):
-        problems.append(f"skills 目录不符: {actual_skills} != {sorted(EXPECTED_SKILLS)}")
+        problems.append(
+            f"skills 目录不符: {actual_skills} != {sorted(EXPECTED_SKILLS)}"
+        )
     for name in EXPECTED_SKILLS:
         skill_md = skills_dir / name / "SKILL.md"
         if not skill_md.is_file():
@@ -117,9 +136,17 @@ def main() -> int:
         int: 退出码（0 成功，非 0 失败）
     """
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    parser = argparse.ArgumentParser(description="构建 pi.agent 扩展分发包 dist/govio-pi-<version>/")
-    parser.add_argument("--version", help="包版本号（默认取 pyproject.toml 的 project.version）")
-    parser.add_argument("--output", default="dist", help="产物输出目录（相对路径以仓库根为基准，默认 dist）")
+    parser = argparse.ArgumentParser(
+        description="构建 pi.agent 扩展分发包 dist/govio-pi-<version>/"
+    )
+    parser.add_argument(
+        "--version", help="包版本号（默认取 pyproject.toml 的 project.version）"
+    )
+    parser.add_argument(
+        "--output",
+        default="dist",
+        help="产物输出目录（相对路径以仓库根为基准，默认 dist）",
+    )
     args = parser.parse_args()
 
     try:
@@ -148,7 +175,9 @@ def main() -> int:
         if SKILLS_TARGET.exists():
             shutil.rmtree(SKILLS_TARGET)
         SKILLS_TARGET.mkdir(parents=True)
-        skill_file_count = copy_files(collect_files(SKILLS_DIR), SKILLS_DIR, SKILLS_TARGET)
+        skill_file_count = copy_files(
+            collect_files(SKILLS_DIR), SKILLS_DIR, SKILLS_TARGET
+        )
 
         # 2. 清理并重建产物目录
         out_dir = output_dir / f"govio-pi-{version}"
@@ -170,8 +199,17 @@ def main() -> int:
             logger.error("✗ 自检失败: %s", problem)
         return 1
 
-    logger.info("✓ %s（%d 个文件，其中 skills 副本 %d 个文件）", out_dir.resolve(), file_count, skill_file_count)
-    logger.info("✓ 产物结构自检通过（%d 个 skill、无 assets/缓存文件、版本 %s 已注入）", len(EXPECTED_SKILLS), version)
+    logger.info(
+        "✓ %s（%d 个文件，其中 skills 副本 %d 个文件）",
+        out_dir.resolve(),
+        file_count,
+        skill_file_count,
+    )
+    logger.info(
+        "✓ 产物结构自检通过（%d 个 skill、无 assets/缓存文件、版本 %s 已注入）",
+        len(EXPECTED_SKILLS),
+        version,
+    )
     return 0
 
 
