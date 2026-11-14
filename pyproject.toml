@@ -6,7 +6,9 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
-    "datacompy>=0.10.0",
+    # 锁 <1.0：datacompy 1.x 移除了 datacompy.core 并把 Compare 改名 PandasCompare（已实测 1.2.0），
+    # core/comparator.py 仍用 0.x 的 from datacompy.core import Compare；迁移到 1.x 前不得放开上限
+    "datacompy>=0.10.0,<1.0",
     "dotenv>=0.9.9",
     "duckdb>=0.10.0",
     "falkordb>=1.4.0",

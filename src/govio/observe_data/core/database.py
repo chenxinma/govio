@@ -62,6 +62,15 @@ class DatabaseManager:
         self._duckdb_conns: dict[str, DuckDBPyConnection] = {}
         self._duckdb_dirs: dict[str, str] = {}
 
+    @property
+    def datasources(self) -> dict[str, DataSourceConfig]:
+        """已注册的数据源配置（只读副本，供调用方枚举而无需触碰私有属性）
+
+        Returns:
+            dict[str, DataSourceConfig]: 数据源名到配置的映射
+        """
+        return dict(self._datasources)
+
     def _ensure(self, name: str) -> None:
         """按需初始化指定数据源连接（首次使用时才真正连接）"""
         if name not in self._datasources:

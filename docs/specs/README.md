@@ -48,7 +48,7 @@ Govio ships with AI assistant skills under `skills/`:
 | openpyxl | Excel file reading |
 | jsonschema | JSON Schema validation |
 | duckdb | DuckDB data source |
-| datacompy | DataFrame comparison |
+| datacompy | DataFrame comparison（锁 `<1.0`：1.x 移除 `datacompy.core`、`Compare` 改名 `PandasCompare`，`core/comparator.py` 迁移前不兼容） |
 | pyyaml | YAML config I/O |
 | tqdm | Progress bars |
 | questionary | Interactive CLI prompts |

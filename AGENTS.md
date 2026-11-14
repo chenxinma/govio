@@ -317,7 +317,6 @@ src/govio/
         ├── chart.py          # render_chart (bar/line PNG)
         ├── comparator.py     # TableComparator (datacompy)
         ├── database.py       # DatabaseManager (multi-datasource)
-        ├── dataframe_store.py
         ├── explorer.py       # RelationExplorer (FK inference, similarity)
         ├── observe_store.py  # ObserveStore (parquet-backed)
         └── visualizer.py     # RelationVisualizer (networkx/JSON)
