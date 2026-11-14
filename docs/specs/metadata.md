@@ -475,7 +475,7 @@ JSON Schema (draft-07) for metric definitions:
 口径冲突检测（`govio.cli.sql._caliber` 的比对内核，可单测）：
 
 ```python
-extract_sql_facts(sql) -> SqlFacts            # 聚合调用/引用列/WHERE 条件/时间窗
+extract_sql_facts(sql) -> SqlFacts            # 聚合调用/引用列/WHERE 维度三元组/时间窗与粒度
 compare_metric(metric, facts) -> dict         # {metric, status, differences}
 check_caliber(metrics, sql) -> dict           # {results: [...]}
 read_metric_caliber(graph, ref) -> CaliberMetric | None  # code 或节点 ID
@@ -486,17 +486,40 @@ read_metric_caliber(graph, ref) -> CaliberMetric | None  # code 或节点 ID
   WHERE 走 `Where` 节点（子查询内的 `GROUP BY` 不再截断外层 WHERE）、星号展开 vs
   乘号由 `Token.Wildcard` vs `Token.Operator` 区分。
 
-- 比对维度：`aggregation`（formula 显式聚合 vs SQL 聚合签名，含 DISTINCT）、
-  `filter`（定义中剔除类限定 vs SQL WHERE）、`time_scope`（定义明确时间窗 vs SQL
-  时间窗字面量）、`column`（REFERS_COLUMN(role) 列 + 聚合参数列 vs SQL 引用列）。
-- 判定纪律：**宁可 unknown 不误报 conflict**。conflict 仅在证据确定时给出
-  （聚合签名不匹配 / 明确时间窗不相交 / 计量列缺失且无 `*` 展开）；中文语义提示
-  （合计/均值…）、剔除类限定、COUNT(*) 等弱证据一律降级 unknown。
+- 比对维度：
+
+  | aspect | SQL 侧事实 | 指标侧声明 | 证据强度 |
+  |---|---|---|---|
+  | `aggregation` | 聚合调用（函数/DISTINCT/参数表达式，按 `_canonical_expr` 归一） | `formula`/定义里的显式 `FUNC(col)`；中文语义提示为弱证据 | 显式=确定，提示=存疑 |
+  | `filter` | 剔除词子串（旧路径）+ **维度限定三元组**（列/算子/值集合） | 剔除短语；`Dimension.values_example` 枚举码值 ∩ 定义文本、`usage_type`、`REFERS_COLUMN role` | 三元组结构化=可比对；子串路径只存疑 |
+  | `time_scope` | 时间窗字面量（`INTERVAL` 等）+ 显式粒度（`DATE_TRUNC`/`YEAR()`…） | 定义里的「近30天」类窗口 + 「按月/季度/日粒度」类声明 | 双侧明确才比对 |
+  | `column` | SQL 引用列 | `REFERS_COLUMN(role=measure)` + 聚合参数列（measure-first） | 确定 |
+
+- 维度限定三元组（X19）：从**所有** WHERE 节点（含子查询/CTE）按顶层 AND/OR 切谓词，
+  `BETWEEN ... AND ...` 不误切、括号内复合条件展开、`NOT (...)` 丢弃；算子归一为
+  `= != > >= < <= IN NOT IN LIKE NOT LIKE IS NULL IS NOT NULL BETWEEN`；值集合**只**接受
+  引号串/数字字面量（子查询、参数占位、列间等值一律视为不可枚举，不猜测）；
+  列名与表达式共用 `_canonical_expr` 归一口径。
+- 维度声明对齐（X19）：`read_metric_caliber` 另读 `DIMENSION_USED` → `Dimension`
+  （`code`/`name`/`values_example` + 边属性 `usage_type`）。声明限定取值 = 枚举码值出现在
+  `business_definition + statistical_scope + time_scope` 文本内且不在剔除短语区间；
+  `usage_type=filter|slice` 为显式限定维度，`group` 需文本另有正向限定线索词。
+  维度读不到（图库缺 `Dimension` 标签等）时**降级为无维度声明**并告警，不使命令失败。
+- 判定纪律：**宁可 unknown 不误报 conflict**。conflict 仅在证据确定时给出（聚合签名或参数
+  表达式不匹配 / 明确时间窗不相交 / 明确时间粒度不相交 / 计量列缺失且无 `*` 展开 /
+  维度限定实质矛盾：限定到同维度其它声明枚举值、声明限定在整条 SQL 无落点、
+  结果只取声明剔除的取值）；中文语义提示、剔除类词子串、取值不可枚举、按维度分组而非限定、
+  SQL 附加未声明限定、`COUNT(*)` 等弱证据一律降级 unknown。
+- 降噪：无维度声明的指标不产 `filter` 条目；`dimension_ref` 列缺失不产 `column` 条目
+  （measure-first）；时间窗/粒度在 SQL 侧无显式形态时不产条目。判定矩阵与三态边界详见
+  `docs/tasks/X19-caliber-dimension-substance/design.md`。
+- 输出契约（map 侧消费）：三态取值 `consistent`/`conflict`/`unknown` 与 `differences` 条目
+  键 `aspect/expected/found/detail` 不变，`aspect` 集合未新增。
+
 - `read_metric_caliber` 接收调用方注入的图对象（GraphFactory 产物）：NetworkXGraph
   走 `.G`，FalkorDBGraph/LadybugGraph 走 `.query`；本模块不建连。
 
 ---
-
 ## Relationship Schema (`relationship_schema.json`)
 
 JSON Schema (draft-07) for table relationship definitions（文件路径 `src/govio/metadata/relationship_schema.json`）：
