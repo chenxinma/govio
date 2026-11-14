@@ -38,7 +38,11 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
-    "ruff>=0.15.6",
+    # ruff 必须锁到同一个 minor：它既是 linter 也是 formatter，而 CI 把
+    # `ruff format --check` 当门禁。实测 0.15.12 认为 108 个文件全部已格式化，
+    # 0.16/0.17 对同一批代码要重排 29 个文件（且文件发现范围从 108 扩到 213）。
+    # 升级 ruff 请开单独 PR：改上限 -> uv run ruff format . -> 审阅 diff -> 跑全量测试。
+    "ruff>=0.15.6,<0.16",
 ]
 
 [[tool.uv.index]]
