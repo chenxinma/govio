@@ -45,8 +45,16 @@ dev = [
     "ruff>=0.15.6,<0.16",
 ]
 
+# 显式把 PyPI 设为默认 index：项目级配置优先级高于用户级 uv 配置
+# （%APPDATA%/uv/uv.toml 或 ~/.config/uv/uv.toml，开发机通常配了镜像），否则本地
+# 任何裸跑 `uv lock` / `uv run`（隐式 sync）都会把 uv.lock 里的 registry 改写成镜像源。
+# uv.lock 逐包记录来源 registry，且 `uv sync --frozen/--locked` 只认 lock 里的源
+# （实测 `--default-index` 覆盖不了），所以 lock 必须保持 PyPI 基准；镜像有同步延迟，
+# 刚发布的版本可能拉不到，CI 在境外 runner 上访问镜像也慢。
+# 本地确需镜像加速时可临时用 `--default-index`，但提交前必须 `git diff uv.lock`
+# 确认 registry 没被改写（CI 的 `uv sync --locked` 也会拦住不一致的 lock）。
 [[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+url = "https://pypi.org/simple"
 default = true
 
 [tool.hatch.build]

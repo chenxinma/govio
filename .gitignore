@@ -12,7 +12,6 @@ wheels/
 logs/
 /data/
 .env
-uv.lock
 
 assets/
 # 例外：skills 自带的 assets 资源不是派生数据，必须入库并进入分发包

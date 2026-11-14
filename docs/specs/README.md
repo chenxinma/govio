@@ -59,3 +59,5 @@ Govio ships with AI assistant skills under `skills/`:
 | dotenv | Environment variable loading (.env) |
 | cryptography | Password encryption for config |
 | sqlparse | SQL tokenizer for metric caliber conflict check (aggregate/WHERE/star extraction) |
+
+依赖版本由入仓的 `uv.lock` 锁定（78 个包，以 PyPI 为基准）；`pyproject.toml` 显式声明 PyPI 为默认 index，以免开发机的用户级镜像配置把 lock 里的 registry 改写掉；CI 用 `uv sync --group dev --locked` 严格按 lock 安装。两个必要的版本上限：`datacompy<1.0`（见上表）、`ruff<0.16`（formatter 版本必须锁，否则 `ruff format --check` 门禁不稳定）。
