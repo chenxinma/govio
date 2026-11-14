@@ -382,8 +382,10 @@ cat query.json | govio-cli sql build
 
 ### `caliber` Subcommand
 
-口径冲突检测：SQL 与图谱指标定义（formula/business_definition/statistical_scope/time_scope/REFERS_COLUMN）比对，
-输出机器可读 JSON。指标可按 `code` 或节点 ID 指定（`--metric` 可重复）。
+口径冲突检测：SQL 与图谱指标定义（formula/business_definition/statistical_scope/time_scope/REFERS_COLUMN，
+并沿 `DIMENSION_USED` 读取 `Dimension` 的 `values_example` 维度声明）比对，输出机器可读 JSON。
+指标可按 `code` 或节点 ID 指定（`--metric` 可重复）。参数与 JSON 形状未变；比对深度见
+`docs/specs/metadata.md` 的 caliber.py 一节。
 
 ```bash
 govio-cli sql caliber --sql "SELECT SUM(amount) FROM orders" --metric m_sales_amount
@@ -399,7 +401,7 @@ Output（stdout 单行 JSON，ensure_ascii 转义）：
 - `status`：`consistent`（一致）| `conflict`（确定冲突）| `unknown`（无法判定）。
   判定纪律：**宁可 unknown 不误报 conflict**。
 - `differences[]`：`{aspect, expected, found, detail?}`，aspect 取
-  `aggregation`（聚合口径）| `filter`（过滤/统计范围）| `time_scope`（时间窗）|
+  `aggregation`（聚合口径）| `filter`（过滤/统计范围与维度限定条件）| `time_scope`（时间窗与时间粒度）|
   `column`（引用列）| `metric`（指标未找到）| `sql`（SQL 无法解析）。
 - 退出码：比对完成（含 conflict/unknown 结果）退出 0；坏输入（缺 SQL / 缺
   `--metric` / 文件不存在）、配置或图后端错误退出 1（错误只落 stderr）。

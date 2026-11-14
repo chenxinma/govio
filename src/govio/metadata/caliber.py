@@ -3,25 +3,30 @@ govio.metadata.caliber
 口径冲突检测（T2.3）：SQL 与图谱指标定义的最小维度比对。
 
 SQL 事实提取基于 sqlparse 分词（不依赖方言语法分析），不触图后端、不连库：
-- `extract_sql_facts`：从 SQL 文本提取可比对事实（聚合调用/引用列/WHERE 条件/时间窗）；
+- `extract_sql_facts`：从 SQL 文本提取可比对事实（聚合调用/引用列/WHERE 维度限定三元组/时间窗与时间粒度）；
 - `check_caliber` / `compare_metric`：逐指标比对，输出结构化 JSON 形态
   `{results: [{metric, status, differences}]}`；
 - `read_metric_caliber`：从图对象（NetworkXGraph / FalkorDBGraph / LadybugGraph）
   读取指标定义与 REFERS_COLUMN 边，图对象由调用方注入（GraphFactory），本模块不建连。
 
 判定纪律：**宁可 unknown 不误报 conflict**。conflict 仅在证据确定时给出
-（聚合签名不匹配 / 明确时间窗不一致 / 计量列完全缺失），语义比对不确定一律 unknown。
+（聚合签名不匹配 / 明确时间窗或粒度不一致 / 计量列完全缺失 /
+维度限定与指标声明实质矛盾），语义比对不确定一律 unknown。
 """
 
 from __future__ import annotations
 
+import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
 import sqlparse
 import sqlparse.sql as S
 from sqlparse import tokens as T
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # SQL 事实提取
@@ -103,6 +108,9 @@ class SqlFacts:
     where_text: str = ""
     where_segments: list[str] = field(default_factory=list)
     window_days: set[int] = field(default_factory=set)
+    dim_predicates: list[DimPredicate] = field(default_factory=list)
+    group_by_columns: set[str] = field(default_factory=set)
+    grains: set[str] = field(default_factory=set)
 
 
 def _window_days(value: str, unit: str) -> int:
@@ -220,6 +228,241 @@ def _split_where_segments(where: S.Where) -> list[str]:
     return segments
 
 
+# ---------------------------------------------------------------------------
+# 维度限定三元组：SQL 侧解析（列 / 算子 / 值集合）
+# ---------------------------------------------------------------------------
+
+# 谓词形状 `列 算子 值`；算子按长优先排列，避免 NOT IN 被 IN 抢先命中
+_PREDICATE_RE = re.compile(
+    r"^\s*(?P<lhs>[A-Za-z_][A-Za-z0-9_.]*)\s*"
+    r"(?P<op>NOT\s+IN|NOT\s+LIKE|IS\s+NOT\s+NULL|IS\s+NULL"
+    r"|!=|<>|>=|<=|=|<|>|\bIN\b|\bLIKE\b|\bBETWEEN\b)"
+    r"\s*(?P<rhs>.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+_CONNECTOR_RE = re.compile(r"\b(BETWEEN|AND|OR)\b", re.IGNORECASE)
+# 值侧只有「纯字面量（引号串/数字）列表」才产出取值集合；其余形态一律不猜测
+_LITERAL_RE = re.compile(r"'((?:[^']|'')*)'|\"([^\"]*)\"|(-?\d+(?:\.\d+)?)")
+_LITERAL_ONLY_RE = re.compile(
+    r"^(?:\s*(?:'(?:[^']|'')*'|\"[^\"]*\"|-?\d+(?:\.\d+)?)\s*)"
+    r"(?:,\s*(?:'(?:[^']|'')*'|\"[^\"]*\"|-?\d+(?:\.\d+)?)\s*)*$"
+)
+_OP_CANON = {
+    "=": "=",
+    "!=": "!=",
+    "<>": "!=",
+    ">": ">",
+    "<": "<",
+    ">=": ">=",
+    "<=": "<=",
+    "IN": "IN",
+    "NOT IN": "NOT IN",
+    "LIKE": "LIKE",
+    "NOT LIKE": "NOT LIKE",
+    "IS NULL": "IS NULL",
+    "IS NOT NULL": "IS NOT NULL",
+    "BETWEEN": "BETWEEN",
+}
+# 正向限定（限定到值集合）；!=/NOT IN/NOT LIKE/IS NOT NULL 是实现剔除，不是选取
+_POSITIVE_OPS = frozenset(
+    {"=", ">", "<", ">=", "<=", "IN", "LIKE", "IS NULL", "BETWEEN"}
+)
+# 可枚举取值的算子：范围/BETWEEN 的右值不是离散取值集合
+_VALUE_OPS = frozenset({"=", "!=", "IN", "NOT IN", "LIKE", "NOT LIKE"})
+# 「SQL 附加未声明限定」只按等值/集合/前缀匹配判定，范围类归 time_scope 处理
+_EXTRA_RESTRICTION_OPS = frozenset({"=", "IN", "LIKE"})
+_QUOTE_CHARS = ("'", '"', "`")
+
+
+@dataclass
+class DimPredicate:
+    """SQL 侧一个维度限定三元组
+
+    column: `_canonical_expr` 口径的列名；op: 归一算子；
+    values: 字面量取值集合（不可枚举时为空集）；positive: 是否「限定到取值」。
+    """
+
+    column: str
+    op: str
+    values: frozenset[str]
+    positive: bool
+    raw: str
+
+
+def _structural_mask(text: str) -> list[tuple[int, bool]]:
+    """逐字符的 (括号深度, 是否在引号内) 状态，用于只在顶层切分连接词"""
+    mask: list[tuple[int, bool]] = []
+    depth = 0
+    quote = ""
+    for ch in text:
+        if quote:
+            mask.append((depth, True))
+            if ch == quote:
+                quote = ""
+            continue
+        if ch in _QUOTE_CHARS:
+            mask.append((depth, True))
+            quote = ch
+            continue
+        mask.append((depth, False))
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+    return mask
+
+
+def _split_predicates(text: str) -> list[str]:
+    """按顶层 AND/OR 切分谓词原文；`BETWEEN x AND y` 的 AND 不切"""
+    mask = _structural_mask(text)
+    parts: list[str] = []
+    last = 0
+    pending_between_and = False
+    for m in _CONNECTOR_RE.finditer(text):
+        depth, in_quote = mask[m.start()]
+        if in_quote or depth != 0:
+            continue
+        word = m.group(1).upper()
+        if word == "BETWEEN":
+            pending_between_and = True
+            continue
+        if word == "AND" and pending_between_and:
+            pending_between_and = False
+            continue
+        seg = text[last : m.start()].strip()
+        if seg:
+            parts.append(seg)
+        last = m.end()
+    tail = text[last:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _paren_contents(text: str) -> list[str]:
+    """取顶层括号内的原文（括号里的复合条件要展开成独立谓词）"""
+    out: list[str] = []
+    depth = 0
+    start = 0
+    quote = ""
+    for i, ch in enumerate(text):
+        if quote:
+            if ch == quote:
+                quote = ""
+            continue
+        if ch in _QUOTE_CHARS:
+            quote = ch
+        elif ch == "(":
+            depth += 1
+            if depth == 1:
+                start = i + 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                out.append(text[start:i])
+    return out
+
+
+def _literal_values(rhs: str) -> frozenset[str]:
+    """值侧 -> 取值集合：仅接受引号串/数字字面量（允许 IN 的括号列表与尾随 ::type）"""
+    body = rhs.strip()
+    if body.startswith("(") and body.endswith(")"):
+        body = body[1:-1]
+    body = _CAST_SUFFIX_RE.sub("", body).strip()
+    if not body or not _LITERAL_ONLY_RE.match(body):
+        return frozenset()
+    values: set[str] = set()
+    for m in _LITERAL_RE.finditer(body):
+        token = next((g for g in m.groups() if g is not None), "")
+        token = token.replace("''", "'").strip().lower()
+        if token:
+            values.add(token)
+    return frozenset(values)
+
+
+def _parse_predicate(seg: str) -> DimPredicate | None:
+    """谓词原文 -> 三元组；形状不认识返回 None（宁可不比对，也不猜测）"""
+    seg = _COMMENT_RE.sub(" ", seg).strip()
+    m = _PREDICATE_RE.match(seg)
+    if not m:
+        return None
+    op_raw = re.sub(r"\s+", " ", m.group("op")).strip().upper()
+    op = _OP_CANON.get(op_raw)
+    if op is None:
+        return None
+    column = _canonical_expr(m.group("lhs"))
+    if not column:
+        return None
+    values = _literal_values(m.group("rhs")) if op in _VALUE_OPS else frozenset()
+    return DimPredicate(
+        column=column,
+        op=op,
+        values=values,
+        positive=op in _POSITIVE_OPS,
+        raw=re.sub(r"\s+", " ", seg),
+    )
+
+
+def _iter_predicate_segments(text: str) -> list[str]:
+    """切分谓词并展开括号内复合条件；`NOT (...)` 整体丢弃（否定包裹无法还原取值）"""
+    out: list[str] = []
+    for seg in _split_predicates(text):
+        if _PREDICATE_RE.match(seg):
+            out.append(seg)
+            continue
+        if re.match(r"^\s*NOT\b", seg, re.IGNORECASE):
+            continue
+        inner = _paren_contents(seg)
+        if inner:
+            out.extend(_iter_predicate_segments(" ".join(inner)))
+    return out
+
+
+def _iter_where_nodes(node: Any, out: list[Any]) -> None:
+    """递归收集 WHERE 子句节点（子查询/CTE 内的限定同样算限定）"""
+    for tok in getattr(node, "tokens", []) or []:
+        if isinstance(tok, S.Where):
+            out.append(tok)
+        _iter_where_nodes(tok, out)
+
+
+def _extract_dim_predicates(stmt: Any) -> list[DimPredicate]:
+    """SQL -> 维度限定三元组列表，按 (列, 算子, 取值, 正向) 去重"""
+    wheres: list[Any] = []
+    _iter_where_nodes(stmt, wheres)
+    found: dict[tuple[str, str, frozenset[str], bool], DimPredicate] = {}
+    for where in wheres:
+        for seg in _iter_predicate_segments(_where_text(where)):
+            pred = _parse_predicate(seg)
+            if pred is not None:
+                found.setdefault(
+                    (pred.column, pred.op, pred.values, pred.positive), pred
+                )
+    return list(found.values())
+
+
+def _group_by_columns(stmt: Any) -> set[str]:
+    """GROUP BY 里的列名（位置号 `GROUP BY 1` 取不到名字，自然落空）"""
+    out: set[str] = set()
+    collecting = False
+    for tok in getattr(stmt, "tokens", []) or []:
+        if tok.is_keyword:
+            value = (tok.value or "").upper()
+            if value == "GROUP BY":
+                collecting = True
+                continue
+            if value in ("HAVING", "ORDER BY", "LIMIT", "OFFSET", "UNION", "WINDOW"):
+                collecting = False
+                continue
+        if not collecting:
+            continue
+        names: set[str] = set()
+        excluded: set[str] = set()
+        _collect(tok, [], names, excluded)
+        out |= {_canonical_expr(n) for n in names - excluded if n.strip()}
+    return out
+
+
 def extract_sql_facts(sql: str) -> SqlFacts:
     """从 SQL 文本提取比对事实（sqlparse 分词，不做方言语义分析）"""
     facts = SqlFacts()
@@ -242,9 +485,13 @@ def extract_sql_facts(sql: str) -> SqlFacts:
         facts.where_text = _where_text(where)
         facts.where_segments = _split_where_segments(where)
 
+    facts.dim_predicates = _extract_dim_predicates(stmt)
+    facts.group_by_columns = _group_by_columns(stmt)
+
     raw = _COMMENT_RE.sub(" ", sql or "")
     for m in _SQL_WINDOW_RE.finditer(raw):
         facts.window_days.add(_window_days(m.group(1), m.group(2)))
+    facts.grains = _sql_grains(raw)
 
     facts.parse_ok = bool(facts.aggs or facts.referenced_columns or facts.where_text)
     return facts
@@ -265,7 +512,7 @@ class MetricColumn:
 
 @dataclass
 class CaliberMetric:
-    """参与比对的指标定义（图谱 Metric 节点 + REFERS_COLUMN 边）"""
+    """参与比对的指标定义（图谱 Metric 节点 + REFERS_COLUMN / DIMENSION_USED 边）"""
 
     id: str | None = None
     code: str | None = None
@@ -275,6 +522,7 @@ class CaliberMetric:
     statistical_scope: str | None = None
     time_scope: str | None = None
     columns: list[MetricColumn] = field(default_factory=list)
+    dimensions: list[DimensionDecl] = field(default_factory=list)
 
 
 def _metric_summary(metric: CaliberMetric) -> dict[str, Any]:
@@ -522,7 +770,11 @@ def _compare_aggregation(
 def _compare_filter(
     metric: CaliberMetric, facts: SqlFacts
 ) -> list[tuple[dict[str, Any], bool]]:
-    """过滤/统计范围比对（剔除类限定）。全部存疑：只给 unknown，不判 conflict。"""
+    """过滤/统计范围比对（定义里的剔除类词 vs WHERE 段子串包含）。
+
+    弱证据路径：全部存疑，只给 unknown，不判 conflict。剔除条件是否被**实质**违反，
+    由 `_compare_dimensions` 按「维度枚举码值 vs SQL 三元组取值」判定（X19-W5a）。
+    """
     diffs: list[tuple[dict[str, Any], bool]] = []
     for term in _exclusion_terms(metric):
         hit_segments = [s for s in facts.where_segments if term.lower() in s.lower()]
@@ -668,6 +920,355 @@ def _compare_columns(
     return diffs
 
 
+# ---------------------------------------------------------------------------
+# 维度限定条件：指标侧声明对齐 + 三态实质比对
+# ---------------------------------------------------------------------------
+
+# REFERS_COLUMN 里承担维度角色的 role（enum 见 metric_schema.json）
+_DIM_COLUMN_ROLES = frozenset({"dimension_ref", "filter"})
+# 声明式限定要求维度承担「过滤/切片」角色；group 维度需正向限定线索词才算限定
+_LIMITING_USAGE_TYPES = frozenset({"filter", "slice"})
+_RESTRICTION_CUE_RE = re.compile(r"仅|只|限定|限制|范围|针对|口径为|选取")
+_NAME_SPLIT_RE = re.compile(r"[^0-9a-z\u4e00-\u9fa5]+")
+# 枚举码值分隔：只按分隔符切，不按空格切（避免拆散带空格的取值）
+_ENUM_SPLIT_RE = re.compile(r"[,，、;；/|\n]+")
+_ENUM_TRIM_RE = re.compile(r"^[\s\[\('\"`]+|[\s\]\)'\"`]+$")
+# 时间粒度声明（「近30天」这类窗口由 _DEF_WINDOW_RE 负责，不在此列）
+_DEF_GRAIN_RE = re.compile(
+    r"按\s*([日天周月季年])|每\s*([日天周月季年])|([日月季年])\s*度|([日天周月季年])\s*粒度"
+)
+_SQL_GRAIN_FUNC_RE = re.compile(r"\b(YEAR|QUARTER|MONTH|WEEK|DAY)\s*\(", re.IGNORECASE)
+_SQL_TRUNC_RE = re.compile(
+    r"DATE_TRUNC\s*\(\s*['\"]?(YEAR|QUARTER|MONTH|WEEK|DAY)['\"]?\s*,", re.IGNORECASE
+)
+_GRAIN_CHARS = {
+    "日": "day",
+    "天": "day",
+    "周": "week",
+    "月": "month",
+    "季": "quarter",
+    "年": "year",
+}
+
+
+@dataclass
+class DimensionDecl:
+    """DIMENSION_USED 指向的 Dimension 声明（code/name/granularity/values_example + 边属性 usage_type）"""
+
+    code: str | None = None
+    name: str | None = None
+    usage_type: str | None = None
+    values_example: str | None = None
+
+
+@dataclass
+class DimRequirement:
+    """指标侧一条维度限定声明（实质判据）"""
+
+    label: str
+    usage_type: str
+    enum_values: frozenset[str]
+    expected: frozenset[str]
+    excluded: frozenset[str]
+    columns: frozenset[str]
+
+
+def _name_tokens(value: Any) -> set[str]:
+    return {t for t in _NAME_SPLIT_RE.split(str(value or "").lower()) if t}
+
+
+def _split_enum_values(raw: Any) -> list[str]:
+    """Dimension.values_example 字符串 -> 码值列表（只按分隔符切，不做翻译/别名归一）"""
+    if raw is None:
+        return []
+    out: list[str] = []
+    for part in _ENUM_SPLIT_RE.split(str(raw)):
+        token = _ENUM_TRIM_RE.sub("", part).strip("'\"").lower()
+        # 单字符取值（"1"/"0"）在中文描述里极易误命中，不作为限定证据
+        if len(token) >= 2 and token not in out:
+            out.append(token)
+    return out
+
+
+def _expected_grains(metric: CaliberMetric) -> set[str]:
+    """指标声明的时间粒度：按月/月度/每季/日粒度…"""
+    grains: set[str] = set()
+    for m in _DEF_GRAIN_RE.finditer(_definition_text(metric)):
+        char = next((g for g in m.groups() if g), "")
+        if char in _GRAIN_CHARS:
+            grains.add(_GRAIN_CHARS[char])
+    return grains
+
+
+def _sql_grains(text: str) -> set[str]:
+    """SQL 侧时间粒度：YEAR(x)/DATE_TRUNC('month', x) 等显式形态"""
+    grains = {m.group(1).lower() for m in _SQL_GRAIN_FUNC_RE.finditer(text)}
+    grains |= {m.group(1).lower() for m in _SQL_TRUNC_RE.finditer(text)}
+    return grains
+
+
+def _values_desc(values: Iterable[str]) -> str:
+    items = sorted({str(v) for v in values if str(v)})
+    return "、".join(f"'{v}'" for v in items[:5]) or "未声明取值"
+
+
+def _dim_requirements(metric: CaliberMetric) -> list[DimRequirement]:
+    """把维度声明读成限定声明：Dimension.values_example 枚举码值 ∩ 指标定义文本。
+
+    - 码值出现在定义文本且不在剔除短语内 → 声明限定的取值（expected）；
+    - 码值只出现在剔除短语（剔除/不含/排除…）内 → 声明剔除的取值（excluded）；
+    - usage_type=filter/slice 是显式限定维度；group 维度需定义文本有正向限定线索词；
+    - 两者都为空的维度不产声明（无声明即不比对，不制造存疑噪声）。
+    """
+    text = _definition_text(metric).lower()
+    if not text or not metric.dimensions:
+        return []
+    spans = [(m.start(1), m.end(1)) for m in _EXCLUSION_RE.finditer(text)]
+    reqs: list[DimRequirement] = []
+    for dim in metric.dimensions:
+        enum = _split_enum_values(dim.values_example)
+        if not enum:
+            continue
+        usage = (dim.usage_type or "").lower()
+        qualifies = usage in _LIMITING_USAGE_TYPES or bool(
+            _RESTRICTION_CUE_RE.search(text)
+        )
+        code_tokens = _name_tokens(dim.code)
+        columns = frozenset(
+            c.column_name.lower()
+            for c in metric.columns
+            if c.role in _DIM_COLUMN_ROLES and code_tokens & _name_tokens(c.column_name)
+        )
+        expected: list[str] = []
+        excluded: list[str] = []
+        for value in enum:
+            positions = [m.start() for m in re.finditer(re.escape(value), text)]
+            if not positions:
+                continue
+            outside = [
+                p
+                for p in positions
+                if not any(s <= p and p + len(value) <= e for s, e in spans)
+            ]
+            inside = [p for p in positions if p not in outside]
+            if outside and qualifies:
+                expected.append(value)
+            if inside and not outside:
+                excluded.append(value)
+        if not expected and not excluded:
+            continue
+        reqs.append(
+            DimRequirement(
+                label=str(dim.name or dim.code or "维度"),
+                usage_type=usage,
+                enum_values=frozenset(enum),
+                expected=frozenset(expected),
+                excluded=frozenset(excluded),
+                columns=columns,
+            )
+        )
+    return reqs
+
+
+def _compare_dimensions(
+    metric: CaliberMetric, facts: SqlFacts
+) -> list[tuple[dict[str, Any], bool]]:
+    """维度限定条件的实质比对：SQL 三元组 vs 指标声明的维度取值。
+
+    判定矩阵（详见 docs/tasks/X19-caliber-dimension-substance/design.md）：
+
+    | 声明取值 expected | SQL 侧证据                       | 判定                |
+    |-------------------|----------------------------------|---------------------|
+    | 有                | 等值/IN 命中 expected（含跨列） | 无差异（consistent）|
+    | 有                | 命中但取值超出 expected          | unknown（取值超出） |
+    | 有                | 同维度的其它声明枚举值           | conflict（实质矛盾）|
+    | 有                | 限定同一列但取值不可枚举         | unknown             |
+    | 有                | 只在 GROUP BY 出现该列           | unknown（分组非限定）|
+    | 有                | 另有无法归属声明维度的等值限定   | unknown（不猜映射） |
+    | 有                | 整条 SQL 无任何等价落点          | conflict（限定缺失）|
+    | 剔除 excluded     | SQL 只取被剔除的取值             | conflict（实质矛盾）|
+    | 无声明            | 任意                             | 不产差异（不增噪声）|
+
+    conflict 只在「实质矛盾」给出；SQL 多了指标未声明的限定 → unknown + reason。
+    """
+    reqs = _dim_requirements(metric)
+    if not reqs:
+        return []
+    predicates = facts.dim_predicates
+    covered_columns: set[str] = set()
+    all_enum_values: set[str] = set()
+    for req in reqs:
+        covered_columns |= set(req.columns)
+        all_enum_values |= set(req.enum_values)
+    positive_enum = [
+        p
+        for p in predicates
+        if p.positive and p.op in _EXTRA_RESTRICTION_OPS and p.values
+    ]
+
+    diffs: list[tuple[dict[str, Any], bool]] = []
+    unattributed_emitted = False
+    for req in reqs:
+        violated = [
+            p
+            for p in predicates
+            if p.positive and p.values and p.values <= req.excluded
+        ]
+        if violated:
+            diffs.append(
+                (
+                    _diff(
+                        "filter",
+                        f"剔除 {_values_desc(req.excluded)}",
+                        violated[0].raw,
+                        "SQL 把结果限定到指标声明剔除的取值（实质矛盾）",
+                    ),
+                    True,
+                )
+            )
+        expected = req.expected
+        others = req.enum_values - expected
+        hit = [p for p in predicates if p.positive and p.values & expected]
+        if hit:
+            over = [p for p in hit if not p.values <= expected]
+            if over:
+                diffs.append(
+                    (
+                        _diff(
+                            "filter",
+                            _values_desc(expected),
+                            over[0].raw,
+                            f"SQL 对维度 {req.label} 的取值超出指标声明的限定取值",
+                        ),
+                        False,
+                    )
+                )
+            continue
+        if not expected:
+            continue
+
+        sibling = [
+            p
+            for p in positive_enum
+            if p.values & others and (not req.columns or p.column in req.columns)
+        ]
+        stray_sibling = [p for p in positive_enum if p.values & others]
+        same_col = [p for p in predicates if p.positive and p.column in req.columns]
+        if sibling:
+            diffs.append(
+                (
+                    _diff(
+                        "filter",
+                        _values_desc(expected),
+                        sibling[0].raw,
+                        f"SQL 把维度 {req.label} 限定到指标未选取的声明取值（实质矛盾）",
+                    ),
+                    True,
+                )
+            )
+        elif same_col:
+            diffs.append(
+                (
+                    _diff(
+                        "filter",
+                        _values_desc(expected),
+                        same_col[0].raw,
+                        f"SQL 限定了维度 {req.label} 所在列，但取值无法与声明枚举比对",
+                    ),
+                    False,
+                )
+            )
+        elif req.columns & facts.group_by_columns:
+            grouped = "、".join(sorted(req.columns & facts.group_by_columns))
+            diffs.append(
+                (
+                    _diff(
+                        "filter",
+                        _values_desc(expected),
+                        f"GROUP BY {grouped}",
+                        f"SQL 按维度 {req.label} 分组而非限定，取值范围无法确认",
+                    ),
+                    False,
+                )
+            )
+        elif stray_sibling or positive_enum:
+            # SQL 里有归属不到声明维度的等值限定：可能由它实现该限定，不猜映射
+            other = stray_sibling[0] if stray_sibling else positive_enum[0]
+            diffs.append(
+                (
+                    _diff(
+                        "filter",
+                        _values_desc(expected),
+                        other.raw,
+                        f"指标声明 {req.label} 限定到 {_values_desc(expected)}，"
+                        "但 SQL 的等值限定无法归属到该维度，未确证",
+                    ),
+                    False,
+                )
+            )
+            unattributed_emitted = True
+        else:
+            diffs.append(
+                (
+                    _diff(
+                        "filter",
+                        _values_desc(expected),
+                        "SQL WHERE 未见该维度限定",
+                        f"指标声明 {req.label} 限定到 {_values_desc(expected)}，"
+                        "SQL 未见任何等价取值限定（实质矛盾）",
+                    ),
+                    True,
+                )
+            )
+
+    if not unattributed_emitted:
+        extra = [
+            p
+            for p in positive_enum
+            if p.column not in covered_columns and not p.values & all_enum_values
+        ]
+        if extra:
+            desc = "；".join(p.raw for p in sorted(extra, key=lambda x: x.raw)[:3])
+            diffs.append(
+                (
+                    _diff(
+                        "filter",
+                        "指标声明的维度限定",
+                        desc,
+                        "SQL 附加了指标未声明的维度限定，可能收窄口径（存疑，不判冲突）",
+                    ),
+                    False,
+                )
+            )
+    return diffs
+
+
+def _compare_time_grain(
+    metric: CaliberMetric, facts: SqlFacts
+) -> list[tuple[dict[str, Any], bool]]:
+    """时间粒度比对（time_scope 侧的实质比对补充）。
+
+    指标声明粒度（按月/季度…）且 SQL 有显式粒度（DATE_TRUNC/YEAR(...)）而不相交 →
+    确定 conflict；SQL 无显式粒度 → 不产差异（按时间分组属查询自由度，不是口径偏差）。
+    """
+    expected = _expected_grains(metric)
+    if not expected or not facts.grains:
+        return []
+    if expected & facts.grains:
+        return []
+    return [
+        (
+            _diff(
+                "time_scope",
+                "时间粒度 " + "、".join(sorted(expected)),
+                "时间粒度 " + "、".join(sorted(facts.grains)),
+                "SQL 时间粒度与指标声明不一致",
+            ),
+            True,
+        )
+    ]
+
+
 def compare_metric(metric: CaliberMetric, facts: SqlFacts) -> dict[str, Any]:
     """单指标比对：返回 {metric, status, differences}
 
@@ -693,6 +1294,8 @@ def compare_metric(metric: CaliberMetric, facts: SqlFacts) -> dict[str, Any]:
         + _compare_filter(metric, facts)
         + _compare_time_scope(metric, facts)
         + _compare_columns(metric, facts)
+        + _compare_dimensions(metric, facts)
+        + _compare_time_grain(metric, facts)
     )
     conflict = any(certain for _d, certain in verdicts)
     status = "conflict" if conflict else ("unknown" if verdicts else "consistent")
@@ -715,7 +1318,10 @@ def check_caliber(metrics: list[CaliberMetric], sql: str) -> dict[str, Any]:
 
 
 def _metric_from_attrs(
-    node_id: str | None, attrs: dict[str, Any], columns: list[MetricColumn]
+    node_id: str | None,
+    attrs: dict[str, Any],
+    columns: list[MetricColumn],
+    dimensions: list[DimensionDecl] | None = None,
 ) -> CaliberMetric:
     return CaliberMetric(
         id=attrs.get("id") or node_id,
@@ -726,11 +1332,64 @@ def _metric_from_attrs(
         statistical_scope=attrs.get("statistical_scope"),
         time_scope=attrs.get("time_scope"),
         columns=columns,
+        dimensions=list(dimensions or []),
     )
 
 
 def _match_ref(ref: str, *candidates: Any) -> bool:
     return any(c is not None and str(c) == ref for c in candidates)
+
+
+def _read_dimensions_networkx(graph: Any, node_key: Any) -> list[DimensionDecl]:
+    """读取 DIMENSION_USED -> Dimension 声明；图库缺该标签/边时降级为无维度声明。
+
+    降级而非报错：口径比对不能因为维度声明读不到就整体失败
+    （历史缺陷 BUGFIX-caliber-has-star：DIMENSION_USED 查询报错导致检测静默跳过）。
+    """
+    dims: list[DimensionDecl] = []
+    try:
+        for _u, v, edata in graph.out_edges(node_key, data=True):
+            if edata.get("edge_type") != "DIMENSION_USED":
+                continue
+            attrs = graph.nodes[v]
+            if attrs.get("node_type") != "Dimension":
+                continue
+            dims.append(
+                DimensionDecl(
+                    code=attrs.get("code"),
+                    name=attrs.get("name"),
+                    usage_type=edata.get("usage_type"),
+                    values_example=attrs.get("values_example"),
+                )
+            )
+    except Exception as exc:
+        logger.warning("读取 DIMENSION_USED 失败，按无维度声明处理：%s", exc)
+    return dims
+
+
+def _read_dimensions_cypher(graph: Any, ref: str) -> list[DimensionDecl]:
+    """Cypher 后端读取维度声明（属性名一律取 schema.md，同 BUGFIX-caliber-cypher 纪律）"""
+    try:
+        rows = graph.query(
+            "MATCH (m:Metric)-[r:DIMENSION_USED]->(d:Dimension) "
+            "RETURN m.id, m.code, d.code, d.name, d.values_example, r.usage_type"
+        )
+    except Exception as exc:
+        logger.warning("读取 DIMENSION_USED 失败，按无维度声明处理：%s", exc)
+        return []
+    dims: list[DimensionDecl] = []
+    for row in rows:
+        if not _match_ref(ref, row[0], row[1]):
+            continue
+        dims.append(
+            DimensionDecl(
+                code=str(row[2]) if row[2] is not None else None,
+                name=str(row[3]) if row[3] is not None else None,
+                values_example=str(row[4]) if row[4] is not None else None,
+                usage_type=str(row[5]) if row[5] is not None else None,
+            )
+        )
+    return dims
 
 
 def _read_metric_networkx(graph: Any, ref: str) -> CaliberMetric | None:
@@ -754,7 +1413,9 @@ def _read_metric_networkx(graph: Any, ref: str) -> CaliberMetric | None:
                     column_name=name or str(v), role=str(edata.get("role") or "")
                 )
             )
-        return _metric_from_attrs(str(node_key), attrs, columns)
+        return _metric_from_attrs(
+            str(node_key), attrs, columns, _read_dimensions_networkx(g, node_key)
+        )
     return None
 
 
@@ -793,7 +1454,9 @@ def _read_metric_cypher(graph: Any, ref: str) -> CaliberMetric | None:
         "statistical_scope": target[5],
         "time_scope": target[6],
     }
-    return _metric_from_attrs(str(attrs["id"]), attrs, columns)
+    return _metric_from_attrs(
+        str(attrs["id"]), attrs, columns, _read_dimensions_cypher(graph, ref)
+    )
 
 
 def read_metric_caliber(graph: Any, ref: str) -> CaliberMetric | None:

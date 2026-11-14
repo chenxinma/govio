@@ -1,0 +1,15 @@
+{
+  "task": "X19-W5a",
+  "status": "done",
+  "summary": "口径判定升级：维度限定条件由「剔除词子串 + 一律 unknown」升级为 SQL 三元组（列/算子/值集合）vs 指标维度声明（DIMENSION_USED/values_example/usage_type/REFERS_COLUMN role）的结构化三态比对，conflict 仅限实质矛盾；同批新增时间粒度比对（时间窗逻辑维持现状并在 design.md 说明理由）；8 档样本固化为用例集（s2/t2 consistent、t4 conflict、其余 conflict 零回归）；输出 JSON 契约不变；新增 44 例，全量 526 passed / 18 skipped，ruff check 与 format --check 均 0",
+  "files": [
+    "src/govio/metadata/caliber.py",
+    "tests/test_caliber_dimension_compare.py",
+    "tests/test_caliber_cli.py",
+    "docs/specs/metadata.md",
+    "docs/specs/cli.md",
+    "docs/tasks/X19-caliber-dimension-substance/design.md",
+    "docs/tasks/X19-caliber-dimension-substance/progress.md",
+    "docs/tasks/X19-caliber-dimension-substance/status.json"
+  ]
+}

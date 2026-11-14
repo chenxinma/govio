@@ -11,7 +11,7 @@ import sys
 import pytest
 
 from govio.cli import sql as sql_mod
-from govio.metadata.caliber import CaliberMetric, MetricColumn
+from govio.metadata.caliber import CaliberMetric, DimensionDecl, MetricColumn
 
 
 class StubConfigManager:
@@ -148,6 +148,70 @@ def test_caliber_multi_metric_mixed(monkeypatch, capsys):
     assert results[0]["metric"]["code"] == "m_sales"
     assert results[0]["status"] == "consistent"
     assert results[1]["status"] == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# 维度限定实质比对（X19-W5a）：CLI 输出契约不变
+# ---------------------------------------------------------------------------
+
+
+DIMENSION_METRIC = CaliberMetric(
+    id="ME00000009",
+    code="m_sales",
+    name="销售额",
+    formula="sum(amount)",
+    statistical_scope="仅统计中国的销售额",
+    columns=[
+        MetricColumn("amount", "measure"),
+        MetricColumn("country_id", "dimension_ref"),
+    ],
+    dimensions=[
+        DimensionDecl(
+            code="country",
+            name="国家",
+            usage_type="filter",
+            values_example="中国、美国、德国",
+        )
+    ],
+)
+
+
+def test_caliber_dimension_conflict_keeps_json_contract(monkeypatch, capsys):
+    """声明限定「仅中国」而 SQL 无任何等价限定 -> conflict，JSON 形状不变"""
+    _setup(monkeypatch, metric=DIMENSION_METRIC)
+    _run(
+        monkeypatch,
+        [
+            "caliber",
+            "--sql",
+            "SELECT SUM(amount) FROM fact_sales",
+            "--metric",
+            "m_sales",
+        ],
+    )
+    payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    result = payload["results"][0]
+    assert result["status"] == "conflict"
+    assert {d["aspect"] for d in result["differences"]} == {"filter"}
+    for diff in result["differences"]:
+        assert set(diff.keys()) <= {"aspect", "expected", "found", "detail"}
+
+
+def test_caliber_dimension_restriction_satisfied_is_consistent(monkeypatch, capsys):
+    _setup(monkeypatch, metric=DIMENSION_METRIC)
+    _run(
+        monkeypatch,
+        [
+            "caliber",
+            "--sql",
+            "SELECT SUM(f.amount) FROM fact_sales f WHERE f.country_id = '中国'",
+            "--metric",
+            "m_sales",
+        ],
+    )
+    payload = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert payload["results"][0]["status"] == "consistent"
+    assert payload["results"][0]["differences"] == []
 
 
 # ---------------------------------------------------------------------------
