@@ -42,6 +42,10 @@ uv sync
 uv sync --group dev
 ```
 
+`uv.lock` **已入仓**（以 PyPI 为基准）：CI 用 `uv sync --group dev --locked` 严格按 lock 安装，所以改依赖必须同时跑 `uv lock` 并提交，否则 CI 会直接失败。
+
+`pyproject.toml` 里显式把 PyPI 设为默认 index，用来压过开发机的用户级镜像配置（`%APPDATA%/uv/uv.toml`、`~/.config/uv/uv.toml`）——否则本地裸跑 `uv lock` / `uv run`（隐式 sync）会把 lock 里逐包记录的 registry 改写成镜像源。镜像有同步延迟（刚发布的版本可能拉不到），而 `--frozen/--locked` 只认 lock 里的 registry（实测 `--default-index` 覆盖不了）。本地确需加速可临时用 `--default-index`，但提交前请用 `git diff uv.lock` 确认 registry 未被改写。
+
 ### Running Tests
 
 ```bash

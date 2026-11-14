@@ -6,9 +6,11 @@ name: CI
 #            （已由 PR #18 一次性对齐），加这道门禁防止再次漂移。
 #   test  —— pytest tests/（真实库集成测试 tests/test_real_*.py 需 GOVIO_REAL_DB=1，默认 skip）
 #
-# 注意：仓库不含 uv.lock（.gitignore 忽略），CI 每次全新解析依赖，因此 pyproject 的依赖
-# 上限是 CI 稳定性的前提（例如 datacompy<1.0：1.x 移除了 datacompy.core，会让
-# core/comparator.py 直接 ImportError）。新增依赖时请一并评估是否需要上限。
+# 依赖来源：uv.lock 已入仓（以 PyPI 为基准，清华等镜像有同步延迟故不当默认源），CI 用
+# `uv sync --group dev --locked` 严格按 lock 安装，不重新解析 —— 上游发版不会让 CI 莫名变红；
+# 若改了 pyproject 依赖却没跑 `uv lock` 并提交，--locked 会直接失败（这是故意的）。
+# 依赖上限仍然是第一道防线（例如 datacompy<1.0：1.x 移除了 datacompy.core，会让
+# core/comparator.py 直接 ImportError）；ruff 锁 <0.16 是因为 format 当门禁必须锁 formatter 版本。
 
 on:
   push:
@@ -37,8 +39,8 @@ jobs:
         run: python -m pip install --upgrade uv
 
       - name: 安装依赖
-        # --default-index 覆盖 pyproject 里的清华镜像：GitHub 托管 runner 走 PyPI 更稳更快
-        run: uv sync --group dev --default-index https://pypi.org/simple
+        # --locked：严格按 uv.lock 安装，且断言 lock 与 pyproject 一致（不一致直接失败）
+        run: uv sync --group dev --locked
 
       - name: ruff check
         run: uv run --no-sync ruff check .
@@ -60,7 +62,7 @@ jobs:
         run: python -m pip install --upgrade uv
 
       - name: 安装依赖
-        run: uv sync --group dev --default-index https://pypi.org/simple
+        run: uv sync --group dev --locked
 
       - name: pytest
         run: uv run --no-sync python -m pytest tests/ -q
