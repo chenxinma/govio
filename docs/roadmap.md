@@ -119,6 +119,29 @@
 
 ---
 
+## 工程化基线 ✅ 已完成（v0.7.2 起）
+
+**目标：** 让「本地全绿」等于「可交付」：门禁、依赖锁、分发资源在干净环境里都可复现。
+
+- [x] CI 门禁（`.github/workflows/ci.yml`）：`ruff check .` + `ruff format --check .` + `pytest tests/ -q`，触发于 push main 与所有 PR
+- [x] 全仓 `ruff format` 对齐（51 文件，已用逐文件 AST 对比证明为纯格式化）
+- [x] `ruff` 锁 `>=0.15.6,<0.16`：formatter 版本不锁则 format 门禁不稳定（实测 0.16/0.17 对同一批代码要重排 29 个文件，文件发现范围 108→213）
+- [x] `datacompy` 锁 `>=0.10.0,<1.0`：1.x 移除 `datacompy.core`、`Compare` 改名 `PandasCompare`
+- [x] `uv.lock` 入仓（78 包、PyPI 基准），CI 改 `uv sync --locked`：不再全新解析（实测 Resolved 78 packages in 1ms），上游发版不会让 CI 莫名变红
+- [x] `pyproject.toml` 显式声明 PyPI 为默认 index：项目级配置压过开发机的用户级镜像配置，防止 lock 里的 registry 被静默改写
+- [x] 修复 `.gitignore` 宽泛 `assets/` 规则吞掉 skill 自带资源：干净检出的 `govio-skills.zip` 从 21 条目恢复为 22 条目
+- [x] `observe_data/tools` 不再直读内核私有属性（新增 `DatabaseManager.datasources` 只读属性）；删除零调用方的 `DataFrameStore`
+- [x] 版本号统一到 0.7.2（packaging manifests + install/README 示例与最低要求）
+- [x] v0.7.2 发布：tag + GitHub Release 四资产（whl / tar.gz / govio-skills.zip / chocolate.zip）+ PyPI（owner 手工）；发版清单与步骤见 [release.md](release.md)
+
+### 工程化待办
+
+- [ ] `datacompy` 迁移 1.x（`PandasCompare` + `build_report_data`），迁移后解除 `<1.0` 上限
+- [ ] `ruff` 升级到 0.16/0.17 并全仓重排（0.16+ 会把文件发现范围从 108 扩到 213，需评估新增覆盖面）
+- [ ] CI 扩展：三支打包脚本实跑与产物结构/注入版本校验、`packaging/pi` 的 TS 语法校验、`packaging/deepseek` 的 `npx tsc -p .`、干净检出下 `govio-skills.zip` 条目数断言（防 21/22 条目类回归）
+
+---
+
 ## Phase 4: 可信数据分析（下一阶段）
 
 ### SQL 组装增强
