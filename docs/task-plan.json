@@ -608,5 +608,274 @@
         "completedAt": "2026-10-31"
       }
     ]
-  }
+  },
+  "round6": {
+    "goal": "Phase 3 工程精简落地 + 版本 0.7.2 发布 + 工程化基线补齐（CI 门禁、依赖锁、分发资源修复）",
+    "execution": "K1 由 Orca codex worker 在独立子工作树执行、父代理按 9 项证据核验后合并；K2-K8 由父代理直接执行。每个改动单独分支 + 单独 PR（#16-#22），CI 全绿后由 owner 合并。教训：K6 的 stacked PR（base 指向父 PR 分支）在父 PR 合并后未自动重定向到 main，导致改动落进废分支，必须删除父分支或手工 gh pr edit --base main 重定向（已用 #21 补救）。",
+    "tasks": [
+      {
+        "id": "K1",
+        "dir": "docs/tasks/phase3-slim",
+        "title": "Phase 3 工程精简与边界收敛 7 项（roadmap 全清）",
+        "status": "done",
+        "summary": "Orca codex worker 在子工作树 phase3-slim 完成 roadmap Phase 3 剩余 7 项：移除未使用的 mcp 依赖；_parse_type 三份方言实现收敛为 metadata/type_parser.py（差分 2177 条类型串 + 17303 组 postgres 属性，diffs=0，固化为 47 个单测）；打包排除规则与版本注入收敛到 scripts/_packaging_common.py（产物逐文件 SHA256 前后一致）；cli/meta.py(1294 行) 拆为 cli/meta/ 包（parser/commands/steps/merge/graph_ops/common/constants，__init__ re-export 保持既有导入，AST 复核 30 个顶层定义 missing 0/added 0，meta --help 与 9 个子命令 help 逐字节一致）；metadata/utility.py 拆为 export.py + recommend_entry.py；metadata/gen_networkx.py 归位 graph/networkx_loader.py（同一份 CSV 输入迁移前后 ontology.gml SHA256 相同）；docs/specs/observe-data.md 补 core/tools 分层说明。顺带修好 cmd_recommend 进包后相对导入失效（改 ..std_recommend）。父代理独立复跑核验：pytest 482 passed/18 skipped、ruff 全绿、CLI help diff 为空、打包脚本实跑通过。",
+        "files": [
+          "pyproject.toml",
+          "src/govio/metadata/type_parser.py",
+          "src/govio/metadata/mysql_loader.py",
+          "src/govio/metadata/postgres_loader.py",
+          "src/govio/metadata/trino_loader.py",
+          "scripts/_packaging_common.py",
+          "package_skills.py",
+          "scripts/package_pi_extension.py",
+          "scripts/package_harness_plugin.py",
+          "src/govio/cli/meta/",
+          "src/govio/metadata/export.py",
+          "src/govio/metadata/recommend_entry.py",
+          "src/govio/graph/networkx_loader.py",
+          "tests/test_type_parser.py",
+          "docs/specs/",
+          "docs/roadmap.md",
+          "AGENTS.md",
+          "docs/tasks/phase3-slim/"
+        ],
+        "ownFiles": [
+          "src/govio/cli/meta/",
+          "src/govio/metadata/",
+          "src/govio/graph/networkx_loader.py",
+          "scripts/",
+          "package_skills.py",
+          "tests/",
+          "docs/specs/",
+          "docs/roadmap.md",
+          "AGENTS.md",
+          "docs/tasks/phase3-slim/"
+        ],
+        "findings": [
+          "roadmap Phase 3 的 7 项长期未动，其中 mcp 依赖带来 6 个无用传递依赖（starlette/uvicorn/sse-starlette/python-multipart/pywin32/typing-inspection）",
+          "cli/meta.py 单文件 1294 行是最大结构债；拆分后 CLI 契约零变化，证明按子命令域切分是安全切点",
+          "worker 首次派发因终端在 orchestration recovery 后失联而 abandoned，需 worker-release 后在同一 Task 上重启；第二次派发才成功",
+          "worker 报告的『移动文件全部格式化干净』不准确：graph/networkx_loader.py 沿用了 gen_networkx.py 的既有格式漂移（净漂移 51→50，无新增）"
+        ],
+        "completedAt": "2026-11-13"
+      },
+      {
+        "id": "K2",
+        "dir": "docs/tasks/phase3-slim",
+        "title": "版本号统一到 0.7.2",
+        "status": "done",
+        "summary": "pyproject 与 docs/specs/README.md 本就是 0.7.2，滞后的是分发侧：packaging/pi/package.json 与 packaging/deepseek/package.json 从 0.7.0 改为 0.7.2（此前只靠打包脚本注入才对，源清单长期滞后），docs/install.md 12 处、packaging/pi/README.md 7 处、packaging/deepseek/README.md 4 处（含 govio-cli 最低要求行，按 pi README 自述规则『本包版本 x.y 对应 govio-cli ≥ x.y』同步为 0.7.2）。scripts 里 3 处『如 0.7.0』是版本号格式示例，保留未改。验证：pytest 482/18、ruff 全绿、三支打包脚本产物均为 0.7.2 且自检通过。",
+        "files": [
+          "packaging/pi/package.json",
+          "packaging/deepseek/package.json",
+          "docs/install.md",
+          "packaging/pi/README.md",
+          "packaging/deepseek/README.md"
+        ],
+        "ownFiles": [
+          "packaging/pi/",
+          "packaging/deepseek/",
+          "docs/install.md"
+        ],
+        "findings": [
+          "分发侧 manifest 版本与 pyproject 长期不一致（0.7.0 vs 0.7.2），因为打包脚本会注入版本、源清单没人看",
+          "docs/install.md 指向 releases/download/v0.7.2/... 的链接在打 tag 前必然 404，属预期但需在发版时补齐资产"
+        ],
+        "completedAt": "2026-11-13"
+      },
+      {
+        "id": "K3",
+        "dir": null,
+        "title": ".gitignore 例外放行 skills/govio-observe/assets 自带资源（PR #17）",
+        "status": "done",
+        "summary": "宽泛的 assets/ 规则把 skill 自带资源 skills/govio-observe/assets/visualize-relations-schema.json 吞掉、从未入库，但 govio-observe/SKILL.md 与 govio-eda/references/phase-2-relations.md 都引用它，T2 的 progress.md 也明确它应随包分发，而 _packaging_common.py 只排除 govio/assets 派生数据 —— 后果是任何干净检出打出的 govio-skills.zip 只有 21 条目、缺这个 schema，只有存在本地残留的开发机才打出 22 条目。修法：assets/ 之后加 !skills/govio-observe/assets/ 与 !skills/govio-observe/assets/** 两行（目录与内容都要放行，git 不允许重新包含被排除目录下的文件），并把该 schema 入库；派生数据 skills/govio/assets 仍被忽略。验证：git ls-files skills 21→22；干净 clone 打包得 22 条目、含该 schema、含 0 条 govio/assets。",
+        "files": [
+          ".gitignore",
+          "skills/govio-observe/assets/visualize-relations-schema.json",
+          "docs/specs/README.md"
+        ],
+        "ownFiles": [
+          ".gitignore",
+          "skills/govio-observe/assets/",
+          "docs/specs/README.md"
+        ],
+        "findings": [
+          "与 I2 修过的 tests/regression/data 被全局 data/ 规则吞掉同类：宽泛 gitignore 规则会静默吞掉必须入库的文件",
+          "『本地能跑』掩盖了干净检出的缺失 —— 分发类问题必须在干净 clone 里验证，不能只看开发机",
+          "派生数据（govio/assets）与 skill 自带资源（govio-observe/assets）必须区分，忽略规则要精确到路径"
+        ],
+        "completedAt": "2026-11-13"
+      },
+      {
+        "id": "K4",
+        "dir": null,
+        "title": "全仓 ruff format 对齐（PR #18）",
+        "status": "done",
+        "summary": "ruff format --check 从『51 files would be reformatted』归零（109 files already formatted）；src/ 29 个、其余在 tests/scripts/benchmarks。纯格式化证明：逐文件对比 git show HEAD:<path> 与工作区的 ast.dump()，51 个中 49 个 AST 完全一致；metadata/database.py 与 metadata/recommender.py 的差异定位为 ruff 归一 docstring 尾随空白（docstring 是 AST Constant 节点），对字符串常量做空白归一后两者 AST 一致。ruff check 仍全绿，pytest 482/18 与基线一致。",
+        "files": [
+          "src/",
+          "tests/",
+          "scripts/",
+          "benchmarks/"
+        ],
+        "ownFiles": [
+          "src/",
+          "tests/",
+          "scripts/",
+          "benchmarks/"
+        ],
+        "findings": [
+          "格式漂移能累积到 51 个文件，根因是 format 从未纳入门禁（只有 ruff check 靠自觉）",
+          "用 AST 对比证明『纯格式化』比口头声明可靠，也能精确定位 docstring 空白这类合法差异"
+        ],
+        "completedAt": "2026-11-13"
+      },
+      {
+        "id": "K5",
+        "dir": null,
+        "title": "datacompy 锁 <1.0 + observe 私有属性收敛 + 死代码与过期文档清理（PR #19）",
+        "status": "done",
+        "summary": "① pyproject 给 datacompy 加 <1.0 上限：实测 1.2.0 已移除 datacompy.core（ModuleNotFoundError），顶层导出只有 PandasCompare 而无 Compare，而 0.19.5 顶层命名空间为空（from datacompy import Compare 也 ImportError）—— 两条线导入路径互不兼容，core/comparator.py 迁移前必须锁 0.x。② DatabaseManager 新增 datasources 只读属性（返回副本），tools/list_datasources.py 不再直读 _datasources 私有属性，输出结构与顺序不变，仅同步 tests/test_exit_codes.py 的打桩字段名（断言零改动，observe info 三条退出码用例仍通过）。③ 删除零调用方的 core/dataframe_store.py（DataFrameStore 内存单例，能力已被 parquet 落盘的 ObserveStore 取代，其 DataFrameInfo 与 observe_store 重复，且 _dataframes 用 field() 写在普通类里属实现缺陷）。④ 删除过期的 docs/test_case_fix_todo.md（记录的 test_assets_generator_falkordb_names 现已通过、全仓无引用）；docs/roadmap.md 补记已实现却漏记的 govio-cli sql caliber。文档同步 docs/specs/{README,observe-data}.md 与 AGENTS.md。验证 pytest 482/18、ruff 全绿。",
+        "files": [
+          "pyproject.toml",
+          "src/govio/observe_data/core/database.py",
+          "src/govio/observe_data/tools/list_datasources.py",
+          "src/govio/observe_data/core/dataframe_store.py",
+          "tests/test_exit_codes.py",
+          "docs/test_case_fix_todo.md",
+          "docs/roadmap.md",
+          "docs/specs/README.md",
+          "docs/specs/observe-data.md",
+          "AGENTS.md"
+        ],
+        "ownFiles": [
+          "pyproject.toml",
+          "src/govio/observe_data/",
+          "tests/test_exit_codes.py",
+          "docs/test_case_fix_todo.md",
+          "docs/roadmap.md",
+          "docs/specs/",
+          "AGENTS.md"
+        ],
+        "findings": [
+          "uv.lock 当时被 gitignore，依赖上限只能写在 pyproject 才有约束力 —— 这是 K8 把 lock 入仓的直接动因",
+          "datacompy 0.19.x 已被上游归档（只做 best-effort 安全修复），迁移 1.x 需排期（PandasCompare + build_report_data）",
+          "spec 里写『暂无调用方』的死代码应当直接删除，而不是长期标注"
+        ],
+        "completedAt": "2026-11-14"
+      },
+      {
+        "id": "K6",
+        "dir": null,
+        "title": "CI 门禁（ruff check + ruff format --check + pytest）+ ruff 锁 <0.16（PR #20 落错 base → PR #21 补救）",
+        "status": "done",
+        "summary": "新增 .github/workflows/ci.yml：lint job（ruff check . / ruff format --check .）与 test job（pytest tests/ -q），触发 push main + 所有 PR，permissions contents:read，concurrency cancel-in-progress，setup-python 3.13 + pip 装 uv + uv run --no-sync；AGENTS.md Lint 小节同步门禁说明。CI 首跑即抓到两个真问题并修复：① ruff 版本漂移 —— CI 全新解析装到 0.17.5、本地 0.15.12，实测 0.15.12 认为 108 文件全部已格式化而 0.16/0.17 对同一批代码要重排 29 个文件（文件发现范围 108→213），故 dev 组锁 ruff>=0.15.6,<0.16 并写明升级流程；② tests/test_metadata_benchmark.py::test_compose_prompt_contains_materials_and_question 经 compose_prompt 直读 GRAPH_MATERIALS 里的 skills/govio/assets/schema.md（gitignored 派生数据），干净检出 FileNotFoundError（CI 1 failed/481 passed），改为 monkeypatch 材料到 tmp_path 夹具并收紧断言（去掉 or 'sqlite' in text 兜底，新增 ENV_NOTES 与『任务提示词：』校验），干净 clone 验证 12 passed。CI 复跑全绿：pytest 482 passed/18 skipped、All checks passed!、108 files already formatted。",
+        "files": [
+          ".github/workflows/ci.yml",
+          "AGENTS.md",
+          "pyproject.toml",
+          "tests/test_metadata_benchmark.py"
+        ],
+        "ownFiles": [
+          ".github/workflows/",
+          "AGENTS.md",
+          "pyproject.toml",
+          "tests/test_metadata_benchmark.py"
+        ],
+        "findings": [
+          "stacked PR 的陷阱：#20 的 base 是 #19 的分支，#19 合并后该分支未删除，GitHub 不会自动重定向 base，导致 #20 的改动并进废分支而非 main（核实：git ls-tree origin/main .github 为空）。必须删除父分支或手工 gh pr edit --base main；已用 #21（base=main，同两个提交）补救",
+          "format 当门禁必须锁 formatter 版本，否则 CI 与本地结论不一致，门禁无意义",
+          "测试直读 gitignored 派生数据 = 只在开发机上绿；干净检出（CI）是这类问题的照妖镜",
+          "门禁第一次跑就抓到 2 个真问题，证明此前『本地全绿』并不等于可交付"
+        ],
+        "completedAt": "2026-11-14"
+      },
+      {
+        "id": "K7",
+        "dir": null,
+        "title": "v0.7.2 发布：tag + GitHub Release 四资产 + 本地部署刷新（PyPI 由 owner 手工发布）",
+        "status": "done",
+        "summary": "轻量 tag v0.7.2（与 v0.7.1 同类型）打在 main HEAD 7587048 并 push；GitHub Release 发布为 Latest（isDraft=false、isPrerelease=false、targetCommitish=main），四资产：chocolate.zip 5,802,728B（来自 data/chocolate.zip，3 文件：chocolate.db / relationships / metrics，与 install.md 描述结构吻合）、govio-skills.zip 61,621B（22 条目）、govio-0.7.2-py3-none-any.whl 137,158B、govio-0.7.2.tar.gz 4,212,086B。发布说明覆盖 v0.7.1→v0.7.2 全范围（caliber 增强、Phase 3 七项、CI 门禁、全仓格式化、datacompy/ruff 版本锁、skills 资源修复、版本号统一）与兼容性声明。验证：install.md 引用的两个 v0.7.2 下载链接实测可用 —— govio-skills.zip HTTP 200 且下载后 SHA256 与本地构建一致；chocolate.zip 首次下载被网络截断（4,853,004/5,802,728），curl -C - 重试后完整、SHA256 一致、unzip -t 无错；skills.zip 22 条目另用干净检出逐条目 CRC 比对一致。构建可复现：start.sh 重跑后 whl/tar.gz/skills.zip 三个 SHA256 与已上传资产逐一相同。本地 uv tool 刷新到 govio 0.7.2（govio-cli -V → govio 0.7.2，backend → ladybug）。PyPI 0.7.2 由 owner 手工发布（本机无发布凭据），后续 PyPI 发布同样由 owner 手工处理。",
+        "files": [
+          "dist/govio-0.7.2-py3-none-any.whl",
+          "dist/govio-0.7.2.tar.gz",
+          "dist/govio-skills.zip",
+          "data/chocolate.zip"
+        ],
+        "ownFiles": [
+          "dist/",
+          "data/chocolate.zip"
+        ],
+        "findings": [
+          "install.md 的下载链接指向尚未发布的 tag 时必然 404，发版必须补齐 Release 资产（chocolate.zip 无构建脚本、只存在于 data/ 本地，需人工带入 Release）",
+          "v0.7.1 的 Release 只有 govio-skills.zip、缺 chocolate.zip，而 install.md 两个链接都指向当前版本 —— 发版清单应固定为四资产",
+          "大资产（5.8MB）从 GitHub Release CDN 下载在本机网络下会中断，需 curl -C - 续传重试；校验必须比 SHA256 而不是只看 HTTP 状态码",
+          "PyPI 发布由 owner 手工处理（uv publish），agent 不代发；发布后 install.md 的 uv tool install govio 才装到新版"
+        ],
+        "completedAt": "2026-11-14"
+      },
+      {
+        "id": "K8",
+        "dir": null,
+        "title": "uv.lock 入仓 + CI 改 --locked + 显式 PyPI 默认 index（PR #22）",
+        "status": "done",
+        "summary": "uv.lock 不再被 gitignore，入库 78 包、以 PyPI 为基准的 lock（0 条镜像记录，revision 3；numpy 从 yanked 的 2.4.0 升到 2.4.3）。pyproject 显式声明 [[tool.uv.index]] url=https://pypi.org/simple default=true：uv 配置优先级为 CLI > env > 项目级 > 用户级，不显式声明时开发机的用户级镜像配置（%APPDATA%/uv/uv.toml 的 mirrors.tuna default=true）会生效，而 lock 逐包记录来源 registry，任何裸跑 uv lock / uv run（隐式 sync）都会把 lock 改写成镜像源 —— 本轮实测复现：一次 uv run 就把 0 条镜像记录改回 1041 条。CI 两个 job 从 uv sync --group dev --default-index https://pypi.org/simple 改为 --locked。实测另一关键结论：--frozen/--locked 只认 lock 里记录的 registry，--default-index 覆盖不了，所以『lock 用哪个源』等于『所有人（含 CI）从哪个源下载』。验证：裸跑 uv lock 后仍 0 条镜像记录（项目级配置压过用户级）；flip-back 测试（随后 uv run ruff --version）lock 未被改写；uv lock --check 与 uv sync --locked 通过；下载源探针命中 files.pythonhosted.org；pytest 482/18、ruff check 全绿、format --check 108 files。CI 实跑证据：Resolved 78 packages in 1ms（此前全新解析需 371-543ms，证明未重新解析）、Installed 77 packages in 192ms、482 passed/18 skipped in 19.04s（此前 29.78s）。",
+        "files": [
+          ".gitignore",
+          "uv.lock",
+          "pyproject.toml",
+          ".github/workflows/ci.yml",
+          "AGENTS.md",
+          "docs/specs/README.md"
+        ],
+        "ownFiles": [
+          ".gitignore",
+          "uv.lock",
+          "pyproject.toml",
+          ".github/workflows/ci.yml",
+          "AGENTS.md",
+          "docs/specs/README.md"
+        ],
+        "findings": [
+          "lock 不入仓的代价已经真实发生两次：datacompy 无上限 → 新环境装到 1.2.0 直接 ImportError；ruff 无上限 → CI 与本地 formatter 版本不一致使门禁失效",
+          "开发机的用户级 uv 镜像配置会静默改写入仓的 lock，必须靠项目级 index 声明压制；提交前 git diff uv.lock 检查 registry 是必要动作",
+          "镜像源有同步延迟，刚发布的版本可能拉不到；CI 在境外 runner 上访问境内镜像也慢 —— lock 基准选 PyPI 而非镜像",
+          "改依赖必须同时 uv lock 并提交，否则 CI 的 --locked 会失败（刻意门禁）；升级单个包用 uv lock --upgrade-package <name>"
+        ],
+        "completedAt": "2026-11-14"
+      }
+    ]
+  },
+  "backlog": [
+    {
+      "id": "B1",
+      "title": "datacompy 迁移到 1.x（PandasCompare + build_report_data）",
+      "priority": "中",
+      "why": "0.19.x 已被上游归档、只做 best-effort 安全修复；迁移后可解除 <1.0 上限。1.x 的 PandasCompare 仍支持 join_columns，report() 之外还提供结构化 build_report_data()，可顺带让 observe compare 输出结构化结果而非纯文本报告。"
+    },
+    {
+      "id": "B2",
+      "title": "ruff 升级到 0.16/0.17 并全仓重排",
+      "priority": "低",
+      "why": "现锁 <0.16 是为了 format 门禁稳定。升级需单独 PR：改上限 -> uv run ruff format . -> 审阅 diff（0.16+ 文件发现范围从 108 扩到 213，会纳入此前未被检查的文件）-> 跑全量测试 -> 同步更新 lock。"
+    },
+    {
+      "id": "B3",
+      "title": "CI 扩展：打包产物一致性 + 分发壳层构建校验",
+      "priority": "中",
+      "why": "现有门禁只覆盖 python lint/test。可加：三支打包脚本实跑并校验产物结构与注入版本；packaging/pi 的 TS 语法校验；packaging/deepseek 的 npm install + npx tsc -p . 零错误；干净检出下 govio-skills.zip 条目数断言（防 K3 类回归）。"
+    },
+    {
+      "id": "B4",
+      "title": "发版流程固化（docs/release.md）",
+      "priority": "低",
+      "why": "v0.7.2 发版暴露的清单性问题：四资产（whl/tar.gz/govio-skills.zip/chocolate.zip）必须齐、chocolate.zip 无构建脚本只存在于 data/、install.md 的版本引用需同步、PyPI 由 owner 手工 uv publish。已写入 docs/release.md，后续按其执行。"
+    },
+    {
+      "id": "B5",
+      "title": "Phase 4 首个功能项",
+      "priority": "高（下一阶段主线）",
+      "why": "roadmap Phase 4 待办：环比/同比分析（时间偏移 JOIN）、派生指标递归展开（DERIVED_FROM 链拆 CTE）、维度枚举值自动补全、数据质量检核 4 项、Playbook 扩展 4 项。工程化基线已补齐，可回到功能演进。"
+    }
+  ]
 }
