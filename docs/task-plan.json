@@ -846,6 +846,48 @@
       }
     ]
   },
+  "round7": {
+    "goal": "govio-cli onboard 非交互图后端配置（X33）：为 govio-map 的 onboard GUI 化（X34）补齐前置硬缺口——新增 --backend 等旗标走非交互图后端配置（默认图库 ladybug），同时保持既有交互向导零回归",
+    "execution": "单任务，subagent 实现，父代理验收并回写计划；分支 feat/onboard-noninteractive-graph。需求规格自包含于 docs/tasks/X33-onboard-noninteractive/FRD.md（源自 govio-map docs/task-plan.json → crossCutting X33，动机背景见 govio-map X34 design.md §8）。范围纪律见 FRD §9（不改加密逻辑/ConfigManager 文件格式、不做图后端连通性探测、不新增后端类型）。升版沿 K7 教训：pyproject/docs/specs/README/packaging manifests/uv.lock 随任务升版，tag + GitHub Release + PyPI 发布由 owner 手工",
+    "tasks": [
+      {
+        "id": "X33",
+        "dir": "docs/tasks/X33-onboard-noninteractive",
+        "title": "govio-cli onboard 非交互图后端配置（--backend ladybug|falkordb|networkx）",
+        "status": "pending",
+        "dependsOn": [],
+        "frd": "docs/tasks/X33-onboard-noninteractive/FRD.md",
+        "ownFiles": [
+          "src/govio/cli/main.py",
+          "src/govio/cli/onboard.py",
+          "tests/",
+          "docs/specs/cli.md",
+          "docs/specs/README.md",
+          "pyproject.toml",
+          "uv.lock",
+          "packaging/pi/package.json",
+          "packaging/deepseek/package.json",
+          "docs/install.md",
+          "docs/tasks/X33-onboard-noninteractive/"
+        ],
+        "deliverables": [
+          "src/govio/cli/main.py：p_onboard 新增 --backend {ladybug|falkordb|networkx} / --db-path / --host / --port / --graph / --gml-path 旗标与路由（FRD §3.2 优先级：--backend 给出走非交互，未给出逐字保持现状）",
+          "src/govio/cli/onboard.py：新增 onboard_graph_cli(...) 非交互图后端配置——graph 段按 FRD §3.3 生成并 upsert、保留 datasources、单次 save 落盘、全程无 questionary 确认（FRD §4）",
+          "--backend 与 --add-datasource/--remove-datasource 组合：同进程先后完成、单次 save 落盘，复用 add_datasource()/remove_datasource() 既有加密与解析逻辑（FRD §6）",
+          "错误处理统一 print(错误: ...) 到 stderr + sys.exit(1)（FRD §5 错误表；--backend 与 --remove-datasource 组合的取舍由实现方裁决并记入 progress.md）",
+          "tests/ 新增 onboard 非交互用例覆盖 FRD §7 的 7 类场景（缺省/自定义/幂等/组合/错误路径/向后兼容/--help）",
+          "docs/specs/cli.md 同步新旗标与路由契约；升版 pyproject.toml + docs/specs/README.md + uv.lock（uv lock 并提交）"
+        ],
+        "acceptance": [
+          "govio-cli onboard --backend ladybug 非交互生成 ~/.govio/config.yaml（graph.backend=ladybug、db_path 取默认 ~/.govio/ontology.lbdb），不弹 questionary",
+          "--backend ladybug --db-path <p> 自定义路径生效；重复执行幂等且已有 datasources 不丢",
+          "--backend ladybug --add-datasource mydb --url ... --password ... 一次完成图+数据源，密码加密落盘、URL 脱敏",
+          "不带 --backend 时仍走交互向导（零回归）；--help 列出新旗标",
+          "govio 仓库门禁绿（ruff check + ruff format --check + pytest）；升版发布新 govio 版本号（供 govio-map X34 提升 MIN_GOVIO_CLI_VERSION）"
+        ]
+      }
+    ]
+  },
   "backlog": [
     {
       "id": "B1",
