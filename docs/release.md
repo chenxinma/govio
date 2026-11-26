@@ -115,6 +115,7 @@ curl -s https://pypi.org/pypi/govio/json | jq -r .info.version
 ```
 
 > 大资产（`chocolate.zip` 5.8MB）从 Release CDN 下载在弱网下可能被截断（曾实测只下到 4,853,004/5,802,728 字节，哈希自然不符），必须 `curl -C -` 续传后重算，别把网络中断误判成资产损坏。
+> 本机网络直连 Release CDN 可能直接被重置（v0.8.0 实测 curl exit 56 / HTTP 000），需走代理：`curl --proxy socks5://192.168.71.222:1081 ...`。
 
 ## v0.7.2 实测记录（参照）
 
@@ -123,3 +124,12 @@ curl -s https://pypi.org/pypi/govio/json | jq -r .info.version
 - 下载回来的 `govio-skills.zip` 与 `chocolate.zip` 哈希均与本地构建一致；`unzip -t chocolate.zip` 无错
 - 构建可复现：`./start.sh` 重跑后 whl / tar.gz / skills.zip 三个哈希与已上传资产**逐一相同**
 - 范围 `v0.7.1..v0.7.2`：caliber 增强（sqlparse 分词、has_star 修正、measure-first 降噪）、Phase 3 七项精简、CI 门禁、全仓格式化、datacompy/ruff 版本锁、skills 自带资源修复、版本号统一
+
+## v0.8.0 实测记录（参照）
+
+- tag `v0.8.0` @ `238720e`（轻量 tag）；Release 为 **Latest**，`isDraft=false`、`isPrerelease=false`
+- 四资产 SHA256：`govio-skills.zip` `2648d574…`（61,621 B / 22 条目，skills 内容与 v0.7.2 相同）、`chocolate.zip` `9b965c35…`（5,802,728 B，与 v0.7.2 相同）、`govio-0.8.0-py3-none-any.whl` `357441b1…`（145,546 B）、`govio-0.8.0.tar.gz` `ba4910c0…`（4,349,442 B）
+- 下载回验（经代理）：`govio-skills.zip` 与 `chocolate.zip` 哈希均与本地构建一致，`unzip -t chocolate.zip` 无错
+- 构建可复现：`./start.sh` 重跑后 whl / tar.gz / skills.zip 三个哈希与已上传资产**逐一相同**；`govio-cli -V` → govio 0.8.0
+- 测试基线：**552 passed / 18 skipped**（较 v0.7.2 的 482+18 新增 26 个 onboard 非交互用例 + 其余新增）
+- 范围 `v0.7.2..v0.8.0`：onboard 非交互图后端配置 `--backend`（X33，含升版与 K2 版本清单同步）、caliber 维度限定条件结构化实质比对（X19-W5a）、uv.lock 入仓 + CI `--locked` + PyPI 默认 index 声明（K8）、发版 SOP 与任务计划记录
