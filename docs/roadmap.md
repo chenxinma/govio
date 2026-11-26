@@ -31,7 +31,7 @@
 **目标：** 提供交互式 CLI 覆盖元数据管理全流程。
 
 **已完成：**
-- [x] `govio-cli onboard` 初始化向导（图后端选择 + 数据源配置，含非交互式增删数据源）
+- [x] `govio-cli onboard` 初始化向导（图后端选择 + 数据源配置，含非交互式增删数据源与非交互式图后端配置 `--backend`）
 - [x] `govio-cli meta` 完整同步管线（元数据 → CSV → 图库 → assets）
 - [x] `govio-cli meta` 分步子命令（`meta`/`app`/`rel`/`std`/`compliance`/`metric`/`graph`），已重构为 CLI-only 独立子命令（原 `meta sync` / `meta config` 交互式入口已移除）
 - [x] `govio-cli meta meta --source` 多数据源接入：duckdb / mysql / postgres / trino（`--db` 为连接 URL，解析为各 Loader 构造参数）

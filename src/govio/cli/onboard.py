@@ -165,6 +165,71 @@ def _attach_password(url: str, password: str) -> str:
     return f"{url[: scheme_sep + 3]}{user_part}:{password}{url[at_pos:]}"
 
 
+def _apply_add_datasource(
+    config: dict[str, Any],
+    name: str,
+    url: str,
+    connect_args: dict[str, Any] | None = None,
+    password: str | None = None,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """在配置字典上添加/覆盖数据源（不落盘，供单次 save 组合场景复用）
+
+    Args:
+        config: 配置字典（原地修改 datasources 键）
+        name: 数据源名称
+        url: 连接 URL（可含密码，存储时自动脱敏并加密）
+        connect_args: 连接参数
+        password: 独立传入的密码（URL 不含密码时嵌入）
+        overwrite: 是否允许覆盖同名数据源
+
+    Returns:
+        dict: 保存的数据源条目
+
+    Raises:
+        ValueError: 参数冲突或同名数据源已存在且未指定 overwrite
+    """
+    name = name.strip()
+    if not name:
+        raise ValueError("数据源名称不能为空")
+    if "://" not in url:
+        raise ValueError(f"URL 格式无效: {url}（需包含协议前缀，如 mysql+pymysql://）")
+
+    if password:
+        url = _attach_password(url, password)
+
+    datasources: dict[str, Any] = dict(config.get("datasources") or {})
+    if name in datasources and not overwrite:
+        raise ValueError(f"数据源 '{name}' 已存在，使用 --overwrite 覆盖")
+
+    ds_entry = _encrypt_url_password(url)
+    ds_entry["connect_args"] = dict(connect_args or {})
+    datasources[name] = ds_entry
+    config["datasources"] = datasources
+    return ds_entry
+
+
+def _apply_remove_datasource(config: dict[str, Any], name: str) -> None:
+    """在配置字典上删除数据源（不落盘，供单次 save 组合场景复用）
+
+    Args:
+        config: 配置字典（原地修改 datasources 键）
+        name: 数据源名称
+
+    Raises:
+        ValueError: 数据源不存在
+    """
+    datasources: dict[str, Any] = dict(config.get("datasources") or {})
+    if name not in datasources:
+        raise ValueError(f"数据源 '{name}' 不存在")
+
+    del datasources[name]
+    if datasources:
+        config["datasources"] = datasources
+    else:
+        config.pop("datasources", None)
+
+
 def add_datasource(
     name: str,
     url: str,
@@ -189,25 +254,16 @@ def add_datasource(
     Raises:
         ValueError: 参数冲突或同名数据源已存在且未指定 overwrite
     """
-    name = name.strip()
-    if not name:
-        raise ValueError("数据源名称不能为空")
-    if "://" not in url:
-        raise ValueError(f"URL 格式无效: {url}（需包含协议前缀，如 mysql+pymysql://）")
-
-    if password:
-        url = _attach_password(url, password)
-
     config_manager = config_manager or ConfigManager()
     config = config_manager.load() if config_manager.exists() else {}
-    datasources: dict[str, Any] = dict(config.get("datasources") or {})
-    if name in datasources and not overwrite:
-        raise ValueError(f"数据源 '{name}' 已存在，使用 --overwrite 覆盖")
-
-    ds_entry = _encrypt_url_password(url)
-    ds_entry["connect_args"] = dict(connect_args or {})
-    datasources[name] = ds_entry
-    config["datasources"] = datasources
+    ds_entry = _apply_add_datasource(
+        config,
+        name,
+        url,
+        connect_args=connect_args,
+        password=password,
+        overwrite=overwrite,
+    )
     config_manager.save(config)
     return ds_entry
 
@@ -230,16 +286,187 @@ def remove_datasource(
         raise ValueError("配置文件不存在，无数据源可删除")
 
     config = config_manager.load()
-    datasources: dict[str, Any] = dict(config.get("datasources") or {})
-    if name not in datasources:
-        raise ValueError(f"数据源 '{name}' 不存在")
-
-    del datasources[name]
-    if datasources:
-        config["datasources"] = datasources
-    else:
-        config.pop("datasources", None)
+    _apply_remove_datasource(config, name)
     config_manager.save(config)
+
+
+# ---------------------------------------------------------------------------
+# Non-interactive graph backend configuration (used by onboard --backend)
+# ---------------------------------------------------------------------------
+
+# 各后端专属旗标 -> （CLI 旗标名, 所属后端），用于「--xxx 需配合 --backend <后端>」校验
+_BACKEND_ONLY_FLAGS: list[tuple[str, str, str]] = [
+    ("db_path", "--db-path", "ladybug"),
+    ("host", "--host", "falkordb"),
+    ("port", "--port", "falkordb"),
+    ("graph_name", "--graph", "falkordb"),
+    ("gml_path", "--gml-path", "networkx"),
+]
+
+
+def build_graph_config(
+    backend: str | None,
+    db_path: str | None = None,
+    host: str | None = None,
+    port: str | None = None,
+    graph_name: str | None = None,
+    gml_path: str | None = None,
+) -> dict[str, Any]:
+    """按非交互参数生成 graph 配置段（输出与 prompt_graph_config 严格一致）
+
+    Args:
+        backend: 图后端类型（ladybug/falkordb/networkx）
+        db_path: ladybug 数据库文件路径（缺省 ~/.govio/ontology.lbdb）
+        host: falkordb 主机（缺省 localhost）
+        port: falkordb 端口（缺省 6379，须为数字）
+        graph_name: falkordb 图名（缺省 ontology）
+        gml_path: networkx GML 文件路径（networkx 必填，须已存在）
+
+    Returns:
+        dict: graph 配置段
+
+    Raises:
+        ValueError: 后端专属参数与 backend 不匹配、必填缺失或取值非法
+    """
+    given = {
+        "db_path": db_path,
+        "host": host,
+        "port": port,
+        "graph_name": graph_name,
+        "gml_path": gml_path,
+    }
+    for param, cli_name, expected in _BACKEND_ONLY_FLAGS:
+        if given[param] is not None and backend != expected:
+            raise ValueError(f"{cli_name} 需配合 --backend {expected}")
+
+    if backend not in ("ladybug", "falkordb", "networkx"):
+        raise ValueError("--backend 需指定图后端（ladybug/falkordb/networkx）")
+
+    if backend == "ladybug":
+        default_db = str(Path.home() / ".govio" / "ontology.lbdb")
+        db = str(Path(db_path)) if db_path else default_db
+        return {"backend": "ladybug", "ladybug": {"db_path": db}}
+
+    if backend == "falkordb":
+        if port is not None and not str(port).isdigit():
+            raise ValueError("端口必须是数字")
+        return {
+            "backend": "falkordb",
+            "falkordb": {
+                "host": host or "localhost",
+                "port": int(port) if port is not None else 6379,
+                "graph": graph_name or "ontology",
+            },
+        }
+
+    # networkx
+    if not gml_path:
+        raise ValueError("--backend networkx 需同时提供 --gml-path")
+    if not Path(gml_path).exists():
+        raise ValueError(f"GML 文件不存在: {gml_path}")
+    return {"backend": "networkx", "networkx": {"gml_path": str(Path(gml_path))}}
+
+
+def onboard_graph_cli(
+    backend: str | None,
+    db_path: str | None = None,
+    host: str | None = None,
+    port: str | None = None,
+    graph_name: str | None = None,
+    gml_path: str | None = None,
+    add_name: str | None = None,
+    remove_name: str | None = None,
+    url: str | None = None,
+    password: str | None = None,
+    connect_args: list[str] | None = None,
+    overwrite: bool = False,
+) -> None:
+    """onboard 非交互式图后端配置入口（可与数据源增删组合，单次 save 落盘）
+
+    graph 段 upsert 覆盖，既有 datasources 原样保留；全程不弹 questionary。
+
+    Args:
+        backend: 图后端类型（ladybug/falkordb/networkx）
+        db_path: ladybug 数据库文件路径（--db-path）
+        host: falkordb 主机（--host）
+        port: falkordb 端口（--port）
+        graph_name: falkordb 图名（--graph）
+        gml_path: networkx GML 文件路径（--gml-path）
+        add_name: 待添加的数据源名称（--add-datasource）
+        remove_name: 待删除的数据源名称（--remove-datasource）
+        url: 数据源连接 URL（--url）
+        password: 数据源密码（--password）
+        connect_args: key=value 参数列表（--connect-args，可重复）
+        overwrite: 是否覆盖同名数据源（--overwrite）
+    """
+
+    def _fail(message: str) -> None:
+        print(f"错误: {message}", file=sys.stderr)
+        sys.exit(1)
+
+    # 数据源旗标组合校验（与 onboard_datasource_cli 同款契约）
+    if add_name and remove_name:
+        _fail("--add-datasource 与 --remove-datasource 不能同时使用")
+    if remove_name and (url or password or connect_args):
+        _fail("--remove-datasource 不接受 --url/--password/--connect-args 参数")
+    if (
+        not add_name
+        and not remove_name
+        and (url or password or connect_args or overwrite)
+    ):
+        _fail(
+            "--url/--password/--connect-args/--overwrite 需配合 --add-datasource 使用"
+        )
+    if add_name and not url:
+        _fail("--add-datasource 需同时提供 --url")
+
+    try:
+        graph_config = build_graph_config(
+            backend,
+            db_path=db_path,
+            host=host,
+            port=port,
+            graph_name=graph_name,
+            gml_path=gml_path,
+        )
+    except ValueError as e:
+        _fail(str(e))
+
+    config_manager = ConfigManager()
+    config: dict[str, Any] = (
+        dict(config_manager.load()) if config_manager.exists() else {}
+    )
+    # graph 段 upsert：只覆盖 graph 键，datasources 原样保留
+    config["graph"] = graph_config
+
+    if remove_name:
+        try:
+            _apply_remove_datasource(config, remove_name)
+        except ValueError as e:
+            _fail(str(e))
+    if add_name:
+        try:
+            parsed_args = parse_cli_connect_args(connect_args)
+            _apply_add_datasource(
+                config,
+                add_name,
+                url or "",
+                connect_args=parsed_args,
+                password=password,
+                overwrite=overwrite,
+            )
+        except ValueError as e:
+            _fail(str(e))
+
+    # 图后端 + 数据源增删单次 save 落盘，避免两次写文件互相覆盖
+    config_manager.save(config)
+
+    print(f"已配置图后端: {graph_config['backend']}")
+    if remove_name:
+        print(f"已删除数据源: {remove_name}")
+    if add_name:
+        print(f"已添加数据源: {add_name}")
+    print(f"配置文件: {config_manager.config_path}")
 
 
 def onboard_datasource_cli(

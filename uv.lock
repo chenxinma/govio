@@ -386,7 +386,7 @@ wheels = [
 
 [[package]]
 name = "govio"
-version = "0.7.2"
+version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },

@@ -8,7 +8,7 @@ Uses `argparse` with subparsers:
 
 | Subcommand | Description |
 |---|---|
-| `onboard` | Interactive setup wizard; non-interactive datasource add/remove via flags |
+| `onboard` | Interactive setup wizard; non-interactive graph backend config (`--backend`) and datasource add/remove via flags |
 | `backend` | Display current graph backend type |
 | `query -c QUERY` | Knowledge graph query (Cypher or Python) |
 | `meta` | Knowledge graph maintenance command group |
@@ -60,13 +60,45 @@ validate(config: dict[str, Any]) -> bool  # Raises ValueError on issues
 
 ## onboard.py
 
-Interactive setup wizard + non-interactive datasource management.
+Interactive setup wizard + non-interactive graph backend / datasource management.
+
+### Routing (dispatch in main.py)
+
+1. `--backend` given (or any backend-specific flag `--db-path/--host/--port/--graph/--gml-path`) → non-interactive graph backend config (`onboard_graph_cli`), combinable with `--add-datasource`/`--remove-datasource` in one process with a single `save()`
+2. `--add-datasource`/`--remove-datasource` without `--backend` → `onboard_datasource_cli` (unchanged)
+3. `--url/--password/--connect-args/--overwrite` without `--add-datasource` → error (unchanged)
+4. otherwise → interactive wizard `onboard()` (unchanged)
+
+Without `--backend` and graph flags, behavior is byte-for-byte the pre-0.8.0 contract (zero regression).
 
 ### Interactive wizard behavior
 
 - No config: prompts for graph backend (networkx/falkordb/ladybug), then datasource add/delete/edit loop
 - Existing config with graph backend: offers "skip backend, edit datasources only"; otherwise asks before overwriting
 - Datasources-only config (created via `--add-datasource`): configures graph backend while preserving existing datasources
+
+### Non-interactive graph backend flags
+
+| Flag | Description |
+|---|---|
+| `--backend {ladybug,falkordb,networkx}` | Configure graph backend non-interactively (no questionary prompts, idempotent) |
+| `--db-path PATH` | ladybug DB file (default `~/.govio/ontology.lbdb`; requires `--backend ladybug`) |
+| `--host HOST` | falkordb host (default `localhost`; requires `--backend falkordb`) |
+| `--port PORT` | falkordb port (default `6379`, digits only; requires `--backend falkordb`) |
+| `--graph NAME` | falkordb graph name (default `ontology`; requires `--backend falkordb`) |
+| `--gml-path PATH` | networkx GML file (required with `--backend networkx`, must exist) |
+
+Semantics: the `graph` section is **upserted** (existing `graph` overwritten), `datasources` is preserved untouched, and the whole run (graph + optional datasource add/remove) is a **single `save()`**. No confirmation prompts in non-interactive mode. The generated `graph` section is identical to `prompt_graph_config()` output.
+
+Errors print `错误: ...` to stderr and exit 1: flag/backend mismatch (`--host 需配合 --backend falkordb`), missing `--gml-path`, non-existent GML file, non-numeric port. Ruling (FRD §5): `--backend` combined with `--remove-datasource` is **allowed** — graph backend is configured first, then the datasource is removed, one `save()` total.
+
+```bash
+govio-cli onboard --backend ladybug
+govio-cli onboard --backend ladybug --db-path /data/ontology.lbdb
+govio-cli onboard --backend falkordb --host db.example --port 6379 --graph ontology
+govio-cli onboard --backend networkx --gml-path ./ontology.gml
+govio-cli onboard --backend ladybug --add-datasource mydb --url "duckdb:///x.db" --overwrite
+```
 
 ### Non-interactive datasource flags
 
@@ -96,8 +128,12 @@ prompt_connect_args(existing=None) -> dict           # Interactive key=value inp
 parse_cli_connect_args(pairs) -> dict                # Parse CLI key=value pairs (raises ValueError)
 _encrypt_url_password(url) -> dict                   # {url: masked, encrypted_password?}
 _attach_password(url, password) -> str               # Inject password into password-less URL (raises ValueError)
+_apply_add_datasource(config, name, url, ...) -> dict    # Mutate config dict (no save)
+_apply_remove_datasource(config, name) -> None           # Mutate config dict (no save)
 add_datasource(name, url, connect_args=None, password=None, overwrite=False, config_manager=None) -> dict
 remove_datasource(name, config_manager=None) -> None
+build_graph_config(backend, db_path=None, host=None, port=None, graph_name=None, gml_path=None) -> dict
+onboard_graph_cli(backend, db_path=None, ..., add_name=None, remove_name=None, url=None, ...) -> None
 prompt_graph_config() -> dict                        # Interactive graph backend section
 prompt_datasource_config(existing=None) -> dict | None
 onboard_datasource_cli(add_name=None, remove_name=None, url=None, password=None, connect_args=None, overwrite=False) -> None
