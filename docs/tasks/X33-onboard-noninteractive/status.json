@@ -1,0 +1,22 @@
+{
+  "task": "X33",
+  "status": "done",
+  "summary": "onboard 新增非交互图后端配置：--backend {ladybug|falkordb|networkx} + --db-path/--host/--port/--graph/--gml-path，onboard_graph_cli() graph 段 upsert、datasources 保留、与 --add/--remove-datasource 组合单次 save、全程无 questionary；错误统一 错误: stderr + exit 1（FRD §5 表 + 旗标后端不匹配校验）；不带 --backend 逐字零回归。新增 26 个用例覆盖 FRD §7 全部 7 类场景，全量 552 passed/18 skipped、ruff check + format 全绿、CI 同款 uv sync --locked 通过；升版 0.8.0（pyproject/uv.lock 1 行/install/packaging/specs/roadmap 同步），cli.md 已同步路由与旗标契约。",
+  "files": [
+    "src/govio/cli/main.py",
+    "src/govio/cli/onboard.py",
+    "tests/test_onboard_noninteractive.py",
+    "docs/specs/cli.md",
+    "docs/specs/README.md",
+    "docs/roadmap.md",
+    "docs/install.md",
+    "pyproject.toml",
+    "uv.lock",
+    "packaging/pi/package.json",
+    "packaging/pi/README.md",
+    "packaging/deepseek/package.json",
+    "packaging/deepseek/README.md",
+    "docs/tasks/X33-onboard-noninteractive/progress.md",
+    "docs/tasks/X33-onboard-noninteractive/status.json"
+  ]
+}

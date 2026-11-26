@@ -22,9 +22,34 @@ def main():
     )
     sub = parser.add_subparsers(dest="action")
 
-    # onboard 子命令（交互向导 + 非交互式数据源管理）
+    # onboard 子命令（交互向导 + 非交互式图后端/数据源管理）
     p_onboard = sub.add_parser(
-        "onboard", help="初始化配置向导（支持非交互式添加/删除数据源）"
+        "onboard", help="初始化配置向导（支持非交互式配置图后端与添加/删除数据源）"
+    )
+    p_onboard.add_argument(
+        "--backend",
+        choices=["ladybug", "falkordb", "networkx"],
+        help="非交互式配置图后端（给出即走非交互路径，不弹交互向导）",
+    )
+    p_onboard.add_argument(
+        "--db-path",
+        help="ladybug 数据库文件路径（默认 ~/.govio/ontology.lbdb，需配合 --backend ladybug）",
+    )
+    p_onboard.add_argument(
+        "--host",
+        help="falkordb 主机（默认 localhost，需配合 --backend falkordb）",
+    )
+    p_onboard.add_argument(
+        "--port",
+        help="falkordb 端口（默认 6379，须为数字，需配合 --backend falkordb）",
+    )
+    p_onboard.add_argument(
+        "--graph",
+        help="falkordb 图名（默认 ontology，需配合 --backend falkordb）",
+    )
+    p_onboard.add_argument(
+        "--gml-path",
+        help="networkx GML 文件路径（--backend networkx 必填，须已存在）",
     )
     p_onboard.add_argument(
         "--add-datasource",
@@ -93,9 +118,28 @@ def main():
     args, remaining = parser.parse_known_args()
 
     if args.action == "onboard":
-        from .onboard import onboard, onboard_datasource_cli
+        from .onboard import onboard, onboard_datasource_cli, onboard_graph_cli
 
-        if args.add_datasource or args.remove_datasource:
+        graph_flags_given = any(
+            (args.db_path, args.host, args.port, args.graph, args.gml_path)
+        )
+        if args.backend or graph_flags_given:
+            # 非交互图后端配置（可与数据源增删组合，单次 save 落盘）
+            onboard_graph_cli(
+                backend=args.backend,
+                db_path=args.db_path,
+                host=args.host,
+                port=args.port,
+                graph_name=args.graph,
+                gml_path=args.gml_path,
+                add_name=args.add_datasource,
+                remove_name=args.remove_datasource,
+                url=args.url,
+                password=args.password,
+                connect_args=args.connect_args,
+                overwrite=args.overwrite,
+            )
+        elif args.add_datasource or args.remove_datasource:
             onboard_datasource_cli(
                 add_name=args.add_datasource,
                 remove_name=args.remove_datasource,
