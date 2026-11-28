@@ -345,6 +345,15 @@ Graph backend config is read from `~/.govio/config.yaml` (`graph` section). Supp
 
 `meta graph` 在图数据更新失败时打印 `❌ graph 更新失败（未生成校验报告）` 并退出码 1（不再误报 ✅）。
 
+CSV 兼容性（0.8.1 缺陷修复）：
+
+- `meta rel` 写盘前规范化 `RELATES_TO.csv` 表头（端点列置首、元数据列随后、剔除全空/未知列，
+  如历史杂散列 `source,target`）；0 条有效关系的导出同样只写规范表头
+- `meta graph` 对表头不规范的边 CSV 先容错处理（端点列重排/杂散列丢弃并告警），
+  端点列缺失时报可读错误；`--mode update` 对旧版表结构的图库缺属性列时跳过写入并告警，
+  指引用 `--mode rebuild` 全量重建（不再透出 Ladybug Binder / `Cannot find property` 裸异常，
+  详见 [graph.md](graph.md) Ladybug Loader）
+
 ### 校验报告（import-report.json）
 
 `meta graph` / `meta import-schema` 在图库更新成功后产出机器可读的校验报告：
