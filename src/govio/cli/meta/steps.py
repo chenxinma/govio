@@ -188,20 +188,21 @@ def step_rel_export(
 
     try:
         df_relates_to = load_relationships(relationship_file, df_tables, df_columns)
+        # 重命名为图导入所需的列名格式，保留元数据列；
+        # 空结果同样重命名，避免把 source,target 写进表头（历史杂散列来源）
+        df_relates_to = df_relates_to.rename(
+            columns={
+                "source": ":START_ID(PhysicalTable)",
+                "target": ":END_ID(PhysicalTable)",
+            }
+        )
         if not df_relates_to.empty:
-            df_relates_to["source"] = [
-                table_idx_to_id[i] for i in df_relates_to["source"]
+            df_relates_to[":START_ID(PhysicalTable)"] = [
+                table_idx_to_id[i] for i in df_relates_to[":START_ID(PhysicalTable)"]
             ]
-            df_relates_to["target"] = [
-                table_idx_to_id[i] for i in df_relates_to["target"]
+            df_relates_to[":END_ID(PhysicalTable)"] = [
+                table_idx_to_id[i] for i in df_relates_to[":END_ID(PhysicalTable)"]
             ]
-            # 重命名为图导入所需的列名格式，保留元数据列
-            df_relates_to = df_relates_to.rename(
-                columns={
-                    "source": ":START_ID(PhysicalTable)",
-                    "target": ":END_ID(PhysicalTable)",
-                }
-            )
 
         rel_path = output / "RELATES_TO.csv"
         merge_edge_csv(

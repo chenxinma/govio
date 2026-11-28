@@ -173,6 +173,18 @@ upsert_csv_to_ladybug(csv_dir, db_path, buffer_pool_size, max_db_size) -> None  
 （读 CSV 时 `pd.to_numeric` 转换，缺失值兑底 0），保证 `ORDER BY order_no` 等为数值语义。
 存量 STRING 列的旧 `.lbdb` 需全量重建才能获得 INT64 列。
 
+表头容错与旧库兼容：
+
+- 边表按**列名**识别 `:START_ID(...)` / `:END_ID(...)`，不强制列位置（不在最前时自动重排兕底）；
+  全空杂散列（如历史产物 `source,target`）丢弃并告警后导入；节点表同理按 `:ID(...)` 列名识别
+- 端点列缺失时抛可读 `ValueError`（「边表表头不符合规范：应以 :START_ID(...)、:END_ID(...) 开头」），
+  不透出 Ladybug Binder 裸异常
+- `upsert_csv_to_ladybug` 写入前按 `TABLE_INFO` 读目标表 schema：旧版表结构缺少属性列
+  （如 `node_id`）时跳过缺失列的 SET 并告警，指引用 `meta graph --mode rebuild` 全量重建
+  （Ladybug 不支持 `ALTER TABLE` 就地加列，无法自动迁移）；不会再报
+  `Cannot find property ... for n` 裸异常。全量重建（`import_csv_to_ladybug`）先 DROP 全部表，
+  无 schema 漂移问题
+
 ---
 
 ### NetworkX Loader (CSV → GML)

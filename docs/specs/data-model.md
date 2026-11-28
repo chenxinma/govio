@@ -123,6 +123,9 @@ PTA1B2C3D4,值1,值2,...
 
 - Column 1: `:ID(NodeType)` -- deterministic string ID (prefix + SHA256 hash)
 - Remaining columns: node attributes
+- `node_id` 与 `:ID(NodeType)` 是同一值，节点 CSV **不带**单独的 `node_id` 属性列；
+  `meta rel` 等步骤读节点 CSV 时在内存中统一为 `node_id`，不回写重复列；
+  历史产物（`:ID` 与 `node_id` 并存）再次合并时自动治愈为标准格式
 - `Datasource.csv` 的 `filter` 列存放 JSON 字符串（RFC 4180 引号转义）
 - 数值型属性列 `size`/`precision`/`scale`/`order_no`（Col/Standard）在 CSV 中为整数文本；
   入图时保持数值类型（Ladybug 为 INT64），缺失值兑底 0
@@ -137,6 +140,9 @@ PTA1B2C3D4,COE5F6G7H8,值1,...
 - Column 1: `:START_ID(SourceType)` -- source node string ID
 - Column 2: `:END_ID(TargetType)` -- target node string ID
 - Remaining columns: edge attributes
+- 列序规范：端点列置首，去重列（端点 + 边属性键，如 RELATES_TO 的 `relationship_type`）随后，
+  元数据列最后；`merge_edge_csv` 写盘前按此规范化列序，并剔除全空/未知列
+  （如历史杂散列 `source,target`，合并旧 CSV 时丢弃不识别的列并告警）
 
 ### Naming Convention
 
