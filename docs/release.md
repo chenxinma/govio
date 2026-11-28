@@ -133,3 +133,12 @@ curl -s https://pypi.org/pypi/govio/json | jq -r .info.version
 - 构建可复现：`./start.sh` 重跑后 whl / tar.gz / skills.zip 三个哈希与已上传资产**逐一相同**；`govio-cli -V` → govio 0.8.0
 - 测试基线：**552 passed / 18 skipped**（较 v0.7.2 的 482+18 新增 26 个 onboard 非交互用例 + 其余新增）
 - 范围 `v0.7.2..v0.8.0`：onboard 非交互图后端配置 `--backend`（X33，含升版与 K2 版本清单同步）、caliber 维度限定条件结构化实质比对（X19-W5a）、uv.lock 入仓 + CI `--locked` + PyPI 默认 index 声明（K8）、发版 SOP 与任务计划记录
+
+## v0.8.1 实测记录（参照）
+
+- tag `v0.8.1` @ `61389dc`（轻量 tag）；Release 为 **Latest**，`isDraft=false`、`isPrerelease=false`
+- 四资产 SHA256：`govio-skills.zip` `2648d574…`（61,621 B / 22 条目，与 v0.8.0 相同）、`chocolate.zip` `9b965c35…`（5,802,728 B，与 v0.8.0 相同）、`govio-0.8.1-py3-none-any.whl` `b2fae53c…`（147,812 B）、`govio-0.8.1.tar.gz` `7f91295d…`（4,353,506 B）
+- 下载回验（经代理）：`govio-skills.zip` 与 `chocolate.zip` 哈希均与本地构建一致，`unzip -t chocolate.zip` 无错
+- 测试基线：**559 passed / 18 skipped**（较 v0.8.0 的 552+18 新增 7 个 CSV 表头/旧库兼容回归断言）
+- 范围 `v0.8.0..v0.8.1`：meta rel 边 CSV 表头规范化（空导出脏表头根治 + merge 写盘规范化 + loader 容错重排）、meta graph `--mode update` 旧库缺 `node_id` 属性列兼容（TABLE_INFO 检测 + rebuild 迁移指引）——govio-map X34 可用性 Round 1 两缺陷（PR #26）
+- 备注：版本号统一时 `uv lock` 必须以 PyPI 基准生成（`UV_DEFAULT_INDEX=https://pypi.org/simple` + 走代理），本机 aliyun `UV_DEFAULT_INDEX` 会把 lock 全量改写为镜像 URL——提交前 `git diff uv.lock` 只应有版本行
